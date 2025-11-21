@@ -1,0 +1,154 @@
+Project list
+1. GradeView:
+Developed under Prof. Garcia(https://www2.eecs.berkeley.edu/Faculty/Homepages/garcia.html). 
+Two to three sentences about what it does form :
+Abstract
+Mastery learning promises more equitable outcomes in large CS
+courses, yet instructors lack a full array of tools to support their
+implementation. Popular Learning Analytics Dashboards (LADs)
+and adaptive platforms excel at grade analytics but offer limited
+support for custom mastery policies. We present an open-source,
+instructor-focused dashboard integrated into a custom LMS to sup-
+port mastery learning for high-enrollment CS courses. The system
+features a data pipeline that gathers scores from multiple sources
+and provides a view into the effectiveness of equitable grading
+policies, such as retakes, resubmissions, and flexible deadlines. The
+central interface, the Students view, provides a way to see the
+scores for a particular student across all assignments and exams. The
+system was deployed for two semesters in a large introductory CS
+course, where instructors reported ease of use, increased visibility
+into class performance, and effective support for mastery-learning
+policies. Based on this feedback, we are extending the platform
+with a Statistics view that surfaces assignment–and concept-level
+statistical summaries and interactive histograms to further support
+scalable mastery learning. To support broader adoption, we plan to
+release the system as an open-source platform to assist instructors
+and institutions seeking to implement mastery learning at scale.
+ACM Reference Format:
+Shreya Mantripragada, Eldar Hasanov, Adam Hacker, Weishu Zhang, Samuel
+Hilkey, Juan Ponce de Leon, and Dan Garcia. 2026. An Instructor Dashboard
+to Support Mastery Learning. In Proceedings of the 57th ACM Technical
+Symposium on Computer Science Education V. 1 (SIGCSE TS 2026), February
+18–21, 2026, St. Louis, Missouri, USA. ACM, New York, NY, USA, 2 pages.
+https://doi.org/10.1145/nnnnnnn.nnnnnnn
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for third-party components of this work must be honored.
+For all other uses, contact the owner/author(s).
+SIGCSE TS 2026, St. Louis, MO, USA
+© 2026 Copyright held by the owner/author(s).
+ACM ISBN 978-x-xxxx-xxxx-x/YYYY/MM
+https://doi.org/10.1145/nnnnnnn.nnnnnnn
+1 Background and Prior Work
+LADs promise to provide actionable views of student progress at
+scale [ 3]. Yet existing systems often fall short of supporting mastery
+learning in higher education, where instructors need flexible, policy-
+driven control over grading and progression.
+Mainstream platforms provide only partial support. Canvas’s
+Learning Mastery Gradebook summarizes rubric-aligned outcomes
+into threshold levels [5 ], but does not natively support complex mas-
+tery policies. Adaptive platforms such as Khan Academy and ALEKS
+visualize topic-level mastery trajectories and recommend practice
+activities, but these dashboards remain proprietary and inaccessible
+for customization, limiting their applicability to university-level
+courses [1, 7].
+Beyond LMS-native tools, research systems such as SCALA and
+CADA extend the scope of learning analytics by integrating data
+across sources or surfacing participation metrics. SCALA generates
+competency assessments by scraping data from existing LMSs [ 8 ],
+while CADA provides instructor-facing views of student participa-
+tion and discourse patterns in online discussions [9 ]. Although both
+offer richer analytic perspectives than commercial LMS dashboards,
+neither allows instructors to configure grading schemas, implement
+mastery-based policies, or aggregate data across multiple platforms.
+Figure 1: Students view in our Instructor Dashboard.
+2 Approach
+We present an instructor-facing dashboard designed for mastery
+learning, integrated into our custom open-source LMS. The sys-
+tem retains raw points, supports flexible policies such as infinite
+retakes, aggregates performance by concept across assessments,
+1
+SIGCSE TS 2026, February 18–21, 2026, St. Louis, MO, USA Anonymous et al.
+and integrates data from multiple platforms (e.g., LMS gradebooks,
+autograders, spreadsheets).
+Previously, we designed and deployed an LMS to support mas-
+tery learning, similar to other developed open-source systems [2 ].
+This platform provided students with a portal to view assignment
+grades, track progress against course grade bins, and explore an
+interactive Concept Map [ 4, 6, 10 ] to view their mastery levels. On
+the instructor side, we implemented our proposed LAD: a secure
+dashboard providing insight into both individual and class level
+performance. Concretely, we designed a concept-centric dashboard
+that (i) retains raw student points, (ii) composes data across multi-
+ple platforms, and (iii) provides support for mastery learning (e.g.
+infinite retakes, replacement policies, and incomplete grades).INTERFACEReference SheetInstructor InterfaceInstructor
+Interface APIINPUTSOUTPUTiClickerGradescopePrarieLearn
+Figure 2: Data pipeline for the instructor dashboard.
+Our platform pulls data from three sources, iClicker (attendance),
+Gradescope (autogradable work), and PrairieLearn (exams and
+homework), and consolidates them into a single Google Sheet – we
+call our single-source-of-truth Reference Sheet. At regular intervals,
+a “syncing” utility pulls raw scores via platform APIs and writes
+them to the Reference Sheet, and another serves the instructor
+dashboard from that sheet (Figure 2). LAD access is controlled by
+instructor-managed permissions, so only designated TAs or instruc-
+tors can view entries. By running scripts periodically and even
+beyond the semester, we ensure that our system captures all resub-
+missions and work submitted after flexible deadlines to support
+retake policies and students with incomplete grades. Previously,
+at our institution, this had to be administered manually through
+dedicated TAs.
+The main view of our web-based Instructor Dashboard is the
+Students View (Figure 1). This view presents instructors with a
+choice of all the students in the class whose grades they wish to
+see. Once they choose a student, they see what the student would
+see — grades for each assignment, tabular summaries of all grades,
+and a Concept Map of the topics the student has not yet mastered.
+3 Results
+Once developed and tested, we deployed our custom LMS platform
+with the instructor LAD in an introductory CS course at a large
+public university for two consecutive semesters. Instructors dis-
+tributed access to course staff through role-based permissions, and
+the dashboard was used routinely to monitor student performance.
+Despite serving several hundred students across multiple instruc-
+tors and teaching assistants, the platform operated stably with min-
+imal errors, demonstrating feasibility in high-enrollment settings.
+Instructors reported that the Students view increased visibility into
+class performance, was easy to use, and adequately supported their
+mastery-learning policies. They also noted that it helped identify
+struggling students earlier, enabling timely intervention. The auto-
+mated data pipeline reliably captured resubmissions and late work,
+reducing the need for manual TA oversight. Overall, the positive
+feedback from instructors validated the dashboard’s utility for sup-
+porting mastery learning at a university scale.
+4 Future work
+Based on the feedback, we are adding a Statistics View, providing
+insight into class performance on each individual assignment, as
+well as individual topics. It will provide statistical summaries includ-
+ing mean, median, standard deviation, completion rates, percentiles,
+and score ranges. Interactive histograms will allow instructors to
+examine grade distributions in real time across an entire exam, or
+one of the questions.
+Another feature instructors have requested is to highlight strug-
+ging students who haven’t submitted certain assignments, or who
+scored below a certain threshold for targeted support (e.g., a group
+help session). We are exploring ways to query our system to ex-
+tract these lists. We plan to integrate the Statistics view into our
+deployed platform and run pilot studies to assess its effectiveness.
+Additionally, we plan to release an open-source version of our new
+LAD integration with our LMS.
+
+DA Chat
+A AI chatbot with following features: RAG with knowledge base for the De Anza College(procedures, resoureces, policies)
+A text game for students plan for the transfer process
+Course conselor with backend MySQL database. Using function calling to retrive courses based on the context
+ChatPDF: build personal knowledge base, support multimoda chat.
+Spring Vue OpenAI API
+
+Clinic notes structure extraction model
+Designed the pipeline for processing clinic notes to get structured output form clinic notes.
+Use LORA Fine tuned the GPT5 models, with pydantic tooling to get extraction data and Agent as judge to imporve the accuracy to get SOTA performance.
+Demo unavailable for privacy policy.
+LORA MedSpacy OpenAI API python pytorch 
+
