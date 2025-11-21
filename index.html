@@ -310,7 +310,7 @@
         
         <div id="page-home" class="card active">
             <h1>WeishuZ</h1>
-            <p>Continous exploring...</p>
+            <p id="tagline">exploring</p>
             <div class="btn-group">
                 <a class="nav-link" onclick="switchPage('work')">WORK</a>
                 <a class="nav-link" onclick="switchPage('about')">ABOUT</a>
@@ -590,6 +590,36 @@
         
         resize();
         init();
+        const taglineEl = document.getElementById('tagline');
+        const maxDots = 6;
+        let isTyping = true;
+        let dotCount = 0;
+
+        function typewriterLoop() {
+            const BASE_DELAY = 150; 
+            let delay = BASE_DELAY;
+
+            if (isTyping) {
+                if (dotCount < maxDots) {
+                    dotCount++;
+                    taglineEl.innerText = 'exploring' + '.'.repeat(dotCount);
+                } else {
+                    isTyping = false;
+                    delay = 1000; 
+                }
+            } else {
+                if (dotCount > 0) {
+                    dotCount--;
+                    taglineEl.innerText = 'exploring' + '.'.repeat(dotCount);
+                } else {
+                    isTyping = true;
+                    delay = 500;
+                }
+            }
+
+            setTimeout(typewriterLoop, delay);
+        }
+        window.onload = typewriterLoop; 
 
     </script>
 </body>
