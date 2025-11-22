@@ -46,13 +46,14 @@
             transform: translate(-50%, -50%);
             width: 500px;
             max-width: 90vw;
-            max-height: 85vh; /* 稍微加高 */
+            max-height: 85vh; 
             
-            background: rgba(255, 255, 255, 0.5);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            box-shadow: 0 30px 60px rgba(0,0,0,0.08);
+            background: rgba(255, 255, 255, 0.0001); 
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.05);
             padding: 3rem;
             text-align: center;
             border-radius: 4px;
@@ -70,12 +71,26 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+
+            overflow-y: auto;
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: rgba(0,0,0,0.2) transparent;
+        }
+
+        .card::-webkit-scrollbar {
+            width: 4px;
+        }
+        .card::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .card::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 2px;
         }
         
         .card.work-card { 
-            width: 800px; /* 更宽，适合展示视频 */
-            padding: 0; /* Work页面不需要默认的大内边距，我们自己控制 */
-            overflow: hidden; /* 隐藏溢出 */
+            width: 800px; 
+            padding: 0;
         }
 
         .card.active {
@@ -103,7 +118,7 @@
             margin-bottom: 2rem; 
         }
 
-        .btn-group { display: flex; justify-content: center; gap: 20px; }
+        .btn-group { display: flex; justify-content: center; gap: 20px; flex-shrink: 0; }
         
         .nav-link {
             text-decoration: none;
@@ -122,21 +137,20 @@
         .back-btn {
             font-size: 0.75rem;
             color: #666;
-            margin-top: auto; /* 底部对齐 */
+            margin-top: 20px;
             padding: 20px;
         }
 
-        /* === Work 页面特定样式 (Carousel) === */
+        /* === Work 页面特定样式 === */
         
         .work-container {
             position: relative;
             width: 100%;
-            height: 100%;
+            min-height: 100%; 
             display: flex;
             flex-direction: column;
         }
 
-        /* 左右切换按钮 */
         .nav-arrow {
             position: absolute;
             top: 50%;
@@ -159,18 +173,17 @@
         .nav-arrow.left { left: 10px; }
         .nav-arrow.right { right: 10px; }
 
-        /* 幻灯片区域 */
         .carousel {
             flex-grow: 1;
             position: relative;
-            overflow: hidden;
-            padding: 40px 60px; /* 给左右箭头留空间 */
+            padding: 40px 60px;
             display: flex;
-            align-items: center; /* 垂直居中 */
+            align-items: center;
+            height: auto; 
         }
 
         .project-slide {
-            display: none; /* 默认隐藏 */
+            display: none;
             width: 100%;
             flex-direction: column;
             text-align: left;
@@ -184,16 +197,16 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* 视频/图片区域 */
         .media-wrapper {
             width: 100%;
             height: 320px;
-            background: #e0e0e0;
+            background: rgba(255,255,255,0.5);
             border-radius: 4px;
             overflow: hidden;
             margin-bottom: 25px;
             position: relative;
             border: 1px solid rgba(0,0,0,0.1);
+            flex-shrink: 0;
         }
 
         .project-video {
@@ -214,7 +227,6 @@
             background: #f0f0f0;
         }
 
-        /* 项目文字信息 */
         .slide-info h3 {
             font-size: 1.5rem;
             font-weight: 800;
@@ -237,6 +249,7 @@
             border-radius: 2px;
             margin-right: 6px;
             font-family: 'Menlo', monospace;
+            margin-bottom: 4px;
         }
 
         .live-link-btn {
@@ -253,16 +266,15 @@
         }
         .live-link-btn:hover { opacity: 0.6; }
 
-        /* 底部页码指示器 */
         .slide-counter {
             font-family: 'Menlo', monospace;
             font-size: 0.8rem;
             color: #999;
             margin-bottom: 15px;
             letter-spacing: 2px;
+            padding-top: 20px;
         }
 
-        /* 状态栏 */
         .meta-info {
             position: absolute;
             bottom: 30px;
@@ -295,6 +307,33 @@
             transition: width 0.2s linear;
         }
 
+        @media (max-width: 768px) {
+            .card {
+                padding: 1.5rem;
+                width: 90vw;
+                max-height: 80vh; 
+            }
+            .card.work-card {
+                width: 95vw;
+            }
+            .carousel {
+                padding: 20px;
+                align-items: flex-start;
+            }
+            .nav-arrow {
+                top: auto;
+                bottom: 10px; 
+                transform: none;
+                background: rgba(255,255,255,0.8);
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .media-wrapper {
+                height: 200px; 
+            }
+            h1 { font-size: 2rem; }
+            .back-btn { margin-bottom: 60px; /* 为底部箭头留空 */ }
+        }
+
     </style>
 </head>
 <body>
@@ -321,9 +360,6 @@
         <div id="page-work" class="card work-card">
             <div class="work-container">
                 
-                <button class="nav-arrow left" onclick="changeSlide(-1)">←</button>
-                <button class="nav-arrow right" onclick="changeSlide(1)">→</button>
-
                 <div class="carousel">
                     
                     <div class="project-slide active">
@@ -332,9 +368,7 @@
                         </div>
                         <div class="slide-info">
                             <h3>GradeView: Mastery Learning Dashboard</h3>
-                            <p>Developed under the guidance of  
-                                <a href="https://www2.eecs.berkeley.edu/Faculty/Homepages/garcia.html">Prof. Garcia (UC Berkeley)</a> 
-                            </p>
+                            <p>Developed under the guidance of <a href="https://www2.eecs.berkeley.edu/Faculty/Homepages/garcia.html">Prof. Garcia (UC Berkeley)</a></p>
                             <p>An open-source instructor dashboard designed to facilitate mastery learning in high-enrollment Computer Science courses. The system features a robust data pipeline that aggregates and normalizes scores from disparate sources—including Gradescope, PrairieLearn, and iClicker—into a unified "Student View."</p>
                             <div>
                                 <span class="stack-tag">React</span>
@@ -348,15 +382,11 @@
                     <div class="project-slide">
                         <div class="media-wrapper">
                             <video class="project-video" src="DAChat.mp4" autoplay loop muted playsinline></video>
-
                         </div>
                         <div class="slide-info">
-
                             <h3>DA Chat: AI Educational Assistant</h3>
                             <p>A comprehensive AI assistant designed to help De Anza College students navigate campus resources and academic transfer processes. The system utilizes Retrieval-Augmented Generation (RAG) to answer queries regarding college policies and procedures with high accuracy.</p>
-                            <p>
-                                It features a gamified transfer planning module and an intelligent course counselor agent that utilizes OpenAI function calling to query a backend MySQL database for real-time course availability. Additionally, the platform includes a multimodal "ChatPDF" module, allowing students to build personal knowledge bases from academic documents.
-                            </p>
+                            <p>It features a gamified transfer planning module and an intelligent course counselor agent that utilizes OpenAI function calling to query a backend MySQL database for real-time course availability.</p>
                             <div>
                                 <span class="stack-tag">Spring Boot</span>
                                 <span class="stack-tag">Vue.js</span>
@@ -373,24 +403,27 @@
                         </div>
                         <div class="slide-info">
                             <h3>Clinical Note Structure Extraction</h3>
-                            <p>Designed a high-precision NLP pipeline to convert unstructured clinical notes into standardized, structured outputs. The architecture leverages Low-Rank Adaptation (LoRA) to efficiently fine-tune Large Language Models (LLMs) for medical context, integrated with MedSpacy for domain-specific entity recognition. To ensure State-of-the-Art (SOTA) accuracy, the system employs Pydantic for strict output schema validation and implements an "Agent as Judge" evaluation framework to iteratively refine extraction quality.</p>
+                            <p>Designed a high-precision NLP pipeline to convert unstructured clinical notes into standardized, structured outputs. The architecture leverages Low-Rank Adaptation (LoRA) to efficiently fine-tune Large Language Models (LLMs) for medical context, integrated with MedSpacy for domain-specific entity recognition.</p>
                             <div>
                                 <span class="stack-tag">Python</span>
                                 <span class="stack-tag">PyTorch</span>
                                 <span class="stack-tag">MedSpacy</span>
                                 <span class="stack-tag">LoRA</span>
                             </div>
-                            <a href="#" class="live-link-btn"> Live Demo: Unavailable (Privacy Policy)</a>
+                            <a href="#" class="live-link-btn">Live Demo: Unavailable (Privacy Policy)</a>
                         </div>
                     </div>
 
                     <div class="project-slide">
-                        <div class="media-wrapper" style="background: #f9f9f9; border: 1px dashed #ccc;">
-                            <div class="no-preview" style="color: #ccc;">More projects in pipeline...</div>
+                        <div class="media-wrapper" style="background: transparent; border: 1px dashed #999;">
+                            <div class="no-preview" style="color: #666; background: transparent;">More projects in pipeline...</div>
                         </div>
                     </div>
 
                 </div>
+
+                <button class="nav-arrow left" onclick="changeSlide(-1)">←</button>
+                <button class="nav-arrow right" onclick="changeSlide(1)">→</button>
 
                 <div class="slide-counter" id="slide-counter">01 / 03</div>
                 <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
@@ -414,28 +447,25 @@
     </div>
 
     <script>
-        // === 1. Carousel Logic (新增) ===
+        // === 1. Carousel Logic ===
         let currentSlideIndex = 0;
         const slides = document.querySelectorAll('.project-slide');
         const counter = document.getElementById('slide-counter');
 
         function changeSlide(direction) {
-            // 隐藏当前 slide
             slides[currentSlideIndex].classList.remove('active');
-            
-            // 计算新 index (循环模式)
             currentSlideIndex += direction;
             if (currentSlideIndex >= slides.length) currentSlideIndex = 0;
             if (currentSlideIndex < 0) currentSlideIndex = slides.length - 1;
-            
-            // 显示新 slide
             slides[currentSlideIndex].classList.add('active');
-            
-            // 更新计数器
             counter.innerText = `0${currentSlideIndex + 1} / 0${slides.length}`;
+            
+            // 切换幻灯片时，滚动回顶部 (提升体验)
+            const workCard = document.getElementById('page-work');
+            if(workCard) workCard.scrollTop = 0;
         }
 
-        // === 2. Page Switch Logic (现有) ===
+        // === 2. Page Switch Logic ===
         function switchPage(targetId) {
             const currentCard = document.querySelector('.card.active');
             const targetCard = document.getElementById('page-' + targetId);
@@ -449,6 +479,8 @@
             setTimeout(() => {
                 targetCard.classList.remove('exit');
                 targetCard.classList.add('active');
+                // 重置滚动条位置
+                targetCard.scrollTop = 0;
             }, 100); 
             
             setTimeout(() => {
@@ -456,7 +488,7 @@
             }, 800);
         }
 
-        // === 3. Background Particles (现有) ===
+        // === 3. Background Algorithms (Prim & Kruskal) ===
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const statusText = document.getElementById('status-text');
@@ -471,16 +503,45 @@
         let frameCount = 0;
         
         let cycleStartTime = 0;
-        const CYCLE_DURATION = 60000; 
+        const CYCLE_DURATION = 90000; 
         
+        // 算法相关变量
+        let currentAlgorithm = 'PRIM'; // 'PRIM' or 'KRUSKAL'
+        
+        // Prim 专用
         let reached = [], unreached = [];
+        
+        // Kruskal 专用
+        let allEdges = []; 
+        let dsu = null;
+        let edgeIndex = 0; 
 
         let CONFIG = {
             pointCount: 150,
-            speed: 3, 
-            baseSpeed: 3,
+            speed: 8,       
+            baseSpeed: 8,   
             warpSpeed: 1
         };
+
+        // 并查集类 (用于 Kruskal)
+        class DSU {
+            constructor(n) {
+                this.parent = Array.from({length: n}, (_, i) => i);
+            }
+            find(i) {
+                if (this.parent[i] === i) return i;
+                return this.parent[i] = this.find(this.parent[i]);
+            }
+            union(i, j) {
+                let rootI = this.find(i);
+                let rootJ = this.find(j);
+                if (rootI !== rootJ) {
+                    this.parent[rootI] = rootJ;
+                    return true;
+                }
+                return false;
+            }
+        }
 
         function triggerWarpSpeed() {
             CONFIG.speed = 1;
@@ -490,8 +551,9 @@
         }
 
         class Point {
-            constructor(x, y) {
+            constructor(x, y, id) {
                 this.x = x; this.y = y;
+                this.id = id; // ID 用于 Kruskal
                 this.phase = Math.random() * Math.PI * 2;
                 this.currentSize = 2;
             }
@@ -519,16 +581,37 @@
         function init() {
             if (animationId) cancelAnimationFrame(animationId);
 
-            points = []; edges = []; reached = []; unreached = [];
+            // 切换算法
+            currentAlgorithm = (currentAlgorithm === 'PRIM') ? 'KRUSKAL' : 'PRIM';
+
+            points = []; edges = []; 
             frameCount = 0;
             cycleStartTime = Date.now();
 
             const pad = 20;
             for(let i=0; i<CONFIG.pointCount; i++){
-                points.push(new Point(Math.random()*(width-pad*2)+pad, Math.random()*(height-pad*2)+pad));
+                points.push(new Point(Math.random()*(width-pad*2)+pad, Math.random()*(height-pad*2)+pad, i));
             }
-            unreached = [...points];
-            reached.push(unreached.splice(Math.floor(Math.random()*unreached.length), 1)[0]);
+
+            if (currentAlgorithm === 'PRIM') {
+                // Prim 初始化：一个已达集合，其余未达
+                unreached = [...points];
+                reached = [];
+                reached.push(unreached.splice(Math.floor(Math.random()*unreached.length), 1)[0]);
+            } else {
+                // Kruskal 初始化：生成所有边并按权重排序
+                allEdges = [];
+                for (let i = 0; i < points.length; i++) {
+                    for (let j = i + 1; j < points.length; j++) {
+                        let d = Math.hypot(points[i].x - points[j].x, points[i].y - points[j].y);
+                        allEdges.push({ p1: points[i], p2: points[j], w: d, id1: i, id2: j });
+                    }
+                }
+                // 按距离从小到大排序
+                allEdges.sort((a, b) => a.w - b.w);
+                dsu = new DSU(points.length);
+                edgeIndex = 0;
+            }
             
             loop();
         }
@@ -546,30 +629,63 @@
 
             ctx.clearRect(0, 0, width, height);
 
+            // 绘制点
             for(let p of points) { p.update(); p.draw(ctx); }
+            
+            // 绘制边
             ctx.beginPath();
             for(let e of edges) { ctx.moveTo(e.p1.x, e.p1.y); ctx.lineTo(e.p2.x, e.p2.y); }
             ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.stroke();
 
-            if (unreached.length > 0) {
-                statusText.innerText = "SYSTEM GROWING"; 
-                
-                if (frameCount % CONFIG.speed === 0) {
-                    let record = Infinity, rIdx = -1, uIdx = -1;
-                    for (let i = 0; i < reached.length; i++) {
-                        for (let j = 0; j < unreached.length; j++) {
-                            let d = Math.hypot(reached[i].x - unreached[j].x, reached[i].y - unreached[j].y);
-                            if (d < record) { record = d; rIdx = i; uIdx = j; }
+            // 算法生长逻辑
+            let isFinished = false;
+            if (currentAlgorithm === 'PRIM') {
+                if (unreached.length > 0) {
+                    statusText.innerText = `SYSTEM GROWING (PRIM)`; 
+                    
+                    if (frameCount % CONFIG.speed === 0) {
+                        let record = Infinity, rIdx = -1, uIdx = -1;
+                        // 优化性能：稍微限制搜索范围，或者保持全搜
+                        for (let i = 0; i < reached.length; i++) {
+                            for (let j = 0; j < unreached.length; j++) {
+                                let d = Math.hypot(reached[i].x - unreached[j].x, reached[i].y - unreached[j].y);
+                                if (d < record) { record = d; rIdx = i; uIdx = j; }
+                            }
+                        }
+                        if (rIdx !== -1) {
+                            let p2 = unreached[uIdx];
+                            edges.push({p1: reached[rIdx], p2: p2});
+                            reached.push(p2);
+                            unreached.splice(uIdx, 1);
                         }
                     }
-                    if (rIdx !== -1) {
-                        let p2 = unreached[uIdx];
-                        edges.push({p1: reached[rIdx], p2: p2});
-                        reached.push(p2);
-                        unreached.splice(uIdx, 1);
-                    }
+                } else {
+                    isFinished = true;
                 }
             } else {
+                // KRUSKAL LOGIC
+                if (edgeIndex < allEdges.length && edges.length < points.length - 1) {
+                    statusText.innerText = `SYSTEM GROWING (KRUSKAL)`;
+                    
+                    if (frameCount % CONFIG.speed === 0) {
+                        // 每次尝试添加一条有效边
+                        let added = false;
+                        while (!added && edgeIndex < allEdges.length) {
+                            let e = allEdges[edgeIndex];
+                            edgeIndex++;
+                            
+                            if (dsu.union(e.id1, e.id2)) {
+                                edges.push({p1: e.p1, p2: e.p2});
+                                added = true;
+                            }
+                        }
+                    }
+                } else {
+                    isFinished = true;
+                }
+            }
+
+            if (isFinished) {
                 const remaining = Math.ceil((CYCLE_DURATION - elapsed) / 1000);
                 statusText.innerText = `SYSTEM STABLE (${remaining}s)`;
             }
@@ -590,6 +706,8 @@
         
         resize();
         init();
+
+        // Typewriter Logic
         const taglineEl = document.getElementById('tagline');
         const maxDots = 6;
         let isTyping = true;
@@ -616,7 +734,6 @@
                     delay = 500;
                 }
             }
-
             setTimeout(typewriterLoop, delay);
         }
         window.onload = typewriterLoop; 
