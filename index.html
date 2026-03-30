@@ -93,6 +93,15 @@
             padding: 0;
         }
 
+        .card.experience-card {
+            width: 680px;
+            padding: 2.5rem 3rem;
+        }
+
+        .card.about-card {
+            width: 560px;
+        }
+
         .card.active {
             opacity: 1;
             pointer-events: auto;
@@ -108,6 +117,8 @@
         }
 
         h1 { font-size: 3rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 1rem; color: #000; }
+        h1 a { color: inherit; text-decoration: none; }
+        h1 a:hover { opacity: 0.7; }
         h2 { font-size: 2rem; font-weight: 800; margin-bottom: 1rem; }
         
         p { 
@@ -275,6 +286,185 @@
             padding-top: 20px;
         }
 
+        /* === Experience 页面样式 === */
+
+        .experience-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .experience-header h2 {
+            margin-bottom: 0.25rem;
+        }
+
+        .experience-header .edu-line {
+            font-family: 'Menlo', monospace;
+            font-size: 0.75rem;
+            color: #888;
+            letter-spacing: 0.5px;
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 24px;
+            text-align: left;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 4px;
+            bottom: 4px;
+            width: 1px;
+            background: rgba(0,0,0,0.15);
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 2rem;
+            animation: slideIn 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+        }
+
+        .timeline-item:last-child {
+            margin-bottom: 0.5rem;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -22px;
+            top: 6px;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #000;
+            border: 2px solid var(--bg-color);
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+        }
+
+        .timeline-item.upcoming::before {
+            background: transparent;
+            border: 2px solid #000;
+            box-shadow: none;
+        }
+
+        .timeline-role {
+            font-size: 1rem;
+            font-weight: 800;
+            color: #000;
+            margin-bottom: 2px;
+            letter-spacing: -0.3px;
+        }
+
+        .timeline-company {
+            font-family: 'Menlo', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 2px;
+        }
+
+        .timeline-meta {
+            font-family: 'Menlo', monospace;
+            font-size: 0.7rem;
+            color: #999;
+            margin-bottom: 8px;
+            letter-spacing: 0.3px;
+        }
+
+        .timeline-details {
+            list-style: none;
+            padding: 0;
+        }
+
+        .timeline-details li {
+            font-family: 'Menlo', monospace;
+            font-size: 0.75rem;
+            color: #555;
+            line-height: 1.7;
+            padding-left: 14px;
+            position: relative;
+        }
+
+        .timeline-details li::before {
+            content: '›';
+            position: absolute;
+            left: 0;
+            color: #999;
+            font-weight: 700;
+        }
+
+        .exp-tags {
+            margin-top: 8px;
+        }
+
+        .exp-tags .stack-tag {
+            font-size: 0.65rem;
+            padding: 3px 6px;
+        }
+
+        /* === About 页面增强 === */
+
+        .about-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .about-section-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #999;
+            margin-bottom: 0.6rem;
+        }
+
+        .about-content p {
+            margin-bottom: 1rem;
+        }
+
+        .about-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .about-link-item {
+            font-family: 'Menlo', monospace;
+            font-size: 0.78rem;
+            color: #000;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(0,0,0,0.2);
+            padding-bottom: 1px;
+            transition: border-color 0.2s, opacity 0.2s;
+        }
+
+        .about-link-item:hover {
+            border-bottom-color: #000;
+            opacity: 0.7;
+        }
+
+        .skills-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .skills-group-title {
+            font-family: 'Menlo', monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .skills-group-items {
+            font-family: 'Menlo', monospace;
+            font-size: 0.7rem;
+            color: #666;
+            line-height: 1.6;
+        }
+
         .meta-info {
             position: absolute;
             bottom: 30px;
@@ -316,6 +506,13 @@
             .card.work-card {
                 width: 95vw;
             }
+            .card.experience-card {
+                width: 95vw;
+                padding: 1.5rem;
+            }
+            .card.about-card {
+                width: 92vw;
+            }
             .carousel {
                 padding: 20px;
                 align-items: flex-start;
@@ -331,7 +528,24 @@
                 height: 200px; 
             }
             h1 { font-size: 2rem; }
-            .back-btn { margin-bottom: 60px; /* 为底部箭头留空 */ }
+            h2 { font-size: 1.5rem; }
+            .btn-group { 
+                flex-wrap: wrap; 
+                gap: 12px; 
+            }
+            .nav-link {
+                font-size: 0.8rem;
+            }
+            .back-btn { margin-bottom: 60px; }
+            .timeline {
+                padding-left: 20px;
+            }
+            .timeline-role {
+                font-size: 0.9rem;
+            }
+            .skills-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
     </style>
@@ -347,16 +561,92 @@
 
     <div class="scene">
         
+        <!-- HOME -->
         <div id="page-home" class="card active">
-            <h1>WeishuZ</h1>
+            <h1><a href="https://www.weishuz.com">WeishuZ</a></h1>
             <p id="tagline">exploring</p>
             <div class="btn-group">
+                <a class="nav-link" onclick="switchPage('experience')">EXPERIENCE</a>
                 <a class="nav-link" onclick="switchPage('work')">WORK</a>
                 <a class="nav-link" onclick="switchPage('about')">ABOUT</a>
                 <a class="nav-link" href="https://github.com/WeishuZ" target="_blank">GITHUB</a>
             </div>
         </div>
 
+        <!-- EXPERIENCE -->
+        <div id="page-experience" class="card experience-card">
+            <div class="experience-header">
+                <h2>Experience</h2>
+                <div class="edu-line">UC Berkeley · BS EECS · 4.0/4.0 · May 2027</div>
+            </div>
+
+            <div class="timeline">
+
+                <div class="timeline-item upcoming">
+                    <div class="timeline-role">Software Engineering in Test</div>
+                    <div class="timeline-company">ASML</div>
+                    <div class="timeline-meta">San Jose, CA · May 2026 – Aug 2026</div>
+                    <div class="exp-tags">
+                        <span class="stack-tag">Incoming</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-role">CS Intern — Backend</div>
+                    <div class="timeline-company">BalanX-BIO</div>
+                    <div class="timeline-meta">Remote · Jan 2026 – Present</div>
+                    <ul class="timeline-details">
+                        <li>Express.js backend for AGI Health Coach platform</li>
+                        <li>AI Orchestrator Proxy routing multi-provider LLM APIs</li>
+                        <li>Offline-first conflict resolution for HealthKit / Google Fit sync</li>
+                        <li>AWS EventBridge / Lambda pipelines, Cognito / JWT auth</li>
+                    </ul>
+                    <div class="exp-tags">
+                        <span class="stack-tag">Express.js</span>
+                        <span class="stack-tag">AWS</span>
+                        <span class="stack-tag">LangChain</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-role">Undergraduate Research Assistant</div>
+                    <div class="timeline-company">UCSF</div>
+                    <div class="timeline-meta">San Francisco, CA · Aug 2025 – Present</div>
+                    <ul class="timeline-details">
+                        <li>Clinical extraction pipeline with in-context label propagation — 90% token reduction</li>
+                        <li>Fine-tuned Qwen LLMs via QLoRA on 4,000+ entry clinical dataset</li>
+                        <li>vLLM / PagedAttention optimization — 3× throughput, ~80% VRAM reduction</li>
+                    </ul>
+                    <div class="exp-tags">
+                        <span class="stack-tag">PyTorch</span>
+                        <span class="stack-tag">QLoRA</span>
+                        <span class="stack-tag">vLLM</span>
+                        <span class="stack-tag">MedSpacy</span>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-role">Lead Systems Architect</div>
+                    <div class="timeline-company">UC Berkeley — GradeView / GradeSync</div>
+                    <div class="timeline-meta">Berkeley, CA · Aug 2025 – Present</div>
+                    <ul class="timeline-details">
+                        <li>PostgreSQL cluster with Redis caching — 95% latency reduction</li>
+                        <li>Row-Level Security, RBAC, resolved 200+ N+1 query issues</li>
+                    </ul>
+                    <div class="exp-tags">
+                        <span class="stack-tag">React</span>
+                        <span class="stack-tag">Node.js</span>
+                        <span class="stack-tag">PostgreSQL</span>
+                        <span class="stack-tag">Redis</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
+        </div>
+
+        <!-- WORK -->
         <div id="page-work" class="card work-card">
             <div class="work-container">
                 
@@ -374,6 +664,8 @@
                                 <span class="stack-tag">React</span>
                                 <span class="stack-tag">Node.js</span>
                                 <span class="stack-tag">Express</span>
+                                <span class="stack-tag">PostgreSQL</span>
+                                <span class="stack-tag">Redis</span>
                             </div>
                             <a href="https://gradeview.eecs.berkeley.edu" target="_blank" class="live-link-btn">VISIT LIVE SITE ↗</a>
                         </div>
@@ -409,14 +701,9 @@
                                 <span class="stack-tag">PyTorch</span>
                                 <span class="stack-tag">MedSpacy</span>
                                 <span class="stack-tag">LoRA</span>
+                                <span class="stack-tag">vLLM</span>
                             </div>
                             <a href="#" class="live-link-btn">Live Demo: Unavailable (Privacy Policy)</a>
-                        </div>
-                    </div>
-
-                    <div class="project-slide">
-                        <div class="media-wrapper" style="background: transparent; border: 1px dashed #999;">
-                            <div class="no-preview" style="color: #666; background: transparent;">More projects in pipeline...</div>
                         </div>
                     </div>
 
@@ -430,16 +717,49 @@
             </div>
         </div>
 
-        <div id="page-about" class="card">
-            <h2>About Me</h2>
+        <!-- ABOUT -->
+        <div id="page-about" class="card about-card">
+            <h2>About</h2>
             <div class="about-content">
-                <p>
-                    EECS at UC Berkeley.
-                <br><br>
-                   Passionate about tackling real-world challenges with cutting-edge techniques.
-                <br><br>
-                Exploring the unknown. Building the future.
-                </p>
+
+                <div class="about-section">
+                    <div class="about-section-title">Who</div>
+                    <p>
+                        EECS at UC Berkeley, graduating May 2027. I build systems that sit at the intersection of infrastructure engineering and applied AI — clinical NLP pipelines, distributed backends, developer tooling. Biased toward things that ship, scale, and matter.
+                    </p>
+                </div>
+
+                <div class="about-section">
+                    <div class="about-section-title">Skills</div>
+                    <div class="skills-grid">
+                        <div>
+                            <div class="skills-group-title">Languages</div>
+                            <div class="skills-group-items">Python, Java, C/C++, SQL, TypeScript, JavaScript</div>
+                        </div>
+                        <div>
+                            <div class="skills-group-title">Frameworks</div>
+                            <div class="skills-group-items">FastAPI, React, Node.js, Spring Boot, Next.js, LangChain</div>
+                        </div>
+                        <div>
+                            <div class="skills-group-title">Cloud & DevOps</div>
+                            <div class="skills-group-items">AWS, Kubernetes, Docker, Terraform, CI/CD</div>
+                        </div>
+                        <div>
+                            <div class="skills-group-title">AI & Data</div>
+                            <div class="skills-group-items">PyTorch, vLLM, LoRA/QLoRA, MedSpacy, HuggingFace</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="about-section">
+                    <div class="about-section-title">Links</div>
+                    <div class="about-links">
+                        <a class="about-link-item" href="mailto:weszhang@berkeley.edu">weszhang@berkeley.edu</a>
+                        <a class="about-link-item" href="https://linkedin.com/in/Weishuz" target="_blank">LinkedIn</a>
+                        <a class="about-link-item" href="https://github.com/WeishuZ" target="_blank">GitHub</a>
+                    </div>
+                </div>
+
             </div>
             <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
         </div>
@@ -645,7 +965,6 @@
                     
                     if (frameCount % CONFIG.speed === 0) {
                         let record = Infinity, rIdx = -1, uIdx = -1;
-                        // 优化性能：稍微限制搜索范围，或者保持全搜
                         for (let i = 0; i < reached.length; i++) {
                             for (let j = 0; j < unreached.length; j++) {
                                 let d = Math.hypot(reached[i].x - unreached[j].x, reached[i].y - unreached[j].y);
@@ -668,7 +987,6 @@
                     statusText.innerText = `SYSTEM GROWING (KRUSKAL)`;
                     
                     if (frameCount % CONFIG.speed === 0) {
-                        // 每次尝试添加一条有效边
                         let added = false;
                         while (!added && edgeIndex < allEdges.length) {
                             let e = allEdges[edgeIndex];
