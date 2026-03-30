@@ -94,12 +94,12 @@
         }
 
         .card.experience-card {
-            width: 680px;
+            width: 820px;
             padding: 2.5rem 3rem;
         }
 
         .card.about-card {
-            width: 560px;
+            width: 720px;
         }
 
         .card.active {
@@ -123,9 +123,9 @@
         
         p { 
             font-family: 'Menlo', monospace; 
-            font-size: 0.85rem; 
+            font-size: 0.9rem; 
             color: #555; 
-            line-height: 1.6;
+            line-height: 1.7;
             margin-bottom: 2rem; 
         }
 
@@ -350,7 +350,7 @@
         }
 
         .timeline-role {
-            font-size: 1rem;
+            font-size: 1.1rem;
             font-weight: 800;
             color: #000;
             margin-bottom: 2px;
@@ -359,7 +359,7 @@
 
         .timeline-company {
             font-family: 'Menlo', monospace;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-weight: 600;
             color: #333;
             margin-bottom: 2px;
@@ -367,9 +367,9 @@
 
         .timeline-meta {
             font-family: 'Menlo', monospace;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             color: #999;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             letter-spacing: 0.3px;
         }
 
@@ -380,11 +380,12 @@
 
         .timeline-details li {
             font-family: 'Menlo', monospace;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             color: #555;
-            line-height: 1.7;
+            line-height: 1.8;
             padding-left: 14px;
             position: relative;
+            margin-bottom: 2px;
         }
 
         .timeline-details li::before {
@@ -452,7 +453,7 @@
 
         .skills-group-title {
             font-family: 'Menlo', monospace;
-            font-size: 0.72rem;
+            font-size: 0.8rem;
             font-weight: 700;
             color: #333;
             margin-bottom: 4px;
@@ -460,9 +461,9 @@
 
         .skills-group-items {
             font-family: 'Menlo', monospace;
-            font-size: 0.7rem;
+            font-size: 0.78rem;
             color: #666;
-            line-height: 1.6;
+            line-height: 1.7;
         }
 
         .meta-info {
@@ -596,10 +597,10 @@
                     <div class="timeline-company">BalanX-BIO</div>
                     <div class="timeline-meta">Remote · Jan 2026 – Present</div>
                     <ul class="timeline-details">
-                        <li>Express.js backend for AGI Health Coach platform</li>
-                        <li>AI Orchestrator Proxy routing multi-provider LLM APIs</li>
-                        <li>Offline-first conflict resolution for HealthKit / Google Fit sync</li>
-                        <li>AWS EventBridge / Lambda pipelines, Cognito / JWT auth</li>
+                        <li>Architecting high-performance Express.js backend for an AGI Health Coach with server-authoritative synchronization engine for real-time state consistency</li>
+                        <li>Engineered AI Orchestrator Proxy interfacing with LLM APIs, managing dynamic context injection (personality vectors, health summaries) for personalized health insights</li>
+                        <li>Designed offline-first conflict resolution logic for seamless data sync across HealthKit and Google Fit devices</li>
+                        <li>Built automated data pipelines using AWS EventBridge and Lambda for daily health metric aggregation, secured via Cognito and JWT</li>
                     </ul>
                     <div class="exp-tags">
                         <span class="stack-tag">Express.js</span>
@@ -613,9 +614,9 @@
                     <div class="timeline-company">UCSF</div>
                     <div class="timeline-meta">San Francisco, CA · Aug 2025 – Present</div>
                     <ul class="timeline-details">
-                        <li>Clinical extraction pipeline with in-context label propagation — 90% token reduction</li>
-                        <li>Fine-tuned Qwen LLMs via QLoRA on 4,000+ entry clinical dataset</li>
-                        <li>vLLM / PagedAttention optimization — 3× throughput, ~80% VRAM reduction</li>
+                        <li>Engineered high-throughput clinical extraction pipeline by decomposing monolithic tasks into modular sub-tasks; used in-context label propagation to reduce token consumption by 90%</li>
+                        <li>Constructed 4,000+ entry domain-specific dataset and fine-tuned Qwen LLMs via QLoRA; implemented Self-Consistency checks ensuring 100% schema fidelity for medical compliance</li>
+                        <li>Optimized inference infrastructure using vLLM and PagedAttention — 3× throughput increase for long-context medical records, ~80% VRAM reduction via quantization</li>
                     </ul>
                     <div class="exp-tags">
                         <span class="stack-tag">PyTorch</span>
@@ -630,8 +631,10 @@
                     <div class="timeline-company">UC Berkeley — GradeView / GradeSync</div>
                     <div class="timeline-meta">Berkeley, CA · Aug 2025 – Present</div>
                     <ul class="timeline-details">
-                        <li>PostgreSQL cluster with Redis caching — 95% latency reduction</li>
-                        <li>Row-Level Security, RBAC, resolved 200+ N+1 query issues</li>
+                        <li>Engineered distributed course management ecosystem, migrating fragmented legacy data into high-concurrency PostgreSQL cluster with normalized schema</li>
+                        <li>Optimized system-wide read performance with Redis-backed caching layer and Python pre-rendering service — 95% query latency reduction</li>
+                        <li>Hardened infrastructure with Row-Level Security and granular RBAC for 100+ concurrent students and staff</li>
+                        <li>Resolved 200+ N+1 query patterns; deployed Nginx reverse proxy for 70% reduction in deployment overhead</li>
                     </ul>
                     <div class="exp-tags">
                         <span class="stack-tag">React</span>
@@ -725,7 +728,7 @@
                 <div class="about-section">
                     <div class="about-section-title">Who</div>
                     <p>
-                        EECS at UC Berkeley, graduating May 2027. I build systems that sit at the intersection of infrastructure engineering and applied AI — clinical NLP pipelines, distributed backends, developer tooling. Biased toward things that ship, scale, and matter.
+                        EECS at UC Berkeley, graduating May 2027. I build systems at the intersection of infrastructure engineering and applied AI — clinical NLP pipelines, distributed course management platforms, and backend systems for health tech. Currently researching LLM optimization for clinical data extraction at UCSF and engineering backend infrastructure for an AGI health platform at BalanX-BIO. Incoming SWE intern at ASML (Summer 2026). Biased toward things that ship, scale, and matter.
                     </p>
                 </div>
 
