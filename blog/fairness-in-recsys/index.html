@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Measuring What Matters: Fairness and Popularity Bias in Recommender Systems — WeishuZ.Dev</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        });"></script>
+    <style>
+        :root { --bg: #f2f2f2; --text: #1a1a1a; --muted: #666; --accent: #2563eb; --border: rgba(0,0,0,0.1); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; }
+        .top-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(242,242,242,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 16px 0; }
+        .top-nav-inner { max-width: 720px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; }
+        .top-nav a { text-decoration: none; color: var(--text); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 2px; border-bottom: 2px solid transparent; transition: border-color 0.3s; }
+        .top-nav a:hover { border-bottom-color: var(--text); }
+        .top-nav .site-name { font-size: 1.1rem; letter-spacing: -0.5px; }
+        .container { max-width: 720px; margin: 0 auto; padding: 100px 24px 60px; }
+        .article-header { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+        .article-title { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 12px; }
+        .article-meta { font-family: 'Menlo', monospace; font-size: 0.8rem; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+        .article-tags { margin-top: 12px; }
+        .tag { display: inline-block; font-family: 'Menlo', monospace; font-size: 0.65rem; background: #333; color: #fff; padding: 3px 7px; border-radius: 2px; margin-right: 4px; }
+        .article-body h2 { font-size: 1.5rem; font-weight: 800; margin: 2.5rem 0 1rem; padding-top: 1rem; }
+        .article-body h3 { font-size: 1.2rem; font-weight: 700; margin: 2rem 0 0.8rem; }
+        .article-body p { margin-bottom: 1.2rem; font-size: 1rem; color: #333; }
+        .article-body img { width: 100%; max-width: 100%; border-radius: 4px; margin: 1.5rem 0; border: 1px solid var(--border); }
+        .article-body code { font-family: 'Menlo', 'Consolas', monospace; font-size: 0.85em; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 3px; }
+        .article-body pre { background: #1e1e2e; color: #cdd6f4; padding: 20px 24px; border-radius: 6px; overflow-x: auto; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.6; }
+        .article-body pre code { background: none; padding: 0; color: inherit; }
+        .article-body blockquote { border-left: 3px solid #333; padding-left: 20px; margin: 1.5rem 0; color: #555; font-style: italic; }
+        .article-body ul, .article-body ol { padding-left: 24px; margin-bottom: 1.2rem; }
+        .article-body li { margin-bottom: 0.4rem; font-size: 1rem; color: #333; }
+        .article-body table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+        .article-body th, .article-body td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; }
+        .article-body th { background: rgba(0,0,0,0.03); font-weight: 700; font-size: 0.85rem; }
+        .katex-display { margin: 1.5rem 0; overflow-x: auto; padding: 8px 0; }
+        .article-footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: 'Menlo', monospace; font-size: 0.8rem; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+        .article-footer a { color: var(--text); font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--border); }
+        .article-footer a:hover { border-bottom-color: var(--text); }
+        .ref-list { font-size: 0.85rem; line-height: 1.6; }
+        .ref-list li { margin-bottom: 0.6rem; color: #444; }
+        @media (max-width: 768px) { .container { padding: 80px 16px 40px; } .article-title { font-size: 1.6rem; } .article-body h2 { font-size: 1.3rem; } }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="site-name">WeishuZ</a>
+            <div style="display:flex;gap:20px;">
+                <a href="/">Home</a>
+                <a href="/blog/">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <header class="article-header">
+            <h1 class="article-title">Measuring What Matters: Fairness and Popularity Bias in Recommender Systems</h1>
+            <div class="article-meta">
+                <span>April 2026</span>
+                <span>·</span>
+                <span>12 min read</span>
+            </div>
+            <div class="article-tags">
+                <span class="tag">recommender systems</span>
+                <span class="tag">fairness</span>
+                <span class="tag">network science</span>
+                <span class="tag">evaluation metrics</span>
+            </div>
+        </header>
+
+        <article class="article-body">
+
+            <p>Most recommendation system tutorials focus on accuracy — NDCG, Recall@k, RMSE. But a system that's "accurate" can still be deeply unfair. It can systematically ignore niche content, amplify existing popularity imbalances, and serve different quality recommendations to different demographic groups.</p>
+
+            <p>I've been taking a rigorous network science course this semester (CS 194-198 at Berkeley, taught by Christian Borgs), and it struck me how deeply connected these fairness problems are to classical graph theory. Popularity bias in recommendations mirrors preferential attachment in networks. The Gini index we use to measure recommendation inequality is the same tool economists use — and the same lens through which we study degree distributions in scale-free networks.</p>
+
+            <p>This post walks through 10 evaluation metrics for fairness and popularity bias in recommender systems, the math behind them, and why they matter. I also implemented all of them as a module compatible with <a href="https://github.com/microsoft/recommenders">Microsoft Recommenders</a>.</p>
+
+            <h2>The Problem: Popularity Follows a Power Law</h2>
+
+            <p>In almost any recommendation dataset, item popularity follows a power-law distribution:</p>
+
+            $$P(k) \propto k^{-\gamma}$$
+
+            <p>where $k$ is the number of interactions and $\gamma$ is typically between 1.5 and 3. A small number of items receive the vast majority of interactions, while a "long tail" of items receives almost nothing.</p>
+
+            <p>This is exactly the degree distribution we observe in scale-free networks — and for the same reason. In the Barabási–Albert model, new edges preferentially attach to high-degree nodes ("the rich get richer"). In recommendation systems, popular items get recommended more, which generates more clicks, which makes them even more popular. Same mechanism, same math.</p>
+
+            <p>The question is: <strong>does your recommender amplify this natural bias, or does it help surface the long tail?</strong></p>
+
+            <h2>Part I: Popularity Bias Metrics</h2>
+
+            <h3>1. Average Recommendation Popularity (ARP)</h3>
+
+            <p>The simplest measure: how popular are the items you're recommending?</p>
+
+            $$\text{ARP} = \frac{1}{|U|} \sum_{u \in U} \frac{1}{|L_u|} \sum_{i \in L_u} \phi(i)$$
+
+            <p>where $\phi(i)$ is item $i$'s popularity (number of interactions in training data), $U$ is the set of users, and $L_u$ is the recommendation list for user $u$.</p>
+
+            <p>A high ARP means your system mostly recommends items everyone already knows. Not necessarily bad — popular items are popular for a reason — but if ARP is significantly higher than the average training popularity, your model is amplifying bias.</p>
+
+            <h3>2. Average Percentage of Long Tail Items (APLT)</h3>
+
+            <p>Define the "long tail" as items below the $\tau$-th percentile in popularity (default $\tau = 80\%$, meaning the bottom 80% of items by popularity). Then:</p>
+
+            $$\text{APLT} = \frac{1}{|U|} \sum_{u \in U} \frac{|\{i \in L_u : i \in \Gamma\}|}{|L_u|}$$
+
+            <p>where $\Gamma$ is the set of long-tail items. This tells you what fraction of each user's recommendations come from the long tail.</p>
+
+            <h3>3. Average Coverage of Long Tail Items (ACLT)</h3>
+
+            <p>APLT measures what fraction of <em>recommendations</em> are long-tail. ACLT asks the reverse: what fraction of <em>long-tail items</em> actually appear in anyone's recommendations?</p>
+
+            $$\text{ACLT} = \frac{|\{i \in \Gamma : \exists u, i \in L_u\}|}{|\Gamma|}$$
+
+            <p>An ACLT of 0.1 means 90% of long-tail items are never recommended to anyone. They're effectively invisible.</p>
+
+            <h3>4. Popularity Lift</h3>
+
+            <p>How much does your model amplify popularity compared to the training data?</p>
+
+            $$\text{PopLift} = \frac{\text{ARP}(\text{recommendations})}{\text{ARP}(\text{training})}$$
+
+            <p>A PopLift of 1.0 means the model preserves the training distribution. Above 1.0 means it amplifies popularity; below 1.0 means it actively promotes the long tail.</p>
+
+            <h3>5. Gini Index</h3>
+
+            <p>The Gini index measures inequality in how often items are recommended. Borrowed directly from economics (income inequality), it has a beautiful connection to network science.</p>
+
+            <p>Sort items by recommendation frequency $f_1 \leq f_2 \leq \ldots \leq f_n$. The Gini index is:</p>
+
+            $$G = \frac{\sum_{i=1}^{n}(2i - n - 1) f_i}{n \sum_{i=1}^{n} f_i}$$
+
+            <p>$G = 0$ means every item is recommended equally often. $G = 1$ means one item gets all recommendations. In practice, most recommender systems produce $G > 0.7$, which is worse than global income inequality ($G \approx 0.65$).</p>
+
+            <blockquote>
+                <strong>Network science connection:</strong> The Gini index of the degree distribution in a network tells you how "unequal" the network is. A star graph has Gini = 1. An Erdős–Rényi random graph $G(n, p)$ has a near-symmetric degree distribution, so Gini $\approx 0$. Scale-free networks with power-law degrees sit in between — and so do recommendation frequency distributions.
+            </blockquote>
+
+            <h2>Part II: Fairness Metrics</h2>
+
+            <p>Popularity bias is about items. Fairness is about users — specifically, whether different groups of users receive equitable recommendations.</p>
+
+            <h3>6. Group Metric Disparity</h3>
+
+            <p>A meta-metric: take any existing metric (e.g., NDCG@10), compute it separately for each user group, and measure the gap:</p>
+
+            $$\text{Disparity} = \frac{\max_{g} M_g - \min_{g} M_g}{\max_{g} M_g}$$
+
+            <p>where $M_g$ is the metric value for group $g$. A disparity of 0.3 means the worst-served group gets 30% less quality than the best-served group.</p>
+
+            <h3>7. Demographic Parity</h3>
+
+            <p>Are recommendation rates equal across groups? For each group $g$:</p>
+
+            $$R_g = \frac{1}{|U_g|} \sum_{u \in U_g} |L_u|$$
+
+            <p>Demographic parity requires $R_g \approx R_{g'}$ for all groups. If your system recommends 20 items to young users but only 10 to older users, you have a parity problem.</p>
+
+            <h3>8. Equal Opportunity Difference</h3>
+
+            <p>Adapted from Hardt et al. (NeurIPS 2016), this measures the gap in Recall@k across groups:</p>
+
+            $$\text{EOD} = \max_{g} \text{Recall@k}_g - \min_{g} \text{Recall@k}_g$$
+
+            <p>Recall@k measures how many relevant items actually appear in the top-k. If one group consistently has lower recall, the system is failing to surface their relevant items.</p>
+
+            <h3>9. Calibration Error</h3>
+
+            <p>A calibrated recommender matches the user's actual preference distribution. If a user watches 70% action and 30% comedy, their recommendations should reflect roughly the same ratio.</p>
+
+            <p>Per user $u$, measure the KL divergence between their preference distribution $p_u$ and recommendation distribution $q_u$:</p>
+
+            $$\text{CalErr} = \frac{1}{|U|} \sum_{u \in U} D_{\text{KL}}(p_u \| q_u) = \frac{1}{|U|} \sum_{u} \sum_{c} p_u(c) \log \frac{p_u(c)}{q_u(c)}$$
+
+            <p>A calibration error near 0 means recommendations faithfully represent each user's tastes. High calibration error means the system is distorting user preferences — often by over-representing popular categories.</p>
+
+            <h3>10. Exposure Fairness</h3>
+
+            <p>From the <em>producer</em> side (Singh & Joachims, KDD 2018): is exposure distributed fairly among content providers?</p>
+
+            <p>Group items by their provider (e.g., artist, publisher, seller), compute total exposure per provider, then measure inequality with the Gini index:</p>
+
+            $$\text{ExposureFairness} = \text{Gini}(\{\text{exposure}(p) : p \in \text{providers}\})$$
+
+            <p>High exposure Gini means a few providers dominate all recommendations while most get nothing — the same "winner-take-all" pattern we see in network hub formation.</p>
+
+            <h2>Implementation</h2>
+
+            <p>I implemented all 10 metrics as a Python module compatible with <a href="https://github.com/microsoft/recommenders">Microsoft Recommenders</a> (21k+ stars). The implementation follows the library's conventions: pandas DataFrames as input, consistent column naming, numpy-style docstrings, and zero new dependencies.</p>
+
+<pre><code>from python_evaluation_fairness import (
+    average_recommendation_popularity,
+    gini_index,
+    calibration_error,
+    exposure_fairness,
+)
+
+# Popularity bias
+arp = average_recommendation_popularity(train_df, reco_df)
+gini = gini_index(reco_df)
+
+# Fairness
+cal_err = calibration_error(train_df, reco_df, col_genre="genre")
+exp_fair = exposure_fairness(reco_df, item_providers=provider_map)</code></pre>
+
+            <p>The full implementation includes 40 unit tests covering boundary conditions (Gini = 0 for uniform distributions, calibration error = 0 when distributions match), edge cases, and known-input validation.</p>
+
+            <h2>Why This Matters</h2>
+
+            <p>The EU AI Act now requires fairness assessments for AI systems that affect people's access to information. Recommendation systems are explicitly in scope. Beyond regulation, there's a practical argument: a system that only recommends the same 100 popular items out of a catalog of 100,000 is wasting 99.9% of its inventory.</p>
+
+            <p>From a network science perspective, we've known since Barabási's work on scale-free networks that preferential attachment creates extreme inequality. Recommendation systems are essentially performing directed preferential attachment at scale — routing user attention toward already-popular items. These metrics give us the tools to measure and counteract that process.</p>
+
+            <h2>Appendix: Mathematical Details</h2>
+
+            <h3>A.1 Gini Index Derivation</h3>
+
+            <p>The Gini index is related to the area between the Lorenz curve $L(x)$ and the line of perfect equality:</p>
+
+            $$G = 1 - 2\int_0^1 L(x)\,dx$$
+
+            <p>For a discrete distribution with values $f_1 \leq f_2 \leq \ldots \leq f_n$, the Lorenz curve is piecewise linear, and the integral evaluates to:</p>
+
+            $$G = \frac{2\sum_{i=1}^{n} i \cdot f_i}{n \sum_{i=1}^{n} f_i} - \frac{n+1}{n} = \frac{\sum_{i=1}^{n}(2i - n - 1)f_i}{n\sum_{i=1}^{n}f_i}$$
+
+            <p>This is numerically stable and computable in $O(n \log n)$ (dominated by the sort).</p>
+
+            <h3>A.2 Calibration Error and KL Divergence</h3>
+
+            <p>The KL divergence $D_{\text{KL}}(p \| q)$ is not symmetric and is undefined when $q(c) = 0$ for some category $c$ where $p(c) > 0$. In practice, we apply Laplace smoothing:</p>
+
+            $$q'(c) = \frac{q(c) + \epsilon}{\sum_{c'} (q(c') + \epsilon)}$$
+
+            <p>with $\epsilon = 10^{-10}$. This ensures the KL divergence is always finite while barely affecting the distribution.</p>
+
+            <h3>A.3 Connection to Power-Law Degree Distributions</h3>
+
+            <p>In a network with degree distribution $P(k) \propto k^{-\gamma}$, the Gini index can be expressed analytically. For a continuous power law on $[1, \infty)$:</p>
+
+            $$G = \frac{1}{2\mu} \int_0^\infty \int_0^\infty |x - y|\, f(x)\,f(y)\,dx\,dy$$
+
+            <p>where $\mu = E[k] = \frac{\gamma - 1}{\gamma - 2}$ for $\gamma > 2$. For the Barabási–Albert model with $\gamma = 3$, this gives $G = 1/2$. Real recommendation frequency distributions often have $\gamma$ closer to 2, pushing $G$ toward 1.</p>
+
+            <p>This parallel isn't a coincidence — it reflects the same generative process (preferential attachment) operating in both domains.</p>
+
+            <h2>References</h2>
+
+            <ol class="ref-list">
+                <li>H. Abdollahpouri, R. Burke, B. Mobasher. "Managing Popularity Bias in Recommender Systems with Personalized Re-ranking." <em>FLAIRS</em>, 2019.</li>
+                <li>H. Steck. "Calibrated Recommendations." <em>RecSys</em>, 2018.</li>
+                <li>A. Singh, T. Joachims. "Fairness of Exposure in Rankings." <em>KDD</em>, 2018.</li>
+                <li>R. Burke, N. Sonboli, A. Ordonez-Gauger. "Balanced Neighborhoods for Multi-Sided Fairness in Recommendation." <em>FAccT</em>, 2018.</li>
+                <li>Y. Li et al. "User-oriented Fairness in Recommendation." <em>WWW</em>, 2021.</li>
+                <li>M. Hardt, E. Price, N. Srebro. "Equality of Opportunity in Supervised Learning." <em>NeurIPS</em>, 2016.</li>
+                <li>A.-L. Barabási, R. Albert. "Emergence of Scaling in Random Networks." <em>Science</em>, 1999.</li>
+                <li>M. E. J. Newman. "The Structure and Function of Complex Networks." <em>SIAM Review</em>, 2003.</li>
+                <li>C. Borgs, J. Chayes, et al. "Convergent Sequences of Dense Graphs." <em>Advances in Mathematics</em>, 2008.</li>
+            </ol>
+
+        </article>
+
+        <footer class="article-footer">
+            <a href="/blog/why-networks-matter/">← Previous Post</a>
+            <span>WeishuZ.Dev</span>
+        </footer>
+    </main>
+</body>
+</html>
