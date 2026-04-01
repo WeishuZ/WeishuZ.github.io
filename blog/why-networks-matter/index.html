@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Why Networks Matter for Recommendations — WeishuZ.Dev</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        });"></script>
+    <style>
+        :root { --bg: #f2f2f2; --text: #1a1a1a; --muted: #666; --accent: #2563eb; --border: rgba(0,0,0,0.1); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; }
+        .top-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(242,242,242,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 16px 0; }
+        .top-nav-inner { max-width: 720px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; }
+        .top-nav a { text-decoration: none; color: var(--text); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 2px; border-bottom: 2px solid transparent; transition: border-color 0.3s; }
+        .top-nav a:hover { border-bottom-color: var(--text); }
+        .top-nav .site-name { font-size: 1.1rem; letter-spacing: -0.5px; }
+        .container { max-width: 720px; margin: 0 auto; padding: 100px 24px 60px; }
+
+        .article-header { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+        .article-title { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 12px; }
+        .article-meta { font-family: 'Menlo', monospace; font-size: 0.8rem; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+        .article-tags { margin-top: 12px; }
+        .tag { display: inline-block; font-family: 'Menlo', monospace; font-size: 0.65rem; background: #333; color: #fff; padding: 3px 7px; border-radius: 2px; margin-right: 4px; }
+
+        .article-body h2 { font-size: 1.5rem; font-weight: 800; margin: 2.5rem 0 1rem; padding-top: 1rem; }
+        .article-body h3 { font-size: 1.2rem; font-weight: 700; margin: 2rem 0 0.8rem; }
+        .article-body p { margin-bottom: 1.2rem; font-size: 1rem; color: #333; }
+        .article-body img { width: 100%; max-width: 100%; border-radius: 4px; margin: 1.5rem 0; border: 1px solid var(--border); }
+        .article-body figure { margin: 2rem 0; }
+        .article-body figcaption { font-family: 'Menlo', monospace; font-size: 0.75rem; color: var(--muted); text-align: center; margin-top: 8px; }
+        .article-body code { font-family: 'Menlo', 'Consolas', monospace; font-size: 0.85em; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 3px; }
+        .article-body pre { background: #1e1e2e; color: #cdd6f4; padding: 20px 24px; border-radius: 6px; overflow-x: auto; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.6; }
+        .article-body pre code { background: none; padding: 0; color: inherit; }
+        .article-body blockquote { border-left: 3px solid #333; padding-left: 20px; margin: 1.5rem 0; color: #555; font-style: italic; }
+        .article-body ul, .article-body ol { padding-left: 24px; margin-bottom: 1.2rem; }
+        .article-body li { margin-bottom: 0.4rem; font-size: 1rem; color: #333; }
+        .katex-display { margin: 1.5rem 0; overflow-x: auto; padding: 8px 0; }
+
+        .article-footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: 'Menlo', monospace; font-size: 0.8rem; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+        .article-footer a { color: var(--text); font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--border); }
+        .article-footer a:hover { border-bottom-color: var(--text); }
+
+        @media (max-width: 768px) { .container { padding: 80px 16px 40px; } .article-title { font-size: 1.6rem; } .article-body h2 { font-size: 1.3rem; } }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="site-name">WeishuZ</a>
+            <div style="display:flex;gap:20px;">
+                <a href="/">Home</a>
+                <a href="/blog/">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <header class="article-header">
+            <h1 class="article-title">Why Networks Matter for Recommendations</h1>
+            <div class="article-meta">
+                <span>April 1, 2026</span>
+                <span>12 min read</span>
+                <span>Series: Network Science × RecSys (Part 1)</span>
+            </div>
+            <div class="article-tags">
+                <span class="tag">Network Science</span>
+                <span class="tag">RecSys</span>
+                <span class="tag">Graph Theory</span>
+                <span class="tag">Spectral Methods</span>
+            </div>
+        </header>
+
+        <article class="article-body">
+
+            <p><em>A network science perspective on collaborative filtering.</em></p>
+
+            <h2>Introduction</h2>
+            <p>Every recommendation system is secretly a network problem. When Netflix suggests a movie or Spotify queues a song, the underlying machinery operates on a <strong>graph</strong> — users connected to items through interactions, users connected to users through shared taste, items connected through co-consumption patterns.</p>
+            <p>This post explores why thinking about recommendations through the lens of <strong>network science</strong> unlocks powerful intuitions and algorithms that pure matrix-factorization approaches miss.</p>
+
+            <h2>The User-Item Bipartite Graph</h2>
+            <p>At its core, any collaborative filtering dataset can be represented as a <strong>bipartite graph</strong> $G = (U \cup I, E)$, where $U$ is the set of users, $I$ is the set of items, and $E \subseteq U \times I$ represents observed interactions (ratings, clicks, purchases).</p>
+            <p>This isn't just a convenient representation — it's a <em>structural</em> one. The topology of this graph encodes information that tabular data alone cannot capture.</p>
+
+            <h3>Degree Distribution: Power Laws Everywhere</h3>
+            <p>One of the most fundamental observations in network science is that real-world networks exhibit <strong>scale-free</strong> degree distributions:</p>
+            $$P(k) \sim k^{-\gamma}$$
+            <p>In recommendation data, <strong>user degree</strong> (number of items consumed) follows a heavy-tailed distribution — a few power users interact with thousands of items, while most users interact with a handful. <strong>Item degree</strong> (popularity) similarly follows a power law.</p>
+            <p>This has immediate consequences: standard loss functions weight all interactions equally, but high-degree nodes dominate gradient updates. Popular items are easy to recommend; the real value is in the <strong>long tail</strong>.</p>
+
+            <figure>
+                <img src="assets/fig1_degree_distribution.png" alt="Degree distribution of user and item nodes showing power-law behavior">
+                <figcaption>Figure 1: Degree distributions on a recommendation dataset. Both user activity (left, γ ≈ 1.50) and item popularity (right, γ ≈ 1.19) follow power-law distributions, characteristic of scale-free networks.</figcaption>
+            </figure>
+
+            <h3>Small-World Property</h3>
+            <p>Real user-item graphs exhibit the <strong>small-world</strong> property: most user pairs are connected by short paths through shared items. The average path length scales as:</p>
+            $$\langle d \rangle \sim \frac{\ln N}{\ln \langle k \rangle}$$
+            <p>This means collaborative filtering signals propagate quickly — a 2-hop path (User A → Item X → User B) already captures "users who liked the same item," and 3-4 hops capture surprisingly rich preference patterns.</p>
+
+            <h2>Community Structure = Taste Clusters</h2>
+            <p>Network science provides principled methods for <strong>community detection</strong> — finding densely connected subgroups within a graph. In the recommendation context, communities correspond to <strong>taste clusters</strong>: a community of users who all watch sci-fi anime, a community centered around indie folk music, or cross-cutting communities for users with eclectic taste.</p>
+            <p>The <strong>modularity</strong> of a partition measures how well communities are separated:</p>
+            $$Q = \frac{1}{2m} \sum_{ij} \left[ A_{ij} - \frac{k_i k_j}{2m} \right] \delta(c_i, c_j)$$
+            <p>where $A_{ij}$ is the adjacency matrix, $k_i$ is the degree of node $i$, $m$ is the total number of edges, and $\delta(c_i, c_j) = 1$ if nodes $i$ and $j$ belong to the same community.</p>
+            <p>Algorithms like <strong>Louvain</strong> can detect these communities efficiently, providing a natural way to pre-filter recommendation candidates, add community membership as features, and explain recommendations.</p>
+
+            <figure>
+                <img src="assets/fig2_bipartite_communities.png" alt="User-item bipartite graph colored by detected communities">
+                <figcaption>Figure 2: A sample of the user-item bipartite graph colored by community assignment. Users (circles, left) and items (squares, right) cluster into distinct taste groups.</figcaption>
+            </figure>
+
+            <h2>Link Prediction: The Original Recommendation Problem</h2>
+            <p>Before "recommendation systems" existed as a field, network scientists were already studying <strong>link prediction</strong> — predicting which edges will appear in a network. This is literally the recommendation problem: predict which user-item pairs will interact.</p>
+            <p>Classical link prediction heuristics include:</p>
+            <ul>
+                <li><strong>Common Neighbors:</strong> $\text{CN}(u, i) = |N(u) \cap N(i)|$ — count shared neighbors in the projected graph</li>
+                <li><strong>Adamic-Adar:</strong> $\text{AA}(u, i) = \sum_{z \in N(u) \cap N(i)} \frac{1}{\log |N(z)|}$ — shared niche items count more than shared popular items</li>
+                <li><strong>Preferential Attachment:</strong> $\text{PA}(u, i) = |N(u)| \cdot |N(i)|$ — active users and popular items are more likely to interact</li>
+            </ul>
+            <p>The beauty: these require <strong>zero training</strong> and provide <strong>interpretable</strong> scores. In the next post, we'll benchmark these against learned methods and see when simplicity wins.</p>
+
+            <h2>From Spectral Theory to GNNs</h2>
+            <p>The deepest connection between network science and modern RecSys lies in <strong>spectral graph theory</strong>. The graph Laplacian $L = D - A$ (where $D$ is the degree matrix) has eigenvalues $0 = \lambda_1 \leq \lambda_2 \leq \ldots \leq \lambda_n$ that encode the graph's fundamental structure.</p>
+            <p>Graph Neural Networks (GCNs) can be understood as <strong>learnable spectral filters</strong> on this Laplacian. LightGCN, one of the most effective GNN-based recommenders, simplifies this to:</p>
+            $$\mathbf{e}_u^{(k+1)} = \sum_{i \in \mathcal{N}(u)} \frac{1}{\sqrt{|\mathcal{N}(u)|} \sqrt{|\mathcal{N}(i)|}} \, \mathbf{e}_i^{(k)}$$
+            <p>This is symmetric-normalized adjacency matrix multiplication — a spectral operation. The normalization comes directly from the normalized Laplacian $\tilde{L} = D^{-1/2} L D^{-1/2}$.</p>
+
+            <figure>
+                <img src="assets/fig3_laplacian_spectrum.png" alt="Eigenvalue distribution of the normalized Laplacian">
+                <figcaption>Figure 3: Normalized Laplacian spectrum of the user co-interaction graph. The staircase structure (left) reveals distinct community blocks. The spectral gap λ₂ ≈ 0.476 indicates well-separated communities — a signal that GNN-based methods can exploit for recommendation.</figcaption>
+            </figure>
+
+            <h2>What's Next</h2>
+            <p>This post established the conceptual bridge between network science and recommendation systems. In upcoming posts, we'll get our hands dirty:</p>
+            <ol>
+                <li><strong>Part 2:</strong> Implement link prediction heuristics as RecSys baselines and benchmark against learned methods on RecBole</li>
+                <li><strong>Part 3:</strong> Build community-aware collaborative filtering using Louvain + graph augmentation</li>
+                <li><strong>Part 4:</strong> Deep dive into the spectral theory behind GNN recommendations, with custom implementations</li>
+            </ol>
+            <p>The key insight: network science doesn't replace machine learning for recommendations — it <strong>informs</strong> it. Understanding the structure of your data graph tells you which algorithms will work, why they work, and where they'll fail.</p>
+
+            <blockquote>
+                <p>Tools used: Python, NumPy, SciPy, matplotlib. Dataset: synthetic power-law graphs (MovieLens-1M structure). All code available on <a href="https://github.com/WeishuZ">GitHub</a>.</p>
+            </blockquote>
+        </article>
+
+        <footer class="article-footer">
+            <a href="/blog/">← Back to Blog</a>
+            <span>Part 1 of Network Science × RecSys</span>
+        </footer>
+    </main>
+</body>
+</html>

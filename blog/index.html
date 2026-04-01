@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog — WeishuZ.Dev</title>
+    <style>
+        :root {
+            --bg: #f2f2f2;
+            --text: #1a1a1a;
+            --muted: #666;
+            --border: rgba(0,0,0,0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.8;
+        }
+        .top-nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(242,242,242,0.85);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 0;
+        }
+        .top-nav-inner {
+            max-width: 720px; margin: 0 auto; padding: 0 24px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .top-nav a {
+            text-decoration: none; color: var(--text); font-weight: 700;
+            font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
+            padding-bottom: 2px; border-bottom: 2px solid transparent; transition: border-color 0.3s;
+        }
+        .top-nav a:hover { border-bottom-color: var(--text); }
+        .top-nav .site-name { font-size: 1.1rem; letter-spacing: -0.5px; }
+        .container { max-width: 720px; margin: 0 auto; padding: 100px 24px 60px; }
+        .page-title { font-size: 2.5rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 0.5rem; }
+        .page-subtitle { font-family: 'Menlo', monospace; font-size: 0.85rem; color: var(--muted); margin-bottom: 3rem; }
+        .post-list { list-style: none; }
+        .post-item {
+            padding: 24px 0; border-bottom: 1px solid var(--border); transition: all 0.2s;
+        }
+        .post-item:first-child { border-top: 1px solid var(--border); }
+        .post-item a { text-decoration: none; color: inherit; display: block; }
+        .post-item:hover { background: rgba(0,0,0,0.02); margin: 0 -12px; padding: 24px 12px; border-radius: 4px; }
+        .post-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; line-height: 1.4; }
+        .post-meta {
+            font-family: 'Menlo', monospace; font-size: 0.75rem; color: var(--muted);
+            margin-bottom: 8px; display: flex; gap: 16px;
+        }
+        .post-excerpt { font-size: 0.9rem; color: #555; line-height: 1.6; }
+        .post-tags { margin-top: 8px; }
+        .tag {
+            display: inline-block; font-family: 'Menlo', monospace; font-size: 0.65rem;
+            background: #333; color: #fff; padding: 3px 7px; border-radius: 2px; margin-right: 4px;
+        }
+        @media (max-width: 768px) {
+            .container { padding: 80px 16px 40px; }
+            .page-title { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="site-name">WeishuZ</a>
+            <div style="display:flex;gap:20px;">
+                <a href="/">Home</a>
+                <a href="/blog/" style="border-bottom-color: #1a1a1a;">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+    <main class="container">
+        <h1 class="page-title">Blog</h1>
+        <p class="page-subtitle">Network Science × Recommendation Systems</p>
+        <ul class="post-list">
+            <li class="post-item">
+                <a href="/blog/why-networks-matter/">
+                    <div class="post-title">Why Networks Matter for Recommendations</div>
+                    <div class="post-meta">
+                        <span>2026-04-01</span>
+                        <span>12 min read</span>
+                        <span>Series: Part 1</span>
+                    </div>
+                    <div class="post-excerpt">
+                        Every recommendation system is secretly a network problem. Exploring user-item bipartite graphs, power-law degree distributions, community structure, link prediction, and the spectral theory behind GNN-based recommenders.
+                    </div>
+                    <div class="post-tags">
+                        <span class="tag">Network Science</span>
+                        <span class="tag">RecSys</span>
+                        <span class="tag">Graph Theory</span>
+                        <span class="tag">Spectral Methods</span>
+                    </div>
+                </a>
+            </li>
+        </ul>
+    </main>
+</body>
+</html>
