@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swarm-Coder 搭建日志 — WeishuZ.Dev</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '$', right: '$', display: false}
+            ]
+        });"></script>
+    <style>
+        :root { --bg: #f2f2f2; --text: #1a1a1a; --muted: #666; --accent: #2563eb; --border: rgba(0,0,0,0.1); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.8; }
+        .top-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(242,242,242,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 16px 0; }
+        .top-nav-inner { max-width: 720px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; }
+        .top-nav a { text-decoration: none; color: var(--text); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 2px; border-bottom: 2px solid transparent; transition: border-color 0.3s; }
+        .top-nav a:hover { border-bottom-color: var(--text); }
+        .top-nav .site-name { font-size: 1.1rem; letter-spacing: -0.5px; }
+        .container { max-width: 720px; margin: 0 auto; padding: 100px 24px 60px; }
+
+        .article-header { margin-bottom: 3rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border); }
+        .article-title { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; line-height: 1.3; margin-bottom: 12px; }
+        .article-meta { font-family: 'Menlo', monospace; font-size: 0.8rem; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+        .article-tags { margin-top: 12px; }
+        .tag { display: inline-block; font-family: 'Menlo', monospace; font-size: 0.65rem; background: #333; color: #fff; padding: 3px 7px; border-radius: 2px; margin-right: 4px; }
+
+        .article-body h2 { font-size: 1.5rem; font-weight: 800; margin: 2.5rem 0 1rem; padding-top: 1rem; }
+        .article-body h3 { font-size: 1.2rem; font-weight: 700; margin: 2rem 0 0.8rem; }
+        .article-body p { margin-bottom: 1.2rem; font-size: 1rem; color: #333; }
+        .article-body img { width: 100%; max-width: 100%; border-radius: 4px; margin: 1.5rem 0; border: 1px solid var(--border); }
+        .article-body figure { margin: 2rem 0; }
+        .article-body figcaption { font-family: 'Menlo', monospace; font-size: 0.75rem; color: var(--muted); text-align: center; margin-top: 8px; }
+        .article-body code { font-family: 'Menlo', 'Consolas', monospace; font-size: 0.85em; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 3px; }
+        .article-body pre { background: #1e1e2e; color: #cdd6f4; padding: 20px 24px; border-radius: 6px; overflow-x: auto; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.6; }
+        .article-body pre code { background: none; padding: 0; color: inherit; }
+        .article-body blockquote { border-left: 3px solid #333; padding-left: 20px; margin: 1.5rem 0; color: #555; font-style: italic; }
+        .article-body ul, .article-body ol { padding-left: 24px; margin-bottom: 1.2rem; }
+        .article-body li { margin-bottom: 0.4rem; font-size: 1rem; color: #333; }
+        .article-body a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,0.3); }
+        .article-body a:hover { border-bottom-color: var(--accent); }
+        .katex-display { margin: 1.5rem 0; overflow-x: auto; padding: 8px 0; }
+
+        .article-footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: 'Menlo', monospace; font-size: 0.8rem; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+        .article-footer a { color: var(--text); font-weight: 600; text-decoration: none; border-bottom: 1px solid var(--border); }
+        .article-footer a:hover { border-bottom-color: var(--text); }
+
+        @media (max-width: 768px) { .container { padding: 80px 16px 40px; } .article-title { font-size: 1.6rem; } .article-body h2 { font-size: 1.3rem; } }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="site-name">WeishuZ</a>
+            <div style="display:flex;gap:20px;">
+                <a href="/">Home</a>
+                <a href="/blog/">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <header class="article-header">
+            <h1 class="article-title">Swarm-Coder 搭建日志</h1>
+            <div class="article-meta">
+                <span>April 3, 2026</span>
+                <span>8 min read</span>
+                <span>Project: Swarm-Coder</span>
+            </div>
+            <div class="article-tags">
+                <span class="tag">MLE</span>
+                <span class="tag">LangGraph</span>
+                <span class="tag">Network Science</span>
+                <span class="tag">vLLM</span>
+            </div>
+        </header>
+
+        <article class="article-body">
+
+            <p><em>从零构建低成本多 SLM 代码生成集群 —— Phase 1 搭建记录</em></p>
+
+            <h2>背景</h2>
+            <p>MLE (Machine Learning Engineering) 项目竞争激烈。Kaggle、GitHub contributions、paper 都不缺，但一个能展示<strong>系统设计能力</strong>的项目格外重要。</p>
+            <p><strong>Swarm-Coder</strong> 就是这么来的：基于网络科学理论的多节点 SLM 代码生成集群。核心 idea 是把推荐系统的思想迁移到代码生成 —— 用路由算法调度任务，用反馈回路做数据飞轮，最后产出 Gini 系数这种网络科学指标。</p>
+
+            <h2>架构概览</h2>
+            <figure>
+                <img src="assets/architecture.png" alt="Swarm-Coder architecture diagram">
+                <figcaption>Swarm-Coder 架构: Router → Workers → Critic 循环</figcaption>
+            </figure>
+
+            <p>三个核心组件：</p>
+            <ol>
+                <li><strong>Router</strong>: 基于 LangGraph 的任务分发，支持 affinity-based routing + popularity bias penalty</li>
+                <li><strong>Workers</strong>: 4-6 个 4-bit 量化的 Qwen-2.5-Coder-1.5B 实例</li>
+                <li><strong>Critic</strong>: MiniMax API 打分 + 纠错</li>
+            </ol>
+
+            <h2>Phase 1 完成内容</h2>
+
+            <h3>1. 环境配置</h3>
+            <p>三种后端对比：</p>
+            <table style="width:100%; margin: 1rem 0; border-collapse: collapse;">
+            <tr style="border-bottom:1px solid #ddd;"><td><strong>vLLM</strong></td><td>快，PagedAttention</td><td>需要 GPU</td><td>3-4 个 4-bit</td></tr>
+            <tr style="border-bottom:1px solid #ddd;"><td><strong>Ollama</strong></td><td>安装简单</td><td>灵活性一般</td><td>2-3 个</td></tr>
+            <tr style="border-bottom:1px solid #ddd;"><td><strong>transformers</strong></td><td>CPU 也能跑</td><td>慢</td><td>1 个</td></tr>
+            </table>
+
+            <p>当前环境没有 GPU，用了 <code>transformers</code> + <code>bitsandbytes</code> 做 CPU fallback demo。生产环境建议用 vLLM + 2070s。</p>
+
+            <pre><code>worker_pool = WorkerPool(num_workers=4, backend="vllm")
+worker_pool.initialize_all()</code></pre>
+
+            <h3>2. LangGraph 骨架</h3>
+            <p>定义了 <code>TaskState</code> 包含：<code>task_description</code>, <code>assigned_node</code>, <code>slm_code</code>, <code>minimax_feedback</code>, <code>is_approved</code>。</p>
+            <p>Workflow 流程：</p>
+            <ol>
+                <li><strong>route</strong>: 用 affinity + penalty 选节点</li>
+                <li><strong>generate</strong>: SLM 生成代码</li>
+                <li><strong>evaluate</strong>: Critic 打分</li>
+                <li><strong>update_stats</strong>: 更新节点统计</li>
+                <li><strong>retry</strong>: 如果没通过则重新路由</li>
+            </ol>
+
+            <h3>3. 路由算法 (Network Science 核心)</h3>
+            <p>核心公式 — <strong>Popularity Bias Penalty</strong>:</p>
+
+            $$\text{penalty} = \alpha \cdot (1 + \text{success\_rate}) \cdot \log(1 + \text{queue\_size})$$
+
+            <p><strong>为什么这个公式有效?</strong></p>
+            <ul>
+                <li><code>success_rate</code> 高 → 节点表现好 → 但不能让所有请求都打过去</li>
+                <li><code>queue_size</code> 大 → 节点已经忙了 → 强制分流</li>
+                <li><code>log()</code> → 平滑处理，避免过度惩罚</li>
+            </ul>
+
+            <p>最终得分:</p>
+
+            $$\text{final\_score} = \frac{\text{affinity}}{1 + \text{penalty}}$$
+
+            <h3>4. Demo 运行结果</h3>
+            <p>模拟 demo 结果:</p>
+            <pre>Task Distribution:
+  node-00: 33 tasks, 23 success, avg score: 7.4
+  node-01: 22 tasks, 16 success, avg score: 7.7
+  node-02: 28 tasks, 17 success, avg score: 7.8
+  node-03: 17 tasks, 10 success, avg score: 8.0
+
+Gini Coefficient: 0.135</pre>
+
+            <p>Gini 0.135 意味着任务分配相对均匀 (0 = perfect equality, 1 = maximum inequality)。对比没有 penalty 的 greedy routing (Gini ~0.3+)，显著改善。</p>
+
+            <figure>
+                <img src="assets/lorenz_curve.png" alt="Lorenz curve showing task distribution">
+                <figcaption>Lorenz Curve: 任务分配均匀度 (Gini = 0.135)</figcaption>
+            </figure>
+
+            <figure>
+                <img src="assets/routing_comparison.png" alt="Routing comparison: Greedy vs with penalty">
+                <figcaption>Greedy (无 penalty) vs 我们的方法 (带 popularity bias penalty)</figcaption>
+            </figure>
+
+            <h2>接下来</h2>
+            <p><strong>Phase 2</strong> 会加入：</p>
+            <ol>
+                <li><strong>TF-IDF affinity</strong>: 用任务文本的 embedding 计算相似度</li>
+                <li><strong>RAG 检索</strong>: 从数据库中检索该节点曾经的 correction 作为 in-context learning</li>
+                <li><strong>反馈回路</strong>: 自动把 MiniMax 纠错的代码存入 ChromaDB</li>
+            </ol>
+
+            <p><strong>Phase 3</strong> 做低成本蒸馏：</p>
+            <ul>
+                <li>积累 1000 个 task 的 correction 数据</li>
+                <li>用 Unsloth 做 LoRA 微调</li>
+            </ul>
+
+            <p><strong>Phase 4</strong> 产出指标：</p>
+            <ul>
+                <li>Pass@1 对比 (baseline vs swarm)</li>
+                <li>Gini 对比 (greedy vs topological)</li>
+                <li>开源 + Blog 包装</li>
+            </ul>
+
+            <h2>代码</h2>
+            <p>项目在: <code>projects/swarm-coder/</code></p>
+            <pre>swarm-coder/
+├── src/
+│   ├── state.py      # TaskState 定义
+│   ├── worker.py     # SLM worker pool
+│   ├── critic.py     # MiniMax critic
+│   ├── router.py     # Network-aware router
+│   └── workflow.py   # LangGraph orchestration
+├── assets/           # 生成的 figures
+├── run_demo.py       # Demo 脚本
+└── README.md</pre>
+
+            <h2>总结</h2>
+            <p>今天完成了 Phase 1 的基础设施搭建。虽然没有 GPU 无法跑真正的模型推理，但：</p>
+            <ol>
+                <li>✅ LangGraph workflow 全链路跑通</li>
+                <li>✅ 路由算法实现 (affinity + popularity bias)</li>
+                <li>✅ Gini 系数等网络科学指标</li>
+                <li>✅ 生成的 figures 用于 blog</li>
+            </ol>
+            <p>明天 Phase 2: 加入 TF-IDF affinity + RAG 检索。</p>
+
+            <blockquote>
+                <p>Tools: Python, LangGraph, NetworkX, matplotlib, bitsandbytes</p>
+                <p>Hardware: Demo on CPU, Production: 4x RTX 2070 (8GB)</p>
+            </blockquote>
+        </article>
+
+        <footer class="article-footer">
+            <a href="/blog/">← Back to Blog</a>
+            <span>Project: Swarm-Coder</span>
+        </footer>
+    </main>
+</body>
+</html>
