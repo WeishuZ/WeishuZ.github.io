@@ -1,376 +1,484 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WeishuZ.Dev</title>
+    <title>WeishuZ — Software Engineer</title>
     <style>
         :root {
-            --bg-color: #f2f2f2;
-            --text-color: #1a1a1a;
+            --bg: #000000;
+            --fg: #ededed;
+            --fg-secondary: #888888;
+            --fg-tertiary: #666666;
+            --border: #222222;
+            --border-hover: #444444;
+            --accent: #ffffff;
+            --card-bg: #0a0a0a;
+            --card-hover: #111111;
+            --tag-bg: #1a1a1a;
+            --tag-border: #333333;
+            --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Oxygen, Ubuntu, sans-serif;
+            --mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', 'Menlo', Consolas, monospace;
+            --transition: 150ms ease;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
 
         body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            overflow: hidden;
-            height: 100vh;
-            width: 100vw;
-            position: relative;
-            cursor: crosshair;
+            font-family: var(--sans);
+            background-color: var(--bg);
+            color: var(--fg);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            line-height: 1.6;
         }
 
-        canvas {
-            display: block;
-            position: absolute;
+        ::selection {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        /* === Navigation === */
+        .nav {
+            position: fixed;
             top: 0;
             left: 0;
-            z-index: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid var(--border);
         }
 
-        .scene {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0;
-            height: 0;
-            z-index: 1;
-        }
-
-        /* === 卡片容器 === */
-        .card {
-            position: absolute;
-            transform: translate(-50%, -50%);
-            width: 500px;
-            max-width: 90vw;
-            max-height: 85vh; 
-            
-            background: rgba(255, 255, 255, 0.0001); 
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            box-shadow: 0 30px 60px rgba(0,0,0,0.05);
-            padding: 3rem;
-            text-align: center;
-            border-radius: 4px;
-
-            opacity: 0;
-            pointer-events: none;
-            transition: 
-                opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-                filter 0.6s ease;
-            
-            filter: blur(10px);
-            transform: translate(-50%, -45%) scale(0.95);
-            
+        .nav-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 24px;
+            height: 64px;
             display: flex;
-            flex-direction: column;
+            align-items: center;
             justify-content: space-between;
-
-            overflow-y: auto;
-            scrollbar-width: thin; /* Firefox */
-            scrollbar-color: rgba(0,0,0,0.2) transparent;
         }
 
-        .card::-webkit-scrollbar {
-            width: 4px;
-        }
-        .card::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .card::-webkit-scrollbar-thumb {
-            background-color: rgba(0,0,0,0.2);
-            border-radius: 2px;
-        }
-        
-        .card.work-card { 
-            width: 800px; 
-            padding: 0;
-        }
-
-        .card.experience-card {
-            width: 820px;
-            padding: 2.5rem 3rem;
-        }
-
-        .card.about-card {
-            width: 720px;
-        }
-
-        .card.active {
-            opacity: 1;
-            pointer-events: auto;
-            filter: blur(0);
-            transform: translate(-50%, -50%) scale(1);
-            z-index: 10;
-        }
-
-        .card.exit {
-            transform: translate(-50%, -55%) scale(1.05);
-            filter: blur(20px);
-            opacity: 0;
-        }
-
-        h1 { font-size: 3rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 1rem; color: #000; }
-        h1 a { color: inherit; text-decoration: none; }
-        h1 a:hover { opacity: 0.7; }
-        h2 { font-size: 2rem; font-weight: 800; margin-bottom: 1rem; }
-        
-        p { 
-            font-family: 'Menlo', monospace; 
-            font-size: 0.9rem; 
-            color: #555; 
-            line-height: 1.7;
-            margin-bottom: 2rem; 
-        }
-
-        .btn-group { display: flex; justify-content: center; gap: 20px; flex-shrink: 0; }
-        
-        .nav-link {
-            text-decoration: none;
-            color: #000;
+        .nav-brand {
+            font-size: 1rem;
             font-weight: 700;
-            font-size: 0.9rem;
-            cursor: pointer;
-            padding-bottom: 2px;
-            border-bottom: 2px solid transparent;
-            transition: border-color 0.3s;
-            text-transform: uppercase;
-        }
-        .nav-link:hover { border-bottom-color: #000; }
-
-        .about-content { text-align: left; }
-        .back-btn {
-            font-size: 0.75rem;
-            color: #666;
-            margin-top: 20px;
-            padding: 20px;
+            letter-spacing: -0.02em;
+            color: var(--fg);
         }
 
-        /* === Work 页面特定样式 === */
-        
-        .work-container {
-            position: relative;
-            width: 100%;
-            min-height: 100%; 
-            display: flex;
-            flex-direction: column;
-        }
-
-        .nav-arrow {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 50px;
-            height: 50px;
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            font-size: 1.5rem;
-            color: #333;
-            z-index: 20;
-            transition: all 0.2s;
+        .nav-links {
             display: flex;
             align-items: center;
+            gap: 32px;
+        }
+
+        .nav-link {
+            font-size: 0.875rem;
+            color: var(--fg-secondary);
+            transition: color var(--transition);
+        }
+
+        .nav-link:hover {
+            color: var(--fg);
+        }
+
+        /* === Hero Section === */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
             justify-content: center;
-            border-radius: 50%;
-        }
-        .nav-arrow:hover { background: rgba(0,0,0,0.05); }
-        .nav-arrow.left { left: 10px; }
-        .nav-arrow.right { right: 10px; }
-
-        .carousel {
-            flex-grow: 1;
+            align-items: center;
+            text-align: center;
+            padding: 120px 24px 80px;
             position: relative;
-            padding: 40px 60px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 0.8125rem;
+            color: var(--fg-secondary);
+            font-family: var(--mono);
+            margin-bottom: 32px;
+            transition: border-color var(--transition);
+        }
+
+        .hero-badge:hover {
+            border-color: var(--border-hover);
+        }
+
+        .hero-badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            display: inline-block;
+        }
+
+        .hero h1 {
+            font-size: clamp(3rem, 8vw, 5.5rem);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1.05;
+            margin-bottom: 24px;
+            background: linear-gradient(180deg, #ffffff 0%, rgba(255,255,255,0.7) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 2vw, 1.25rem);
+            color: var(--fg-secondary);
+            max-width: 600px;
+            line-height: 1.7;
+            margin-bottom: 48px;
+        }
+
+        .hero-links {
             display: flex;
             align-items: center;
-            height: auto; 
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
-        .project-slide {
-            display: none;
-            width: 100%;
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            background: var(--fg);
+            color: var(--bg);
+            font-size: 0.875rem;
+            font-weight: 600;
+            border-radius: 8px;
+            border: 1px solid var(--fg);
+            transition: opacity var(--transition);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            background: transparent;
+            color: var(--fg);
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            transition: border-color var(--transition), background var(--transition);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--border-hover);
+            background: var(--card-bg);
+        }
+
+        .hero-scroll {
+            position: absolute;
+            bottom: 40px;
+            display: flex;
             flex-direction: column;
-            text-align: left;
-            animation: slideIn 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+            align-items: center;
+            gap: 8px;
+            color: var(--fg-tertiary);
+            font-size: 0.75rem;
+            font-family: var(--mono);
+            letter-spacing: 0.05em;
         }
 
-        .project-slide.active { display: flex; }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        .hero-scroll-line {
+            width: 1px;
+            height: 32px;
+            background: linear-gradient(180deg, var(--fg-tertiary) 0%, transparent 100%);
+            animation: scrollPulse 2s ease-in-out infinite;
         }
 
-        .media-wrapper {
-            width: 100%;
-            height: 320px;
-            background: rgba(255,255,255,0.5);
-            border-radius: 4px;
+        @keyframes scrollPulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        /* === Section Common === */
+        .section {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 120px 24px;
+        }
+
+        .section-header {
+            margin-bottom: 64px;
+        }
+
+        .section-label {
+            font-family: var(--mono);
+            font-size: 0.8125rem;
+            color: var(--fg-tertiary);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+        }
+
+        .section-divider {
+            border: none;
+            height: 1px;
+            background: var(--border);
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        /* === Projects Section === */
+        .projects-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+        }
+
+        .project-card {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
             overflow: hidden;
-            margin-bottom: 25px;
-            position: relative;
-            border: 1px solid rgba(0,0,0,0.1);
-            flex-shrink: 0;
+            transition: border-color var(--transition);
         }
 
-        .project-video {
+        .project-card:hover {
+            border-color: var(--border-hover);
+        }
+
+        .project-media {
+            position: relative;
+            aspect-ratio: 16 / 10;
+            overflow: hidden;
+            background: #0f0f0f;
+        }
+
+        .project-media video {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
 
-        .no-preview {
+        .project-placeholder {
             width: 100%;
             height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #999;
-            font-family: 'Menlo', monospace;
-            font-size: 0.8rem;
-            background: #f0f0f0;
+            font-family: var(--mono);
+            font-size: 0.8125rem;
+            color: var(--fg-tertiary);
+            background: linear-gradient(135deg, #0a0a0a 0%, #141414 100%);
         }
 
-        .slide-info h3 {
+        .project-content {
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .project-number {
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            color: var(--fg-tertiary);
+            margin-bottom: 12px;
+        }
+
+        .project-name {
             font-size: 1.5rem;
-            font-weight: 800;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            color: #000;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+            line-height: 1.2;
         }
 
-        .slide-info p {
-            margin-bottom: 15px;
-            max-width: 600px;
+        .project-credit {
+            font-size: 0.8125rem;
+            color: var(--fg-tertiary);
+            margin-bottom: 12px;
         }
 
-        .stack-tag {
-            display: inline-block;
-            font-size: 0.7rem;
-            background: #333;
-            color: #fff;
-            padding: 4px 8px;
-            border-radius: 2px;
-            margin-right: 6px;
-            font-family: 'Menlo', monospace;
-            margin-bottom: 4px;
+        .project-credit a {
+            color: var(--fg-secondary);
+            border-bottom: 1px solid var(--border);
+            transition: color var(--transition), border-color var(--transition);
         }
 
-        .live-link-btn {
+        .project-credit a:hover {
+            color: var(--fg);
+            border-color: var(--fg-secondary);
+        }
+
+        .project-desc {
+            font-size: 0.9375rem;
+            color: var(--fg-secondary);
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .project-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 20px;
+        }
+
+        .project-tag {
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            background: var(--tag-bg);
+            border: 1px solid var(--tag-border);
+            border-radius: 6px;
+            color: var(--fg-secondary);
+        }
+
+        .project-link {
             display: inline-flex;
             align-items: center;
-            margin-top: 20px;
-            font-size: 0.8rem;
-            font-weight: 700;
-            text-decoration: none;
-            color: #000;
-            border-bottom: 2px solid #000;
-            padding-bottom: 2px;
-            transition: opacity 0.2s;
-        }
-        .live-link-btn:hover { opacity: 0.6; }
-
-        .slide-counter {
-            font-family: 'Menlo', monospace;
-            font-size: 0.8rem;
-            color: #999;
-            margin-bottom: 15px;
-            letter-spacing: 2px;
-            padding-top: 20px;
+            gap: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--fg);
+            transition: opacity var(--transition);
         }
 
-        /* === Experience 页面样式 === */
-
-        .experience-header {
-            text-align: center;
-            margin-bottom: 2rem;
+        .project-link:hover {
+            opacity: 0.7;
         }
 
-        .experience-header h2 {
-            margin-bottom: 0.25rem;
+        .project-link svg {
+            width: 14px;
+            height: 14px;
         }
 
-        .experience-header .edu-line {
-            font-family: 'Menlo', monospace;
-            font-size: 0.75rem;
-            color: #888;
-            letter-spacing: 0.5px;
+        /* === Experience Section === */
+        .experience-intro {
+            font-size: 1.125rem;
+            color: var(--fg-secondary);
+            margin-bottom: 48px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .experience-intro .edu-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-family: var(--mono);
+            font-size: 0.8125rem;
+            color: var(--fg-secondary);
         }
 
         .timeline {
             position: relative;
-            padding-left: 24px;
-            text-align: left;
+            padding-left: 32px;
         }
 
         .timeline::before {
             content: '';
             position: absolute;
-            left: 6px;
-            top: 4px;
-            bottom: 4px;
+            left: 0;
+            top: 8px;
+            bottom: 8px;
             width: 1px;
-            background: rgba(0,0,0,0.15);
+            background: var(--border);
         }
 
         .timeline-item {
             position: relative;
-            margin-bottom: 2rem;
-            animation: slideIn 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+            padding-bottom: 48px;
         }
 
         .timeline-item:last-child {
-            margin-bottom: 0.5rem;
+            padding-bottom: 0;
         }
 
         .timeline-item::before {
             content: '';
             position: absolute;
-            left: -22px;
-            top: 6px;
+            left: -36px;
+            top: 8px;
             width: 9px;
             height: 9px;
             border-radius: 50%;
-            background: #000;
-            border: 2px solid var(--bg-color);
-            box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+            background: var(--fg);
+            border: 2px solid var(--bg);
         }
 
         .timeline-item.upcoming::before {
             background: transparent;
-            border: 2px solid #000;
-            box-shadow: none;
+            border: 2px solid var(--fg-secondary);
+        }
+
+        .timeline-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 4px;
+            flex-wrap: wrap;
         }
 
         .timeline-role {
-            font-size: 1.1rem;
-            font-weight: 800;
-            color: #000;
-            margin-bottom: 2px;
-            letter-spacing: -0.3px;
+            font-size: 1.125rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .timeline-date {
+            font-family: var(--mono);
+            font-size: 0.8125rem;
+            color: var(--fg-tertiary);
+            white-space: nowrap;
         }
 
         .timeline-company {
-            font-family: 'Menlo', monospace;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 2px;
-        }
-
-        .timeline-meta {
-            font-family: 'Menlo', monospace;
-            font-size: 0.75rem;
-            color: #999;
-            margin-bottom: 10px;
-            letter-spacing: 0.3px;
+            font-size: 0.9375rem;
+            color: var(--fg-secondary);
+            margin-bottom: 12px;
         }
 
         .timeline-details {
@@ -379,687 +487,560 @@
         }
 
         .timeline-details li {
-            font-family: 'Menlo', monospace;
-            font-size: 0.8rem;
-            color: #555;
-            line-height: 1.8;
-            padding-left: 14px;
             position: relative;
-            margin-bottom: 2px;
+            padding-left: 16px;
+            font-size: 0.9375rem;
+            color: var(--fg-secondary);
+            line-height: 1.7;
+            margin-bottom: 6px;
         }
 
         .timeline-details li::before {
-            content: '›';
+            content: '';
             position: absolute;
             left: 0;
-            color: #999;
-            font-weight: 700;
+            top: 11px;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--fg-tertiary);
         }
 
-        .exp-tags {
-            margin-top: 8px;
-        }
-
-        .exp-tags .stack-tag {
-            font-size: 0.65rem;
-            padding: 3px 6px;
-        }
-
-        /* === About 页面增强 === */
-
-        .about-section {
-            margin-bottom: 1.5rem;
-        }
-
-        .about-section-title {
-            font-size: 0.7rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #999;
-            margin-bottom: 0.6rem;
-        }
-
-        .about-content p {
-            margin-bottom: 1rem;
-        }
-
-        .about-links {
+        .timeline-tags {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 6px;
+            margin-top: 12px;
         }
 
-        .about-link-item {
-            font-family: 'Menlo', monospace;
-            font-size: 0.78rem;
-            color: #000;
-            text-decoration: none;
-            border-bottom: 1px solid rgba(0,0,0,0.2);
-            padding-bottom: 1px;
-            transition: border-color 0.2s, opacity 0.2s;
-        }
-
-        .about-link-item:hover {
-            border-bottom-color: #000;
-            opacity: 0.7;
-        }
-
-        .skills-grid {
+        /* === About Section === */
+        .about-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            gap: 64px;
         }
 
-        .skills-group-title {
-            font-family: 'Menlo', monospace;
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: #333;
-            margin-bottom: 4px;
+        .about-text {
+            font-size: 1.0625rem;
+            color: var(--fg-secondary);
+            line-height: 1.8;
         }
 
-        .skills-group-items {
-            font-family: 'Menlo', monospace;
-            font-size: 0.78rem;
-            color: #666;
-            line-height: 1.7;
+        .about-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
         }
 
-        .meta-info {
-            position: absolute;
-            bottom: 30px;
-            right: 40px;
-            text-align: right;
-            font-family: 'Menlo', monospace;
+        .about-group-title {
+            font-family: var(--mono);
             font-size: 0.75rem;
-            color: #666;
-            z-index: 2;
-            line-height: 1.5;
+            color: var(--fg-tertiary);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        .skills-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .skill-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .skill-label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--fg);
+        }
+
+        .skill-items {
+            font-size: 0.875rem;
+            color: var(--fg-secondary);
+            line-height: 1.6;
+        }
+
+        .contact-links {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .contact-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9375rem;
+            color: var(--fg-secondary);
+            transition: color var(--transition);
+        }
+
+        .contact-link:hover {
+            color: var(--fg);
+        }
+
+        .contact-link svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        /* === Footer === */
+        .footer {
+            border-top: 1px solid var(--border);
+            padding: 32px 24px;
+            text-align: center;
+        }
+
+        .footer-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .footer-text {
+            font-size: 0.8125rem;
+            color: var(--fg-tertiary);
+            font-family: var(--mono);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .footer-link {
+            font-size: 0.8125rem;
+            color: var(--fg-tertiary);
+            transition: color var(--transition);
+        }
+
+        .footer-link:hover {
+            color: var(--fg);
+        }
+
+        /* === Grid Background Effect === */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            overflow: hidden;
             pointer-events: none;
         }
-        #status-text { margin-bottom: 8px; font-weight: 700; letter-spacing: 1px; }
-        .loading-bar {
-            width: 120px;
-            height: 3px;
-            background: rgba(0,0,0,0.1);
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-            border-radius: 2px;
+
+        .grid-bg::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1100px;
+            height: 100%;
+            background-image:
+                linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 80px 80px;
         }
-        .loading-progress {
+
+        .grid-bg::after {
+            content: '';
             position: absolute;
             top: 0;
             left: 0;
-            height: 100%;
-            background: #000;
-            width: 0%;
-            transition: width 0.2s linear;
+            right: 0;
+            height: 600px;
+            background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(100, 100, 255, 0.06) 0%, transparent 70%);
         }
 
+        /* === Responsive === */
         @media (max-width: 768px) {
-            .card {
-                padding: 1.5rem;
-                width: 90vw;
-                max-height: 80vh; 
+            .nav-inner {
+                height: 56px;
             }
-            .card.work-card {
-                width: 95vw;
+
+            .nav-links {
+                gap: 20px;
             }
-            .card.experience-card {
-                width: 95vw;
-                padding: 1.5rem;
-            }
-            .card.about-card {
-                width: 92vw;
-            }
-            .carousel {
-                padding: 20px;
-                align-items: flex-start;
-            }
-            .nav-arrow {
-                top: auto;
-                bottom: 10px; 
-                transform: none;
-                background: rgba(255,255,255,0.8);
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }
-            .media-wrapper {
-                height: 200px; 
-            }
-            h1 { font-size: 2rem; }
-            h2 { font-size: 1.5rem; }
-            .btn-group { 
-                flex-wrap: wrap; 
-                gap: 12px; 
-            }
+
             .nav-link {
-                font-size: 0.8rem;
+                font-size: 0.8125rem;
             }
-            .back-btn { margin-bottom: 60px; }
-            .timeline {
-                padding-left: 20px;
+
+            .hero {
+                padding: 100px 20px 60px;
+                min-height: auto;
+                padding-bottom: 120px;
             }
-            .timeline-role {
-                font-size: 0.9rem;
+
+            .hero-scroll {
+                display: none;
             }
-            .skills-grid {
+
+            .section {
+                padding: 80px 20px;
+            }
+
+            .section-header {
+                margin-bottom: 40px;
+            }
+
+            .project-card {
                 grid-template-columns: 1fr;
             }
+
+            .project-content {
+                padding: 24px;
+            }
+
+            .project-media {
+                aspect-ratio: 16 / 9;
+            }
+
+            .about-grid {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+
+            .timeline {
+                padding-left: 24px;
+            }
+
+            .timeline-item::before {
+                left: -28px;
+            }
+
+            .timeline-head {
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .footer-inner {
+                flex-direction: column;
+                gap: 16px;
+            }
         }
 
+        @media (max-width: 480px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-links {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .btn-primary, .btn-secondary {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .nav-links {
+                gap: 14px;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <canvas id="canvas"></canvas>
-    
-    <div class="meta-info">
-        <div id="status-text">SYSTEM INITIALIZING</div>
-        <div class="loading-bar"><div class="loading-progress" id="progress-bar"></div></div>
-    </div>
+    <div class="grid-bg"></div>
 
-    <div class="scene">
-        
-        <!-- HOME -->
-        <div id="page-home" class="card active">
-            <h1><a href="https://www.weishuz.com">WeishuZ</a></h1>
-            <p id="tagline">exploring</p>
-            <div class="btn-group">
-                <a class="nav-link" onclick="switchPage('experience')">EXPERIENCE</a>
-                <a class="nav-link" onclick="switchPage('work')">WORK</a>
-                <a class="nav-link" onclick="switchPage('about')">ABOUT</a>
-                <a class="nav-link" href="/blog/">BLOG</a>
-                <a class="nav-link" href="https://github.com/WeishuZ" target="_blank">GITHUB</a>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a href="/" class="nav-brand">WeishuZ</a>
+            <div class="nav-links">
+                <a href="#projects" class="nav-link">Projects</a>
+                <a href="#experience" class="nav-link">Experience</a>
+                <a href="#about" class="nav-link">About</a>
+                <a href="/blog/" class="nav-link">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank" class="nav-link">GitHub</a>
             </div>
         </div>
+    </nav>
 
-        <!-- EXPERIENCE -->
-        <div id="page-experience" class="card experience-card">
-            <div class="experience-header">
-                <h2>Experience</h2>
-                <div class="edu-line">UC Berkeley · BS EECS · 4.0/4.0 · May 2027</div>
-            </div>
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-badge">
+            <span class="hero-badge-dot"></span>
+            UC Berkeley · EECS · 4.0 GPA
+        </div>
+        <h1>Weishu Zhang</h1>
+        <p class="hero-subtitle">
+            Building systems at the intersection of infrastructure engineering and applied AI — from clinical NLP pipelines to distributed platforms.
+        </p>
+        <div class="hero-links">
+            <a href="#projects" class="btn-primary">
+                View Projects
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+            </a>
+            <a href="mailto:weszhang@berkeley.edu" class="btn-secondary">
+                Get in Touch
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            </a>
+        </div>
+        <div class="hero-scroll">
+            <span>scroll</span>
+            <div class="hero-scroll-line"></div>
+        </div>
+    </section>
 
-            <div class="timeline">
+    <hr class="section-divider">
 
-                <div class="timeline-item upcoming">
-                    <div class="timeline-role">Software Engineering in Test</div>
-                    <div class="timeline-company">ASML</div>
-                    <div class="timeline-meta">San Jose, CA · May 2026 – Aug 2026</div>
-                    <div class="exp-tags">
-                        <span class="stack-tag">Incoming</span>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-role">CS Intern — Backend</div>
-                    <div class="timeline-company">BalanX-BIO</div>
-                    <div class="timeline-meta">Remote · Jan 2026 – Present</div>
-                    <ul class="timeline-details">
-                        <li>Architecting high-performance Express.js backend for an AGI Health Coach with server-authoritative synchronization engine for real-time state consistency</li>
-                        <li>Engineered AI Orchestrator Proxy interfacing with LLM APIs, managing dynamic context injection (personality vectors, health summaries) for personalized health insights</li>
-                        <li>Designed offline-first conflict resolution logic for seamless data sync across HealthKit and Google Fit devices</li>
-                        <li>Built automated data pipelines using AWS EventBridge and Lambda for daily health metric aggregation, secured via Cognito and JWT</li>
-                    </ul>
-                    <div class="exp-tags">
-                        <span class="stack-tag">Express.js</span>
-                        <span class="stack-tag">AWS</span>
-                        <span class="stack-tag">LangChain</span>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-role">Undergraduate Research Assistant</div>
-                    <div class="timeline-company">UCSF</div>
-                    <div class="timeline-meta">San Francisco, CA · Aug 2025 – Present</div>
-                    <ul class="timeline-details">
-                        <li>Engineered high-throughput clinical extraction pipeline by decomposing monolithic tasks into modular sub-tasks; used in-context label propagation to reduce token consumption by 90%</li>
-                        <li>Constructed 4,000+ entry domain-specific dataset and fine-tuned Qwen LLMs via QLoRA; implemented Self-Consistency checks ensuring 100% schema fidelity for medical compliance</li>
-                        <li>Optimized inference infrastructure using vLLM and PagedAttention — 3× throughput increase for long-context medical records, ~80% VRAM reduction via quantization</li>
-                    </ul>
-                    <div class="exp-tags">
-                        <span class="stack-tag">PyTorch</span>
-                        <span class="stack-tag">QLoRA</span>
-                        <span class="stack-tag">vLLM</span>
-                        <span class="stack-tag">MedSpacy</span>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-role">Lead Systems Architect</div>
-                    <div class="timeline-company">UC Berkeley — GradeView / GradeSync</div>
-                    <div class="timeline-meta">Berkeley, CA · Aug 2025 – Present</div>
-                    <ul class="timeline-details">
-                        <li>Engineered distributed course management ecosystem, migrating fragmented legacy data into high-concurrency PostgreSQL cluster with normalized schema</li>
-                        <li>Optimized system-wide read performance with Redis-backed caching layer and Python pre-rendering service — 95% query latency reduction</li>
-                        <li>Hardened infrastructure with Row-Level Security and granular RBAC for 100+ concurrent students and staff</li>
-                        <li>Resolved 200+ N+1 query patterns; deployed Nginx reverse proxy for 70% reduction in deployment overhead</li>
-                    </ul>
-                    <div class="exp-tags">
-                        <span class="stack-tag">React</span>
-                        <span class="stack-tag">Node.js</span>
-                        <span class="stack-tag">PostgreSQL</span>
-                        <span class="stack-tag">Redis</span>
-                    </div>
-                </div>
-
-            </div>
-
-            <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
+    <!-- Projects -->
+    <section id="projects" class="section">
+        <div class="section-header">
+            <p class="section-label">Selected Work</p>
+            <h2 class="section-title">Projects</h2>
         </div>
 
-        <!-- WORK -->
-        <div id="page-work" class="card work-card">
-            <div class="work-container">
-                
-                <div class="carousel">
-                    
-                    <div class="project-slide active">
-                        <div class="media-wrapper">
-                            <video class="project-video" src="GradeView.mp4" autoplay loop muted playsinline></video>
-                        </div>
-                        <div class="slide-info">
-                            <h3>GradeView: Mastery Learning Dashboard</h3>
-                            <p>Developed under the guidance of <a href="https://www2.eecs.berkeley.edu/Faculty/Homepages/garcia.html">Prof. Garcia (UC Berkeley)</a></p>
-                            <p>An open-source instructor dashboard designed to facilitate mastery learning in high-enrollment Computer Science courses. The system features a robust data pipeline that aggregates and normalizes scores from disparate sources—including Gradescope, PrairieLearn, and iClicker—into a unified "Student View."</p>
-                            <div>
-                                <span class="stack-tag">React</span>
-                                <span class="stack-tag">Node.js</span>
-                                <span class="stack-tag">Express</span>
-                                <span class="stack-tag">PostgreSQL</span>
-                                <span class="stack-tag">Redis</span>
-                            </div>
-                            <a href="https://gradeview.eecs.berkeley.edu" target="_blank" class="live-link-btn">VISIT LIVE SITE ↗</a>
-                        </div>
-                    </div>
-
-                    <div class="project-slide">
-                        <div class="media-wrapper">
-                            <video class="project-video" src="DAChat.mp4" autoplay loop muted playsinline></video>
-                        </div>
-                        <div class="slide-info">
-                            <h3>DA Chat: AI Educational Assistant</h3>
-                            <p>A comprehensive AI assistant designed to help De Anza College students navigate campus resources and academic transfer processes. The system utilizes Retrieval-Augmented Generation (RAG) to answer queries regarding college policies and procedures with high accuracy.</p>
-                            <p>It features a gamified transfer planning module and an intelligent course counselor agent that utilizes OpenAI function calling to query a backend MySQL database for real-time course availability.</p>
-                            <div>
-                                <span class="stack-tag">Spring Boot</span>
-                                <span class="stack-tag">Vue.js</span>
-                                <span class="stack-tag">OpenAI API</span>
-                                <span class="stack-tag">MySQL</span>
-                            </div>
-                            <a href="https://storage.googleapis.com/dachat-web/index.html" class="live-link-btn">VIEW SOURCE ↗</a>
-                        </div>
-                    </div>
-
-                    <div class="project-slide">
-                        <div class="media-wrapper">
-                             <div class="no-preview">NLP Pipeline for Medical Data Structuring</div>
-                        </div>
-                        <div class="slide-info">
-                            <h3>Clinical Note Structure Extraction</h3>
-                            <p>Designed a high-precision NLP pipeline to convert unstructured clinical notes into standardized, structured outputs. The architecture leverages Low-Rank Adaptation (LoRA) to efficiently fine-tune Large Language Models (LLMs) for medical context, integrated with MedSpacy for domain-specific entity recognition.</p>
-                            <div>
-                                <span class="stack-tag">Python</span>
-                                <span class="stack-tag">PyTorch</span>
-                                <span class="stack-tag">MedSpacy</span>
-                                <span class="stack-tag">LoRA</span>
-                                <span class="stack-tag">vLLM</span>
-                            </div>
-                            <a href="#" class="live-link-btn">Live Demo: Unavailable (Privacy Policy)</a>
-                        </div>
-                    </div>
-
+        <div class="projects-grid">
+            <!-- Project 1: GradeView -->
+            <div class="project-card">
+                <div class="project-media">
+                    <video src="GradeView.mp4" autoplay loop muted playsinline></video>
                 </div>
-
-                <button class="nav-arrow left" onclick="changeSlide(-1)">←</button>
-                <button class="nav-arrow right" onclick="changeSlide(1)">→</button>
-
-                <div class="slide-counter" id="slide-counter">01 / 03</div>
-                <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
-            </div>
-        </div>
-
-        <!-- ABOUT -->
-        <div id="page-about" class="card about-card">
-            <h2>About</h2>
-            <div class="about-content">
-
-                <div class="about-section">
-                    <div class="about-section-title">Who</div>
-                    <p>
-                        EECS at UC Berkeley, graduating May 2027. I build systems at the intersection of infrastructure engineering and applied AI — clinical NLP pipelines, distributed course management platforms, and backend systems for health tech. Currently researching LLM optimization for clinical data extraction at UCSF and engineering backend infrastructure for an AGI health platform at BalanX-BIO. Incoming SWE intern at ASML (Summer 2026). Biased toward things that ship, scale, and matter.
+                <div class="project-content">
+                    <span class="project-number">01</span>
+                    <h3 class="project-name">GradeView</h3>
+                    <p class="project-credit">Developed under <a href="https://www2.eecs.berkeley.edu/Faculty/Homepages/garcia.html" target="_blank">Prof. Garcia</a> at UC Berkeley</p>
+                    <p class="project-desc">
+                        Open-source instructor dashboard for mastery learning in high-enrollment CS courses. Aggregates scores from Gradescope, PrairieLearn, and iClicker into a unified student view.
                     </p>
-                </div>
-
-                <div class="about-section">
-                    <div class="about-section-title">Skills</div>
-                    <div class="skills-grid">
-                        <div>
-                            <div class="skills-group-title">Languages</div>
-                            <div class="skills-group-items">Python, Java, C/C++, SQL, TypeScript, JavaScript</div>
-                        </div>
-                        <div>
-                            <div class="skills-group-title">Frameworks</div>
-                            <div class="skills-group-items">FastAPI, React, Node.js, Spring Boot, Next.js, LangChain</div>
-                        </div>
-                        <div>
-                            <div class="skills-group-title">Cloud & DevOps</div>
-                            <div class="skills-group-items">AWS, Kubernetes, Docker, Terraform, CI/CD</div>
-                        </div>
-                        <div>
-                            <div class="skills-group-title">AI & Data</div>
-                            <div class="skills-group-items">PyTorch, vLLM, LoRA/QLoRA, MedSpacy, HuggingFace</div>
-                        </div>
+                    <div class="project-tags">
+                        <span class="project-tag">React</span>
+                        <span class="project-tag">Node.js</span>
+                        <span class="project-tag">Express</span>
+                        <span class="project-tag">PostgreSQL</span>
+                        <span class="project-tag">Redis</span>
                     </div>
+                    <a href="https://gradeview.eecs.berkeley.edu" target="_blank" class="project-link">
+                        Visit Live Site
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                    </a>
                 </div>
-
-                <div class="about-section">
-                    <div class="about-section-title">Links</div>
-                    <div class="about-links">
-                        <a class="about-link-item" href="mailto:weszhang@berkeley.edu">weszhang@berkeley.edu</a>
-                        <a class="about-link-item" href="https://linkedin.com/in/Weishuz" target="_blank">LinkedIn</a>
-                        <a class="about-link-item" href="https://github.com/WeishuZ" target="_blank">GitHub</a>
-                    </div>
-                </div>
-
             </div>
-            <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
+
+            <!-- Project 2: DA Chat -->
+            <div class="project-card">
+                <div class="project-media">
+                    <video src="DAChat.mp4" autoplay loop muted playsinline></video>
+                </div>
+                <div class="project-content">
+                    <span class="project-number">02</span>
+                    <h3 class="project-name">DA Chat</h3>
+                    <p class="project-desc">
+                        AI assistant helping De Anza College students navigate campus resources and academic transfers using RAG. Features gamified transfer planning and an intelligent course counselor with real-time database queries.
+                    </p>
+                    <div class="project-tags">
+                        <span class="project-tag">Spring Boot</span>
+                        <span class="project-tag">Vue.js</span>
+                        <span class="project-tag">OpenAI API</span>
+                        <span class="project-tag">MySQL</span>
+                    </div>
+                    <a href="https://storage.googleapis.com/dachat-web/index.html" target="_blank" class="project-link">
+                        View Source
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Project 3: Clinical NLP -->
+            <div class="project-card">
+                <div class="project-media">
+                    <div class="project-placeholder">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    </div>
+                </div>
+                <div class="project-content">
+                    <span class="project-number">03</span>
+                    <h3 class="project-name">Clinical Note Extraction</h3>
+                    <p class="project-desc">
+                        High-precision NLP pipeline converting unstructured clinical notes into standardized outputs. Uses LoRA for efficient LLM fine-tuning with MedSpacy for domain-specific entity recognition.
+                    </p>
+                    <div class="project-tags">
+                        <span class="project-tag">Python</span>
+                        <span class="project-tag">PyTorch</span>
+                        <span class="project-tag">MedSpacy</span>
+                        <span class="project-tag">LoRA</span>
+                        <span class="project-tag">vLLM</span>
+                    </div>
+                    <span class="project-link" style="color: var(--fg-tertiary); cursor: default;">
+                        Private — UCSF Policy
+                    </span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <!-- Experience -->
+    <section id="experience" class="section">
+        <div class="section-header">
+            <p class="section-label">Career</p>
+            <h2 class="section-title">Experience</h2>
         </div>
 
-    </div>
+        <div class="experience-intro">
+            <span class="edu-badge">UC Berkeley · BS EECS · 4.0/4.0 · May 2027</span>
+        </div>
 
-    <script>
-        // === 1. Carousel Logic ===
-        let currentSlideIndex = 0;
-        const slides = document.querySelectorAll('.project-slide');
-        const counter = document.getElementById('slide-counter');
+        <div class="timeline">
+            <div class="timeline-item upcoming">
+                <div class="timeline-head">
+                    <span class="timeline-role">Software Engineering in Test</span>
+                    <span class="timeline-date">May 2026 – Aug 2026</span>
+                </div>
+                <div class="timeline-company">ASML · San Jose, CA</div>
+                <div class="timeline-tags">
+                    <span class="project-tag">Incoming</span>
+                </div>
+            </div>
 
-        function changeSlide(direction) {
-            slides[currentSlideIndex].classList.remove('active');
-            currentSlideIndex += direction;
-            if (currentSlideIndex >= slides.length) currentSlideIndex = 0;
-            if (currentSlideIndex < 0) currentSlideIndex = slides.length - 1;
-            slides[currentSlideIndex].classList.add('active');
-            counter.innerText = `0${currentSlideIndex + 1} / 0${slides.length}`;
-            
-            // 切换幻灯片时，滚动回顶部 (提升体验)
-            const workCard = document.getElementById('page-work');
-            if(workCard) workCard.scrollTop = 0;
-        }
+            <div class="timeline-item">
+                <div class="timeline-head">
+                    <span class="timeline-role">CS Intern — Backend</span>
+                    <span class="timeline-date">Jan 2026 – Present</span>
+                </div>
+                <div class="timeline-company">BalanX-BIO · Remote</div>
+                <ul class="timeline-details">
+                    <li>Architecting high-performance Express.js backend for an AGI Health Coach with server-authoritative synchronization engine</li>
+                    <li>Engineered AI Orchestrator Proxy interfacing with LLM APIs, managing dynamic context injection for personalized health insights</li>
+                    <li>Designed offline-first conflict resolution logic for seamless data sync across HealthKit and Google Fit</li>
+                    <li>Built automated data pipelines using AWS EventBridge and Lambda for daily health metric aggregation</li>
+                </ul>
+                <div class="timeline-tags">
+                    <span class="project-tag">Express.js</span>
+                    <span class="project-tag">AWS</span>
+                    <span class="project-tag">LangChain</span>
+                </div>
+            </div>
 
-        // === 2. Page Switch Logic ===
-        function switchPage(targetId) {
-            const currentCard = document.querySelector('.card.active');
-            const targetCard = document.getElementById('page-' + targetId);
-            if (!targetCard || currentCard === targetCard) return;
+            <div class="timeline-item">
+                <div class="timeline-head">
+                    <span class="timeline-role">Undergraduate Research Assistant</span>
+                    <span class="timeline-date">Aug 2025 – Present</span>
+                </div>
+                <div class="timeline-company">UCSF · San Francisco, CA</div>
+                <ul class="timeline-details">
+                    <li>Engineered high-throughput clinical extraction pipeline; used in-context label propagation to reduce token consumption by 90%</li>
+                    <li>Constructed 4,000+ entry dataset and fine-tuned Qwen LLMs via QLoRA with 100% schema fidelity</li>
+                    <li>Optimized inference with vLLM and PagedAttention — 3× throughput increase, ~80% VRAM reduction</li>
+                </ul>
+                <div class="timeline-tags">
+                    <span class="project-tag">PyTorch</span>
+                    <span class="project-tag">QLoRA</span>
+                    <span class="project-tag">vLLM</span>
+                    <span class="project-tag">MedSpacy</span>
+                </div>
+            </div>
 
-            triggerWarpSpeed();
+            <div class="timeline-item">
+                <div class="timeline-head">
+                    <span class="timeline-role">Lead Systems Architect</span>
+                    <span class="timeline-date">Aug 2025 – Present</span>
+                </div>
+                <div class="timeline-company">UC Berkeley — GradeView / GradeSync · Berkeley, CA</div>
+                <ul class="timeline-details">
+                    <li>Engineered distributed course management ecosystem with high-concurrency PostgreSQL cluster</li>
+                    <li>Redis-backed caching layer and Python pre-rendering — 95% query latency reduction</li>
+                    <li>Row-Level Security and granular RBAC for 100+ concurrent users</li>
+                    <li>Resolved 200+ N+1 query patterns; Nginx reverse proxy for 70% deployment overhead reduction</li>
+                </ul>
+                <div class="timeline-tags">
+                    <span class="project-tag">React</span>
+                    <span class="project-tag">Node.js</span>
+                    <span class="project-tag">PostgreSQL</span>
+                    <span class="project-tag">Redis</span>
+                </div>
+            </div>
+        </div>
+    </section>
 
-            currentCard.classList.remove('active');
-            currentCard.classList.add('exit');
+    <hr class="section-divider">
 
-            setTimeout(() => {
-                targetCard.classList.remove('exit');
-                targetCard.classList.add('active');
-                // 重置滚动条位置
-                targetCard.scrollTop = 0;
-            }, 100); 
-            
-            setTimeout(() => {
-                 currentCard.classList.remove('exit');
-            }, 800);
-        }
+    <!-- About -->
+    <section id="about" class="section">
+        <div class="section-header">
+            <p class="section-label">Background</p>
+            <h2 class="section-title">About</h2>
+        </div>
 
-        // === 3. Background Algorithms (Prim & Kruskal) ===
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status-text');
-        const progressBar = document.getElementById('progress-bar');
-        
-        let width, height;
-        let points = [];
-        let edges = [];
-        let mouse = { x: -1000, y: -1000 };
-        
-        let animationId = null;
-        let frameCount = 0;
-        
-        let cycleStartTime = 0;
-        const CYCLE_DURATION = 90000; 
-        
-        // 算法相关变量
-        let currentAlgorithm = 'PRIM'; // 'PRIM' or 'KRUSKAL'
-        
-        // Prim 专用
-        let reached = [], unreached = [];
-        
-        // Kruskal 专用
-        let allEdges = []; 
-        let dsu = null;
-        let edgeIndex = 0; 
+        <div class="about-grid">
+            <div class="about-text">
+                EECS at UC Berkeley, graduating May 2027. Building systems at the intersection of infrastructure engineering and applied AI — clinical NLP pipelines, distributed course management platforms, and backend systems for health tech.
+                <br><br>
+                Currently researching LLM optimization for clinical data extraction at UCSF and engineering backend infrastructure for an AGI health platform at BalanX-BIO. Incoming SWE intern at ASML for Summer 2026.
+                <br><br>
+                Biased toward things that ship, scale, and matter.
+            </div>
 
-        let CONFIG = {
-            pointCount: 150,
-            speed: 8,       
-            baseSpeed: 8,   
-            warpSpeed: 1
-        };
+            <div class="about-sidebar">
+                <div>
+                    <div class="about-group-title">Skills</div>
+                    <div class="skills-list">
+                        <div class="skill-row">
+                            <span class="skill-label">Languages</span>
+                            <span class="skill-items">Python, Java, C/C++, SQL, TypeScript, JavaScript</span>
+                        </div>
+                        <div class="skill-row">
+                            <span class="skill-label">Frameworks</span>
+                            <span class="skill-items">FastAPI, React, Node.js, Spring Boot, Next.js, LangChain</span>
+                        </div>
+                        <div class="skill-row">
+                            <span class="skill-label">Cloud & DevOps</span>
+                            <span class="skill-items">AWS, Kubernetes, Docker, Terraform, CI/CD</span>
+                        </div>
+                        <div class="skill-row">
+                            <span class="skill-label">AI & Data</span>
+                            <span class="skill-items">PyTorch, vLLM, LoRA/QLoRA, MedSpacy, HuggingFace</span>
+                        </div>
+                    </div>
+                </div>
 
-        // 并查集类 (用于 Kruskal)
-        class DSU {
-            constructor(n) {
-                this.parent = Array.from({length: n}, (_, i) => i);
-            }
-            find(i) {
-                if (this.parent[i] === i) return i;
-                return this.parent[i] = this.find(this.parent[i]);
-            }
-            union(i, j) {
-                let rootI = this.find(i);
-                let rootJ = this.find(j);
-                if (rootI !== rootJ) {
-                    this.parent[rootI] = rootJ;
-                    return true;
-                }
-                return false;
-            }
-        }
+                <div>
+                    <div class="about-group-title">Connect</div>
+                    <div class="contact-links">
+                        <a href="mailto:weszhang@berkeley.edu" class="contact-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                            weszhang@berkeley.edu
+                        </a>
+                        <a href="https://linkedin.com/in/Weishuz" target="_blank" class="contact-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+                            LinkedIn
+                        </a>
+                        <a href="https://github.com/WeishuZ" target="_blank" class="contact-link">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                            GitHub
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-        function triggerWarpSpeed() {
-            CONFIG.speed = 1;
-            setTimeout(() => {
-                CONFIG.speed = CONFIG.baseSpeed;
-            }, 800);
-        }
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-inner">
+            <span class="footer-text">© 2026 Weishu Zhang</span>
+            <div class="footer-links">
+                <a href="/blog/" class="footer-link">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank" class="footer-link">GitHub</a>
+                <a href="https://linkedin.com/in/Weishuz" target="_blank" class="footer-link">LinkedIn</a>
+            </div>
+        </div>
+    </footer>
 
-        class Point {
-            constructor(x, y, id) {
-                this.x = x; this.y = y;
-                this.id = id; // ID 用于 Kruskal
-                this.phase = Math.random() * Math.PI * 2;
-                this.currentSize = 2;
-            }
-            update() {
-                const breath = Math.sin(Date.now() * 0.002 + this.phase) * 0.5;
-                const d = Math.hypot(this.x - mouse.x, this.y - mouse.y);
-                let hover = d < 100 ? (1 - d/100) * 3 : 0;
-                this.currentSize += ((2 + breath + hover) - this.currentSize) * 0.1;
-            }
-            draw(ctx) {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.currentSize, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(0,0,0,${0.5 + (this.currentSize-2)/4})`;
-                ctx.fill();
-            }
-        }
-
-        function resize() {
-            width = window.innerWidth;
-            height = window.innerHeight;
-            canvas.width = width;
-            canvas.height = height;
-        }
-
-        function init() {
-            if (animationId) cancelAnimationFrame(animationId);
-
-            // 切换算法
-            currentAlgorithm = (currentAlgorithm === 'PRIM') ? 'KRUSKAL' : 'PRIM';
-
-            points = []; edges = []; 
-            frameCount = 0;
-            cycleStartTime = Date.now();
-
-            const pad = 20;
-            for(let i=0; i<CONFIG.pointCount; i++){
-                points.push(new Point(Math.random()*(width-pad*2)+pad, Math.random()*(height-pad*2)+pad, i));
-            }
-
-            if (currentAlgorithm === 'PRIM') {
-                // Prim 初始化：一个已达集合，其余未达
-                unreached = [...points];
-                reached = [];
-                reached.push(unreached.splice(Math.floor(Math.random()*unreached.length), 1)[0]);
-            } else {
-                // Kruskal 初始化：生成所有边并按权重排序
-                allEdges = [];
-                for (let i = 0; i < points.length; i++) {
-                    for (let j = i + 1; j < points.length; j++) {
-                        let d = Math.hypot(points[i].x - points[j].x, points[i].y - points[j].y);
-                        allEdges.push({ p1: points[i], p2: points[j], w: d, id1: i, id2: j });
-                    }
-                }
-                // 按距离从小到大排序
-                allEdges.sort((a, b) => a.w - b.w);
-                dsu = new DSU(points.length);
-                edgeIndex = 0;
-            }
-            
-            loop();
-        }
-
-        function loop() {
-            const elapsed = Date.now() - cycleStartTime;
-            const progress = Math.min(1, elapsed / CYCLE_DURATION);
-            
-            progressBar.style.width = (progress * 100) + '%';
-            
-            if (elapsed > CYCLE_DURATION) {
-                init(); 
-                return;
-            }
-
-            ctx.clearRect(0, 0, width, height);
-
-            // 绘制点
-            for(let p of points) { p.update(); p.draw(ctx); }
-            
-            // 绘制边
-            ctx.beginPath();
-            for(let e of edges) { ctx.moveTo(e.p1.x, e.p1.y); ctx.lineTo(e.p2.x, e.p2.y); }
-            ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.stroke();
-
-            // 算法生长逻辑
-            let isFinished = false;
-            if (currentAlgorithm === 'PRIM') {
-                if (unreached.length > 0) {
-                    statusText.innerText = `SYSTEM GROWING (PRIM)`; 
-                    
-                    if (frameCount % CONFIG.speed === 0) {
-                        let record = Infinity, rIdx = -1, uIdx = -1;
-                        for (let i = 0; i < reached.length; i++) {
-                            for (let j = 0; j < unreached.length; j++) {
-                                let d = Math.hypot(reached[i].x - unreached[j].x, reached[i].y - unreached[j].y);
-                                if (d < record) { record = d; rIdx = i; uIdx = j; }
-                            }
-                        }
-                        if (rIdx !== -1) {
-                            let p2 = unreached[uIdx];
-                            edges.push({p1: reached[rIdx], p2: p2});
-                            reached.push(p2);
-                            unreached.splice(uIdx, 1);
-                        }
-                    }
-                } else {
-                    isFinished = true;
-                }
-            } else {
-                // KRUSKAL LOGIC
-                if (edgeIndex < allEdges.length && edges.length < points.length - 1) {
-                    statusText.innerText = `SYSTEM GROWING (KRUSKAL)`;
-                    
-                    if (frameCount % CONFIG.speed === 0) {
-                        let added = false;
-                        while (!added && edgeIndex < allEdges.length) {
-                            let e = allEdges[edgeIndex];
-                            edgeIndex++;
-                            
-                            if (dsu.union(e.id1, e.id2)) {
-                                edges.push({p1: e.p1, p2: e.p2});
-                                added = true;
-                            }
-                        }
-                    }
-                } else {
-                    isFinished = true;
-                }
-            }
-
-            if (isFinished) {
-                const remaining = Math.ceil((CYCLE_DURATION - elapsed) / 1000);
-                statusText.innerText = `SYSTEM STABLE (${remaining}s)`;
-            }
-
-            frameCount++;
-            animationId = requestAnimationFrame(loop);
-        }
-
-        window.addEventListener('resize', () => { 
-            resize(); 
-            init(); 
-        });
-        
-        window.addEventListener('mousemove', e => { 
-            mouse.x = e.clientX; 
-            mouse.y = e.clientY; 
-        });
-        
-        resize();
-        init();
-
-        // Typewriter Logic
-        const taglineEl = document.getElementById('tagline');
-        const maxDots = 6;
-        let isTyping = true;
-        let dotCount = 0;
-
-        function typewriterLoop() {
-            const BASE_DELAY = 150; 
-            let delay = BASE_DELAY;
-
-            if (isTyping) {
-                if (dotCount < maxDots) {
-                    dotCount++;
-                    taglineEl.innerText = 'exploring' + '.'.repeat(dotCount);
-                } else {
-                    isTyping = false;
-                    delay = 1000; 
-                }
-            } else {
-                if (dotCount > 0) {
-                    dotCount--;
-                    taglineEl.innerText = 'exploring' + '.'.repeat(dotCount);
-                } else {
-                    isTyping = true;
-                    delay = 500;
-                }
-            }
-            setTimeout(typewriterLoop, delay);
-        }
-        window.onload = typewriterLoop; 
-
-    </script>
 </body>
 </html>
