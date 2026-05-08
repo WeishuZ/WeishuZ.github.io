@@ -3,241 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blog — WeishuZ</title>
+    <title>Blog — WeishuZ.Dev</title>
     <style>
         :root {
-            --bg: #000000;
-            --fg: #ededed;
-            --fg-secondary: #888888;
-            --fg-tertiary: #666666;
-            --border: #222222;
-            --border-hover: #444444;
-            --card-bg: #0a0a0a;
-            --card-hover: #111111;
-            --tag-bg: #1a1a1a;
-            --tag-border: #333333;
-            --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Oxygen, Ubuntu, sans-serif;
-            --mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', 'Menlo', Consolas, monospace;
-            --transition: 150ms ease;
+            --bg: #f2f2f2;
+            --text: #1a1a1a;
+            --muted: #666;
+            --border: rgba(0,0,0,0.1);
         }
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
-            font-family: var(--sans);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: var(--bg);
-            color: var(--fg);
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            text-rendering: optimizeLegibility;
-            line-height: 1.6;
+            color: var(--text);
+            line-height: 1.8;
         }
-
-        ::selection {
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        a { color: inherit; text-decoration: none; }
-
-        .nav {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: saturate(180%) blur(20px);
-            -webkit-backdrop-filter: saturate(180%) blur(20px);
+        .top-nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: rgba(242,242,242,0.85);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--border);
+            padding: 16px 0;
         }
-
-        .nav-inner {
-            max-width: 720px;
-            margin: 0 auto;
-            padding: 0 24px;
-            height: 64px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+        .top-nav-inner {
+            max-width: 720px; margin: 0 auto; padding: 0 24px;
+            display: flex; justify-content: space-between; align-items: center;
         }
-
-        .nav-brand {
-            font-size: 1rem;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            color: var(--fg);
+        .top-nav a {
+            text-decoration: none; color: var(--text); font-weight: 700;
+            font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
+            padding-bottom: 2px; border-bottom: 2px solid transparent; transition: border-color 0.3s;
         }
-
-        .nav-links {
-            display: flex;
-            gap: 24px;
-        }
-
-        .nav-link {
-            font-size: 0.875rem;
-            color: var(--fg-secondary);
-            transition: color var(--transition);
-        }
-
-        .nav-link:hover {
-            color: var(--fg);
-        }
-
-        .nav-link.active {
-            color: var(--fg);
-        }
-
-        .container {
-            max-width: 720px;
-            margin: 0 auto;
-            padding: 120px 24px 80px;
-        }
-
-        .page-header {
-            margin-bottom: 48px;
-        }
-
-        .page-label {
-            font-family: var(--mono);
-            font-size: 0.8125rem;
-            color: var(--fg-tertiary);
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            margin-bottom: 12px;
-        }
-
-        .page-title {
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            font-weight: 800;
-            letter-spacing: -0.03em;
-            margin-bottom: 8px;
-        }
-
-        .page-subtitle {
-            font-family: var(--mono);
-            font-size: 0.875rem;
-            color: var(--fg-tertiary);
-        }
-
-        .post-list {
-            list-style: none;
-        }
-
+        .top-nav a:hover { border-bottom-color: var(--text); }
+        .top-nav .site-name { font-size: 1.1rem; letter-spacing: -0.5px; }
+        .container { max-width: 720px; margin: 0 auto; padding: 100px 24px 60px; }
+        .page-title { font-size: 2.5rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 0.5rem; }
+        .page-subtitle { font-family: 'Menlo', monospace; font-size: 0.85rem; color: var(--muted); margin-bottom: 3rem; }
+        .post-list { list-style: none; }
         .post-item {
-            border-top: 1px solid var(--border);
-            transition: background var(--transition);
+            padding: 24px 0; border-bottom: 1px solid var(--border); transition: all 0.2s;
         }
-
-        .post-item:last-child {
-            border-bottom: 1px solid var(--border);
-        }
-
-        .post-item a {
-            display: block;
-            padding: 28px 0;
-        }
-
-        .post-item:hover {
-            background: rgba(255, 255, 255, 0.02);
-        }
-
-        .post-title {
-            font-size: 1.25rem;
-            font-weight: 700;
-            letter-spacing: -0.01em;
-            margin-bottom: 8px;
-            line-height: 1.4;
-            color: var(--fg);
-        }
-
+        .post-item:first-child { border-top: 1px solid var(--border); }
+        .post-item a { text-decoration: none; color: inherit; display: block; }
+        .post-item:hover { background: rgba(0,0,0,0.02); margin: 0 -12px; padding: 24px 12px; border-radius: 4px; }
+        .post-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; line-height: 1.4; }
         .post-meta {
-            font-family: var(--mono);
-            font-size: 0.75rem;
-            color: var(--fg-tertiary);
-            display: flex;
-            gap: 16px;
-            margin-bottom: 10px;
+            font-family: 'Menlo', monospace; font-size: 0.75rem; color: var(--muted);
+            margin-bottom: 8px; display: flex; gap: 16px;
         }
-
-        .post-excerpt {
-            font-size: 0.9375rem;
-            color: var(--fg-secondary);
-            line-height: 1.6;
-        }
-
-        .post-tags {
-            margin-top: 10px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-
+        .post-excerpt { font-size: 0.9rem; color: #555; line-height: 1.6; }
+        .post-tags { margin-top: 8px; }
         .tag {
-            font-family: var(--mono);
-            font-size: 0.6875rem;
-            padding: 3px 8px;
-            background: var(--tag-bg);
-            border: 1px solid var(--tag-border);
-            border-radius: 4px;
-            color: var(--fg-secondary);
+            display: inline-block; font-family: 'Menlo', monospace; font-size: 0.65rem;
+            background: #333; color: #fff; padding: 3px 7px; border-radius: 2px; margin-right: 4px;
         }
-
-        .footer {
-            border-top: 1px solid var(--border);
-            padding: 32px 24px;
-            margin-top: 40px;
-        }
-
-        .footer-inner {
-            max-width: 720px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .footer-text {
-            font-size: 0.8125rem;
-            color: var(--fg-tertiary);
-            font-family: var(--mono);
-        }
-
-        .footer-link {
-            font-size: 0.8125rem;
-            color: var(--fg-tertiary);
-            transition: color var(--transition);
-        }
-
-        .footer-link:hover {
-            color: var(--fg);
-        }
-
         @media (max-width: 768px) {
-            .container { padding: 90px 16px 60px; }
-            .nav-inner { height: 56px; }
-            .post-item a { padding: 24px 0; }
+            .container { padding: 80px 16px 40px; }
+            .page-title { font-size: 1.8rem; }
         }
     </style>
 </head>
 <body>
-    <nav class="nav">
-        <div class="nav-inner">
-            <a href="/" class="nav-brand">WeishuZ</a>
-            <div class="nav-links">
-                <a href="/" class="nav-link">Home</a>
-                <a href="/blog/" class="nav-link active">Blog</a>
-                <a href="https://github.com/WeishuZ" target="_blank" class="nav-link">GitHub</a>
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="site-name">WeishuZ</a>
+            <div style="display:flex;gap:20px;">
+                <a href="/">Home</a>
+                <a href="/blog/" style="border-bottom-color: #1a1a1a;">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank">GitHub</a>
             </div>
         </div>
     </nav>
-
     <main class="container">
-        <div class="page-header">
-            <p class="page-label">Writing</p>
-            <h1 class="page-title">Blog</h1>
-            <p class="page-subtitle">Swarm-Coder · Network Science × RecSys</p>
-        </div>
-
+        <h1 class="page-title">Blog</h1>
+        <p class="page-subtitle">Swarm-Coder · Network Science × RecSys</p>
         <ul class="post-list">
             <li class="post-item">
                 <a href="/blog/swarm-coder-setup/">
@@ -318,12 +157,5 @@
             </li>
         </ul>
     </main>
-
-    <footer class="footer">
-        <div class="footer-inner">
-            <span class="footer-text">© 2026 Weishu Zhang</span>
-            <a href="/" class="footer-link">← Back to Home</a>
-        </div>
-    </footer>
 </body>
 </html>
