@@ -129,7 +129,7 @@
             margin-bottom: 2rem; 
         }
 
-        .btn-group { display: flex; justify-content: center; gap: 20px; flex-shrink: 0; }
+        .btn-group { display: flex; justify-content: center; gap: 18px; flex-shrink: 0; flex-wrap: wrap; }
         
         .nav-link {
             text-decoration: none;
@@ -498,11 +498,147 @@
             transition: width 0.2s linear;
         }
 
+        /* === Learn 页面样式 === */
+
+        .card.learn-card {
+            width: 760px;
+            padding: 2.5rem 3rem;
+        }
+
+        .learn-intro {
+            font-family: 'Menlo', monospace;
+            font-size: 0.78rem;
+            color: #888;
+            letter-spacing: 0.3px;
+            margin-bottom: 1.8rem;
+            text-align: center;
+        }
+
+        .tutorials {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            text-align: left;
+        }
+
+        .tutorial-item {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            padding: 1.5rem 1.6rem;
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            background: rgba(255, 255, 255, 0.35);
+            border-radius: 4px;
+            transition: border-color 0.2s, transform 0.2s, background 0.2s, box-shadow 0.2s;
+            position: relative;
+            animation: slideIn 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+        }
+
+        .tutorial-item:hover {
+            border-color: #000;
+            background: rgba(255, 255, 255, 0.75);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .tutorial-status {
+            display: inline-block;
+            font-family: 'Menlo', monospace;
+            font-size: 0.62rem;
+            background: #000;
+            color: #fff;
+            padding: 3px 8px;
+            border-radius: 2px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .tutorial-title {
+            font-size: 1.35rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+            color: #000;
+            line-height: 1.2;
+        }
+
+        .tutorial-subtitle {
+            font-family: 'Menlo', monospace;
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 0.9rem;
+            letter-spacing: 0.3px;
+        }
+
+        .tutorial-desc {
+            font-family: 'Menlo', monospace;
+            font-size: 0.8rem;
+            color: #555;
+            line-height: 1.75;
+            margin-bottom: 1rem;
+        }
+
+        .tutorial-stats {
+            display: flex;
+            gap: 18px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .tutorial-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .tutorial-stat-num {
+            font-family: 'Menlo', monospace;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #000;
+            line-height: 1;
+        }
+
+        .tutorial-stat-label {
+            font-family: 'Menlo', monospace;
+            font-size: 0.65rem;
+            color: #999;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+
+        .tutorial-cta {
+            display: inline-block;
+            font-family: 'Menlo', monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #000;
+            border-bottom: 2px solid #000;
+            padding-bottom: 1px;
+            letter-spacing: 1px;
+            margin-top: 6px;
+        }
+
+        .tutorial-placeholder {
+            border: 1px dashed rgba(0, 0, 0, 0.15);
+            padding: 1.5rem;
+            border-radius: 4px;
+            text-align: center;
+            font-family: 'Menlo', monospace;
+            font-size: 0.72rem;
+            color: #999;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
         @media (max-width: 768px) {
             .card {
                 padding: 1.5rem;
                 width: 90vw;
-                max-height: 80vh; 
+                max-height: 80vh;
             }
             .card.work-card {
                 width: 95vw;
@@ -513,6 +649,16 @@
             }
             .card.about-card {
                 width: 92vw;
+            }
+            .card.learn-card {
+                width: 95vw;
+                padding: 1.5rem;
+            }
+            .tutorial-item {
+                padding: 1.2rem;
+            }
+            .tutorial-title {
+                font-size: 1.1rem;
             }
             .carousel {
                 padding: 20px;
@@ -569,6 +715,7 @@
             <div class="btn-group">
                 <a class="nav-link" onclick="switchPage('experience')">EXPERIENCE</a>
                 <a class="nav-link" onclick="switchPage('work')">WORK</a>
+                <a class="nav-link" onclick="switchPage('learn')">LEARN</a>
                 <a class="nav-link" onclick="switchPage('about')">ABOUT</a>
                 <a class="nav-link" href="/blog/">BLOG</a>
                 <a class="nav-link" href="https://github.com/WeishuZ" target="_blank">GITHUB</a>
@@ -719,6 +866,65 @@
                 <div class="slide-counter" id="slide-counter">01 / 03</div>
                 <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
             </div>
+        </div>
+
+        <!-- LEARN -->
+        <div id="page-learn" class="card learn-card">
+            <div class="experience-header">
+                <h2>Learn</h2>
+                <div class="edu-line">深入领域的问题驱动学习笔记 · self-imposed curricula</div>
+            </div>
+
+            <p class="learn-intro">
+                Below are the guides I'm building while I learn. Each follows the same loop —<br>
+                drive question → predict → fill the gap → read real code → self-check.
+            </p>
+
+            <div class="tutorials">
+
+                <a class="tutorial-item" href="/infra-learning-path/" target="_blank" rel="noopener">
+                    <div class="tutorial-status">★ Active</div>
+                    <div class="tutorial-title">Infra Learning Path</div>
+                    <div class="tutorial-subtitle">Going deep into AI infrastructure · 6-month roadmap</div>
+                    <p class="tutorial-desc">
+                        用 vLLM 当锚点，把 OS 当母语。问题驱动 → 先猜后看 → 代码锚点 → 自检。
+                        含 6 个月月度路线、PR 节奏、10 篇必读论文、原创 mini-vLLM 项目设计。
+                    </p>
+                    <div class="tutorial-stats">
+                        <div class="tutorial-stat">
+                            <div class="tutorial-stat-num">9</div>
+                            <div class="tutorial-stat-label">chapters</div>
+                        </div>
+                        <div class="tutorial-stat">
+                            <div class="tutorial-stat-num">6</div>
+                            <div class="tutorial-stat-label">months</div>
+                        </div>
+                        <div class="tutorial-stat">
+                            <div class="tutorial-stat-num">10</div>
+                            <div class="tutorial-stat-label">papers</div>
+                        </div>
+                        <div class="tutorial-stat">
+                            <div class="tutorial-stat-num">3+</div>
+                            <div class="tutorial-stat-label">vLLM PRs</div>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="stack-tag">vLLM</span>
+                        <span class="stack-tag">PagedAttention</span>
+                        <span class="stack-tag">CUDA</span>
+                        <span class="stack-tag">OS</span>
+                        <span class="stack-tag">Scheduler</span>
+                    </div>
+                    <div class="tutorial-cta">READ THE GUIDE →</div>
+                </a>
+
+                <div class="tutorial-placeholder">
+                    More guides coming soon
+                </div>
+
+            </div>
+
+            <a class="nav-link back-btn" onclick="switchPage('home')">← BACK TO HOME</a>
         </div>
 
         <!-- ABOUT -->
