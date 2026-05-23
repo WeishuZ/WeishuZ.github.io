@@ -848,6 +848,175 @@ p { color: var(--ink-2); font-size: var(--t-base); }
 /* ============================================================
    RESPONSIVE
    ============================================================ */
+/* ============================================================
+   ENHANCEMENTS — reveal, tilt, magnetic, counters, ripples
+   ============================================================ */
+
+/* Staggered reveal for items inside a card */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.6s var(--ease),
+    transform 0.6s var(--ease),
+    filter 0.6s var(--ease);
+  filter: blur(2px);
+  will-change: transform, opacity, filter;
+}
+.reveal.in {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+/* Tilt for work tiles */
+.work-tile {
+  transition: transform 0.35s var(--ease), background 0.2s, box-shadow 0.35s var(--ease);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.work-tile.tilt {
+  transform: perspective(900px)
+    rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
+    translate3d(0,0,0);
+  box-shadow: var(--shadow-hover);
+  z-index: 3;
+}
+.work-tile .work-media,
+.work-tile .work-title,
+.work-tile .work-desc,
+.work-tile .tags {
+  transform: translateZ(0);
+  transition: transform 0.35s var(--ease);
+}
+.work-tile.tilt .work-media   { transform: translateZ(24px); }
+.work-tile.tilt .work-title   { transform: translateZ(16px); }
+.work-tile.tilt .work-desc    { transform: translateZ(10px); }
+.work-tile.tilt .tags         { transform: translateZ(8px); }
+
+/* Subtle shimmer on the video media frame on hover */
+.work-media { position: relative; overflow: hidden; }
+.work-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in srgb, var(--ink) 6%, transparent) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.9s var(--ease);
+  pointer-events: none;
+}
+.work-tile:hover .work-media::after { transform: translateX(120%); }
+
+/* Magnetic / underline polish on nav links — keep existing styles */
+.nav-link { will-change: transform; }
+
+/* Ripple for nav link clicks */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  background: var(--accent-soft);
+  pointer-events: none;
+  animation: rippleAnim 0.65s var(--ease) forwards;
+}
+@keyframes rippleAnim {
+  to { transform: scale(20); opacity: 0; }
+}
+
+/* H1 name char-by-char reveal */
+.h1-char {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.4em) rotate(2deg);
+  filter: blur(4px);
+  transition:
+    opacity 0.55s var(--ease),
+    transform 0.55s var(--ease),
+    filter 0.55s var(--ease);
+}
+.h1-char.in {
+  opacity: 1;
+  transform: translateY(0) rotate(0);
+  filter: blur(0);
+}
+h1 a:hover .h1-char {
+  animation: h1Wave 0.6s var(--ease);
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+@keyframes h1Wave {
+  0%   { transform: translateY(0); }
+  40%  { transform: translateY(-6px); color: var(--accent); }
+  100% { transform: translateY(0); }
+}
+
+/* Glow ring for chrome buttons on hover */
+.chrome-btn { position: relative; overflow: visible; }
+.chrome-btn::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--accent-soft), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  z-index: -1;
+}
+.chrome-btn:hover::before { opacity: 1; }
+
+/* Timeline dot pulse for active (in-view) item */
+.timeline-item.reveal.in::before {
+  animation: dotPulse 1.6s var(--ease) 0.1s 1;
+}
+@keyframes dotPulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent-soft); }
+  60%  { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Tutorial item magnet — reuse hover, add inner sheen */
+.tutorial-item { position: relative; overflow: hidden; }
+.tutorial-item::before {
+  content: '';
+  position: absolute;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft) 0%, transparent 65%);
+  left: var(--mx, -200px);
+  top: var(--my, -200px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+.tutorial-item:hover::before { opacity: 1; }
+.tutorial-item > * { position: relative; z-index: 1; }
+
+/* Counter animation flag (counted numbers get subtle pop) */
+.tutorial-stat-num.counted {
+  animation: numPop 0.5s var(--ease);
+}
+@keyframes numPop {
+  0%   { transform: translateY(4px); opacity: 0.6; }
+  100% { transform: translateY(0);   opacity: 1; }
+}
+
+/* Reduced motion: disable extras */
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .h1-char, .work-tile, .work-media::after,
+  .tutorial-item::before, .chrome-btn::before {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+  }
+}
+
 @media (max-width: 768px) {
   .card,
   .card.work-card,
@@ -1246,11 +1415,13 @@ function switchPage(targetId) {
 
   currentCard.classList.remove('active');
   currentCard.classList.add('exit');
+  resetReveals(currentCard);
 
   setTimeout(() => {
     targetCard.classList.remove('exit');
     targetCard.classList.add('active');
     targetCard.scrollTop = 0;
+    runReveals(targetCard);
   }, 80);
 
   setTimeout(() => {
@@ -1487,6 +1658,197 @@ window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.cli
 
 resize();
 init();
+
+/* ============================================================
+   ENHANCEMENTS — staggered reveal, tilt, magnetic, counters
+   ============================================================ */
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* --- Mark reveal targets in each card --- */
+function markReveals() {
+  const selectors = {
+    'page-home':       ['.home-eyebrow', 'h1', '.home-tagline', '.home-currently',
+                        '.home-teaser', '.home-nav .nav-link', '.home-footer'],
+    'page-experience': ['.experience-header', '.timeline-item'],
+    'page-work':       ['.work-header', '.work-tile'],
+    'page-learn':      ['.learn-header', '.learn-intro', '.tutorials > *'],
+    'page-about':      ['h2', '.about-section'],
+  };
+  Object.entries(selectors).forEach(([id, sels]) => {
+    const card = document.getElementById(id);
+    if (!card) return;
+    sels.forEach(sel => {
+      card.querySelectorAll(sel).forEach((el, i) => {
+        el.classList.add('reveal');
+        // staggered delay
+        const d = Math.min(i, 8) * 70;
+        el.style.transitionDelay = d + 'ms';
+      });
+    });
+  });
+}
+
+function runReveals(card) {
+  if (!card) return;
+  // Force reflow so transitions retrigger reliably
+  void card.offsetWidth;
+  card.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+  // For h1 chars
+  card.querySelectorAll('.h1-char').forEach((el, i) => {
+    el.style.transitionDelay = (180 + i * 45) + 'ms';
+    el.classList.add('in');
+  });
+  // Counters
+  card.querySelectorAll('.tutorial-stat-num[data-target]').forEach(animateCounter);
+}
+
+function resetReveals(card) {
+  if (!card) return;
+  card.querySelectorAll('.reveal.in').forEach(el => el.classList.remove('in'));
+  card.querySelectorAll('.h1-char.in').forEach(el => el.classList.remove('in'));
+  card.querySelectorAll('.tutorial-stat-num.counted').forEach(el => {
+    el.classList.remove('counted');
+    if (el.dataset.original) el.textContent = el.dataset.original;
+  });
+}
+
+markReveals();
+
+/* --- H1 name char-by-char wrap --- */
+(function splitH1(){
+  const link = document.querySelector('#page-home h1 a');
+  if (!link) return;
+  const text = link.textContent;
+  link.innerHTML = '';
+  let cIdx = 0;
+  text.split('').forEach(ch => {
+    const span = document.createElement('span');
+    span.className = 'h1-char';
+    span.style.setProperty('--i', cIdx);
+    span.textContent = ch === ' ' ? '\u00A0' : ch;
+    link.appendChild(span);
+    cIdx++;
+  });
+})();
+
+/* Kick off the initial card reveal once on load */
+window.addEventListener('load', () => {
+  const initial = document.querySelector('.card.active');
+  if (initial) runReveals(initial);
+});
+
+/* --- 3D tilt for work tiles --- */
+(function tilt(){
+  if (REDUCED_MOTION) return;
+  const tiles = document.querySelectorAll('.work-tile');
+  tiles.forEach(tile => {
+    tile.addEventListener('mousemove', (e) => {
+      const r = tile.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width;
+      const py = (e.clientY - r.top) / r.height;
+      const rx = (0.5 - py) * 6;   // -3..3 deg
+      const ry = (px - 0.5) * 8;   // -4..4 deg
+      tile.style.setProperty('--rx', rx.toFixed(2) + 'deg');
+      tile.style.setProperty('--ry', ry.toFixed(2) + 'deg');
+      tile.classList.add('tilt');
+    });
+    tile.addEventListener('mouseleave', () => {
+      tile.style.setProperty('--rx', '0deg');
+      tile.style.setProperty('--ry', '0deg');
+      tile.classList.remove('tilt');
+    });
+  });
+})();
+
+/* --- Magnetic nav links --- */
+(function magneticLinks(){
+  if (REDUCED_MOTION) return;
+  const links = document.querySelectorAll('.nav-link, .chrome-btn');
+  links.forEach(link => {
+    link.addEventListener('mousemove', (e) => {
+      const r = link.getBoundingClientRect();
+      const x = e.clientX - (r.left + r.width / 2);
+      const y = e.clientY - (r.top + r.height / 2);
+      link.style.transform = `translate(${x * 0.25}px, ${y * 0.35}px)`;
+      link.style.transition = 'transform 0.15s var(--ease)';
+    });
+    link.addEventListener('mouseleave', () => {
+      link.style.transform = '';
+      link.style.transition = 'transform 0.35s var(--ease)';
+    });
+  });
+})();
+
+/* --- Ripple on nav clicks --- */
+(function ripples(){
+  document.querySelectorAll('.nav-link').forEach(el => {
+    const computed = getComputedStyle(el);
+    if (computed.position === 'static') el.style.position = 'relative';
+    el.style.overflow = 'hidden';
+    el.addEventListener('click', (e) => {
+      const r = el.getBoundingClientRect();
+      const size = Math.max(r.width, r.height);
+      const ripple = document.createElement('span');
+      ripple.className = 'ripple';
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - r.left - size / 2) + 'px';
+      ripple.style.top  = (e.clientY - r.top  - size / 2) + 'px';
+      el.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 700);
+    });
+  });
+})();
+
+/* --- Tutorial item radial spotlight follow --- */
+(function tutorialSpotlight(){
+  document.querySelectorAll('.tutorial-item').forEach(item => {
+    item.addEventListener('mousemove', (e) => {
+      const r = item.getBoundingClientRect();
+      item.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+      item.style.setProperty('--my', (e.clientY - r.top)  + 'px');
+    });
+  });
+})();
+
+/* --- Animated stat counters --- */
+(function prepCounters(){
+  document.querySelectorAll('.tutorial-stat-num').forEach(el => {
+    const raw = el.textContent.trim();
+    const m = raw.match(/^(\d+(?:\.\d+)?)([a-zA-Z+%]*)$/);
+    if (m) {
+      el.dataset.target = m[1];
+      el.dataset.suffix = m[2] || '';
+      el.dataset.original = raw;
+    }
+  });
+})();
+function animateCounter(el) {
+  if (REDUCED_MOTION || !el.dataset.target) {
+    if (el.dataset.original) el.textContent = el.dataset.original;
+    el.classList.add('counted');
+    return;
+  }
+  const target = parseFloat(el.dataset.target);
+  const suffix = el.dataset.suffix || '';
+  const isInt = Number.isInteger(target);
+  const duration = 900;
+  const start = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const v = target * eased;
+    el.textContent = (isInt ? Math.round(v) : v.toFixed(1)) + suffix;
+    if (t < 1) requestAnimationFrame(step);
+    else { el.textContent = el.dataset.original; el.classList.add('counted'); }
+  }
+  requestAnimationFrame(step);
+}
+
+/* --- Pause heavy MST when tab hidden --- */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && raf) { cancelAnimationFrame(raf); raf = null; }
+  else if (!raf) { loop(); }
+});
 </script>
 </body>
 </html>
