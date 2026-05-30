@@ -6,14 +6,15 @@
 <meta name="theme-color" content="#fafaf7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0e0e10" media="(prefers-color-scheme: dark)">
 
-<title>Weishu Zhang — EECS @ Berkeley</title>
-<meta name="description" content="EECS at UC Berkeley. Building infrastructure for applied AI, clinical NLP, and distributed course platforms. Incoming SWE intern at ASML.">
+<title>Weishu Zhang — AI Infrastructure / LLM Systems</title>
+<meta name="description" content="UC Berkeley EECS. Building LLM inference systems, applied AI infrastructure, clinical NLP, and distributed course platforms. Creator of mini-vLLM.">
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
-<meta property="og:title" content="Weishu Zhang — EECS @ Berkeley">
-<meta property="og:description" content="Building infrastructure for applied AI, clinical NLP, and distributed course platforms.">
+<meta property="og:title" content="Weishu Zhang — AI Infrastructure / LLM Systems">
+<meta property="og:description" content="Building LLM inference systems, applied AI infrastructure, clinical NLP, and distributed course platforms.">
 <meta property="og:url" content="https://weishuz.com">
+<meta property="og:image" content="https://raw.githubusercontent.com/WeishuZ/mini-vllm/main/docs/assets/throughput.png">
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="preconnect" href="https://fonts.bunny.net">
@@ -592,6 +593,17 @@ p { color: var(--ink-2); font-size: var(--t-base); }
 .work-media video {
   width: 100%; height: 100%; object-fit: cover;
 }
+.work-media img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.work-media.plot-media {
+  height: 300px;
+  background: #0b0e14;
+}
+.work-media.plot-media img {
+  object-fit: contain;
+  padding: 0.5rem;
+}
 .work-media .no-preview {
   font-family: var(--font-mono);
   font-size: var(--t-xs);
@@ -922,13 +934,13 @@ p { color: var(--ink-2); font-size: var(--t-base); }
 
     <div class="home-currently">
       <strong>Currently</strong>
-      <span>Engineering backend for an AGI Health Coach @ BalanX-BIO · LLM optimization for clinical extraction @ UCSF · Incoming SWE intern @ ASML (Summer 2026).</span>
+      <span>Building mini-vLLM to learn inference internals · optimizing clinical extraction @ UCSF · engineering backend for an AGI Health Coach @ BalanX-BIO · Incoming SWE intern @ ASML (Summer 2026).</span>
     </div>
 
-    <a class="home-teaser" href="/cs170-final-review/">
-      <div class="teaser-label">★ Latest guide</div>
-      <div class="teaser-title">CS170 Final · Problem-Driven Review <span class="teaser-arrow">→</span></div>
-      <div class="teaser-meta">6 topics · 3 passes each · final May 15</div>
+    <a class="home-teaser" href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">
+      <div class="teaser-label">★ Latest project</div>
+      <div class="teaser-title">mini-vLLM · paged KV-cache + continuous batching <span class="teaser-arrow">→</span></div>
+      <div class="teaser-meta">7× more sequences · 1.53× throughput · 54× lower p99 TTFT</div>
     </a>
 
     <nav class="home-nav">
@@ -1023,10 +1035,29 @@ p { color: var(--ink-2); font-size: var(--t-base); }
   <section id="page-work" class="card work-card">
     <div class="work-header">
       <h2>Selected Work</h2>
-      <div class="work-sub">three projects · click title for live links</div>
+      <div class="work-sub">four projects · systems, AI infra, and shipped product work</div>
     </div>
 
     <div class="work-grid">
+
+      <div class="work-tile full">
+        <div class="work-media plot-media"><img src="https://raw.githubusercontent.com/WeishuZ/mini-vllm/main/docs/assets/throughput.png" alt="mini-vLLM continuous batching throughput benchmark"></div>
+        <div class="work-title">
+          mini-vLLM
+          <a class="ext" href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">source ↗</a>
+        </div>
+        <div class="work-desc">
+          From-scratch systems model of a modern LLM serving engine: paged KV-cache, continuous batching, preemption, prefix caching, and deterministic benchmarks that run on a laptop with no GPU. The control plane is real and unit-tested; compute is deliberately simulated so the memory and scheduling behavior can be isolated.
+        </div>
+        <div class="tags">
+          <span class="tag accent">AI Infra</span>
+          <span class="tag">PagedAttention</span>
+          <span class="tag">KV Cache</span>
+          <span class="tag">Scheduler</span>
+          <span class="tag">Prefix Caching</span>
+          <span class="tag">Python</span>
+        </div>
+      </div>
 
       <div class="work-tile">
         <div class="work-media"><video src="GradeView.mp4" autoplay loop muted playsinline></video></div>
@@ -1160,7 +1191,7 @@ p { color: var(--ink-2); font-size: var(--t-base); }
 
       <div class="about-section">
         <div class="about-section-title">Who</div>
-        <p>EECS at UC Berkeley, graduating May 2027. I build systems at the intersection of infrastructure engineering and applied AI — clinical NLP pipelines, distributed course management platforms, and backend systems for health tech. Currently researching LLM optimization for clinical data extraction at UCSF and engineering backend infrastructure for an AGI health platform at BalanX-BIO. Incoming SWE intern at ASML (Summer 2026). Biased toward things that ship, scale, and matter.</p>
+        <p>EECS at UC Berkeley, graduating May 2027. I build systems at the intersection of infrastructure engineering and applied AI — LLM inference control planes, clinical NLP pipelines, distributed course management platforms, and backend systems for health tech. Recently built mini-vLLM to make paged KV-cache, continuous batching, and prefix caching tangible on a laptop. Currently researching LLM optimization for clinical data extraction at UCSF and engineering backend infrastructure for an AGI health platform at BalanX-BIO. Incoming SWE intern at ASML (Summer 2026). Biased toward things that ship, scale, and matter.</p>
       </div>
 
       <div class="about-section">
@@ -1304,10 +1335,10 @@ overlay.addEventListener('click', (e) => {
    ============================================================ */
 (function tagline(){
   const phrases = [
-    "building infra for applied AI",
-    "shipping systems at the seam of research and prod",
+    "building AI infrastructure and LLM systems",
+    "shipping research systems into production",
     "thinking in distributed graphs",
-    "exploring",
+    "making inference internals observable",
   ];
   const el = document.getElementById('tagline-text');
   let pIdx = 0, cIdx = 0, typing = true;
