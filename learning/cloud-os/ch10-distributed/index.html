@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 10 章 · 当机器们意见不合 — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="10">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part IV · 分布式系统 · 第 10 章</div>
+    <div class="ch-number">10</div>
+    <h1 class="ch-title">当机器们意见不合</h1>
+    <p class="ch-standfirst">单机 bug 已经够烦；多机系统还要面对消息丢失、延迟未知、节点宕机和时钟不可信。分布式系统不是高级主题，而是云的默认现实。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> 硬核主线</span><span class="dot"></span>
+      <span><b>用时</b> 约 65 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 副本写入流程 · CAP/Quorum 取舍</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">单机 bug 已经够烦；多机系统还要面对消息丢失、延迟未知、节点宕机和时钟不可信。分布式系统不是高级主题，而是云的默认现实。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>部分失败</b><span>系统的一部分坏了，其他部分还在运行，这是分布式最难的故障形态。</span></div>
+<div class="concept-card"><b>CAP</b><span>网络分区下，一致性和可用性无法同时完全保证。</span></div>
+<div class="concept-card"><b>共识</b><span>让多个节点对同一个值和顺序达成一致的协议族。</span></div>
+<div class="concept-card"><b>时钟</b><span>机器本地时间不等于全局真相，顺序需要协议维护。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">当机器们意见不合 · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 10.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="10.1 分布式的难点不是机器多"><span class="sec-no">10.1</span>分布式的难点不是机器多</h2>
+    <p>如果所有节点永远可靠、网络永远即时，那分布式只是并行程序。真正困难在于你不知道远端是慢了、断了，还是死了。超时不是事实，只是怀疑。</p>
+
+    <h2 id="s2" data-nav="10.2 部分失败改变一切"><span class="sec-no">10.2</span>部分失败改变一切</h2>
+    <p>单机失败通常是全停；分布式失败可能是一半系统继续做决定，另一半看不见它。最危险的不是失败，而是不同节点对失败的认知不同。</p>
+
+    <h2 id="s3" data-nav="10.3 CAP 是警告，不是架构图"><span class="sec-no">10.3</span>CAP 是警告，不是架构图</h2>
+    <p>CAP 说网络分区发生时，系统必须在继续响应和保持强一致之间做选择。现实设计更细：延迟、读写比例、业务可接受的不一致窗口，都要进来。</p>
+
+    <h2 id="s4" data-nav="10.4 共识给顺序一个来源"><span class="sec-no">10.4</span>共识给顺序一个来源</h2>
+    <p>Raft/Paxos 这类协议通过 leader、term、log、majority 让多个节点对操作顺序达成一致。它们不让故障消失，只让故障下的决定有规则。</p>
+
+    <h2 id="s5" data-nav="10.5 云服务的语义都是分布式选择"><span class="sec-no">10.5</span>云服务的语义都是分布式选择</h2>
+    <p>数据库的 strong/session/eventual consistency，队列的 at-least-once，存储的 read-after-write，都是对失败模型和业务需求的具体回答。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">当机器们意见不合 · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 10.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>共识日志</b></td><td>etcd、Kubernetes API server</td><td>K8s 控制面靠强一致元数据推进集群状态。</td></tr>
+<tr><td><b>最终一致</b></td><td>对象存储、缓存、搜索索引</td><td>读旧数据可能可接受，但必须被产品语义承认。</td></tr>
+<tr><td><b>超时</b></td><td>重试、幂等、熔断</td><td>你不知道远端是否执行过，所以 API 设计必须支持重复请求。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>分布式最难的是部分失败和不同节点认知不一致。</li>
+<li>CAP 讨论的是网络分区下的一致性/可用性取舍。</li>
+<li>共识协议给多副本系统提供操作顺序来源。</li>
+<li>云服务的每种一致性语义都是业务和失败模型的折中。</li></ul>
+      <p class="muted" style="margin-bottom:0">有了分布式理论，我们看一个把它工程化到日常运维里的系统：Kubernetes。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch09-storage-scale/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">09 · 规模化存储</span>
+      </a>
+      <a class="next" href="../ch11-kubernetes/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">11 · 编排：Kubernetes</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "partition": {
+    "t": "网络分区 · Network Partition",
+    "d": "节点之间无法互相通信，但各自可能仍在运行。",
+    "l": "#"
+  },
+  "cap": {
+    "t": "CAP",
+    "d": "分区发生时，一致性与可用性不可兼得的限制。",
+    "l": "#"
+  },
+  "consensus": {
+    "t": "共识 · Consensus",
+    "d": "多个节点对值或日志顺序达成一致的协议。",
+    "l": "#"
+  },
+  "quorum": {
+    "t": "多数派 · Quorum",
+    "d": "足够多节点确认，使不同决策集合必然相交。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "强一致写入通常要等多数副本确认。少数副本慢或挂了，系统仍能前进；多数不可达时，正确系统宁可停。",
+    "nodes": [
+      {
+        "icon": "👑",
+        "label": "Leader",
+        "sub": "接收写入"
+      },
+      {
+        "icon": "📝",
+        "label": "复制日志",
+        "sub": "发给 followers"
+      },
+      {
+        "icon": "✅",
+        "label": "多数确认",
+        "sub": "quorum"
+      },
+      {
+        "icon": "📌",
+        "label": "提交",
+        "sub": "commit index"
+      },
+      {
+        "icon": "📖",
+        "label": "读到新值",
+        "sub": "线性化语义"
+      }
+    ],
+    "steps": [
+      {
+        "title": "Leader 收到写",
+        "body": "客户端把写请求发给 leader。",
+        "note": "强一致系统需要一个顺序来源。",
+        "node": 0
+      },
+      {
+        "title": "复制到副本",
+        "body": "leader 把日志项发送给 followers。",
+        "note": "网络可能慢、丢、乱序。",
+        "node": 1
+      },
+      {
+        "title": "等待多数",
+        "body": "只要多数副本确认，少数慢节点不阻塞提交。",
+        "note": "多数交集保证后续 leader 能看到已提交日志。",
+        "node": 2
+      },
+      {
+        "title": "提交并应用",
+        "body": "leader 推进 commit index，把操作应用到状态机。",
+        "note": "顺序从日志转化为状态。",
+        "node": 3
+      },
+      {
+        "title": "客户端读到结果",
+        "body": "线性化读要确保自己看到的 leader 足够新。",
+        "note": "读也可能需要协议，不只是查本地内存。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "强一致",
+        "note": "读写都围绕最新提交顺序，语义清楚，分区时可能不可用。",
+        "metrics": [
+          {
+            "label": "正确性",
+            "value": 94,
+            "warn": false
+          },
+          {
+            "label": "可用性",
+            "value": 58,
+            "warn": false
+          },
+          {
+            "label": "延迟",
+            "value": 72,
+            "warn": true
+          }
+        ],
+        "takeaway": "钱、库存、权限这类业务常需要这条路。"
+      },
+      {
+        "name": "最终一致",
+        "note": "允许短暂读到旧值，换取更高可用和更低延迟。",
+        "metrics": [
+          {
+            "label": "正确性约束",
+            "value": 58,
+            "warn": false
+          },
+          {
+            "label": "可用性",
+            "value": 90,
+            "warn": false
+          },
+          {
+            "label": "延迟",
+            "value": 35,
+            "warn": false
+          }
+        ],
+        "takeaway": "动态、点赞、缓存、推荐常能接受这类语义。"
+      },
+      {
+        "name": "会话一致",
+        "note": "同一用户会话内读到自己的写，跨用户可能稍后收敛。",
+        "metrics": [
+          {
+            "label": "用户直觉",
+            "value": 82,
+            "warn": false
+          },
+          {
+            "label": "可用性",
+            "value": 78,
+            "warn": false
+          },
+          {
+            "label": "实现复杂度",
+            "value": 65,
+            "warn": true
+          }
+        ],
+        "takeaway": "很多产品体验需要的不是全局强一致，而是别让用户怀疑自己。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "EXPLAIN",
+      "t": "为什么 timeout 不是 failure detector 的真相",
+      "d": "慢和死在观察上可能相同。"
+    },
+    {
+      "k": "DRAW",
+      "t": "画三节点 quorum",
+      "d": "说明多数交集为什么重要。"
+    },
+    {
+      "k": "CLASSIFY",
+      "t": "给业务选择一致性",
+      "d": "购物车、点赞、银行转账分别怎么选。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

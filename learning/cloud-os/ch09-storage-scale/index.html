@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 9 章 · 规模化存储 — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="9">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part III · 汇成一朵云 · 第 9 章</div>
+    <div class="ch-number">09</div>
+    <h1 class="ch-title">规模化存储</h1>
+    <p class="ch-standfirst">云存储的目标不是把一块硬盘变大，而是把很多会坏的硬盘组织成一个看起来无限、可靠、按需付费的接口。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> 云核心</span><span class="dot"></span>
+      <span><b>用时</b> 约 55 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 写入复制流程 · 副本/一致性取舍</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">云存储的目标不是把一块硬盘变大，而是把很多会坏的硬盘组织成一个看起来无限、可靠、按需付费的接口。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>块存储</b><span>像远程硬盘，给 VM 挂载，适合文件系统和数据库。</span></div>
+<div class="concept-card"><b>对象存储</b><span>通过 key 读写对象，天然适合海量、低成本、跨地域数据。</span></div>
+<div class="concept-card"><b>复制</b><span>把数据放多份，用空间换可靠性和可用性。</span></div>
+<div class="concept-card"><b>Quorum</b><span>读写等待多数副本确认，在一致性和可用性之间折中。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">规模化存储 · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 9.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="9.1 三种存储接口对应三种心智模型"><span class="sec-no">9.1</span>三种存储接口对应三种心智模型</h2>
+    <p>块存储像硬盘，文件存储像共享目录，对象存储像巨大的 key-value 桶。不要用“哪个更高级”理解它们；要问访问模式、语义和成本。</p>
+
+    <h2 id="s2" data-nav="9.2 可靠性来自复制，不来自祈祷"><span class="sec-no">9.2</span>可靠性来自复制，不来自祈祷</h2>
+    <p>单盘会坏，单机房会断电。云存储通过多副本、纠删码、跨可用区复制把硬件故障转化成后台修复事件。</p>
+
+    <h2 id="s3" data-nav="9.3 一致性是接口承诺"><span class="sec-no">9.3</span>一致性是接口承诺</h2>
+    <p>写完立刻读能否读到？覆盖写怎么排序？列表结果是否马上更新？这些都不是实现细节，而是应用能否正确运行的契约。</p>
+
+    <h2 id="s4" data-nav="9.4 对象存储为什么统治云"><span class="sec-no">9.4</span>对象存储为什么统治云</h2>
+    <p>对象存储放弃 POSIX 文件系统的一些细粒度语义，换来近乎无限扩展、低成本、多区域复制和简单 HTTP 接口。训练数据、日志、备份、静态资源都爱它。</p>
+
+    <h2 id="s5" data-nav="9.5 数据库和云存储的边界"><span class="sec-no">9.5</span>数据库和云存储的边界</h2>
+    <p>数据库需要事务、索引、查询和强语义；对象存储提供持久字节和元数据。现代系统常把冷数据放对象存储，把热路径交给数据库或缓存。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">规模化存储 · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 9.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>块存储</b></td><td>云盘、数据库持久卷</td><td>低延迟随机读写，常挂给 VM 或 StatefulSet。</td></tr>
+<tr><td><b>对象存储</b></td><td>训练数据湖、日志、备份</td><td>牺牲部分文件语义换海量扩展和低成本。</td></tr>
+<tr><td><b>复制/Quorum</b></td><td>数据库副本、消息队列</td><td>一致性协议会在第 10 章正式登场。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>块、文件、对象是不同接口语义，不是简单层级。</li>
+<li>云存储靠复制和故障域隔离对抗硬件失败。</li>
+<li>一致性是应用可依赖的接口承诺。</li>
+<li>对象存储通过简化语义获得巨大规模和低成本。</li></ul>
+      <p class="muted" style="margin-bottom:0">多副本带来新问题：如果副本意见不一致，谁说了算？下一章进入分布式系统的残酷核心。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch08-networking/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">08 · 网络即计算机</span>
+      </a>
+      <a class="next" href="../ch10-distributed/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">10 · 当机器们意见不合</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "object": {
+    "t": "对象存储 · Object Storage",
+    "d": "通过 key 读写不可变或版本化对象的存储服务。",
+    "l": "#"
+  },
+  "quorum": {
+    "t": "Quorum",
+    "d": "读写等待足够多副本确认的策略。",
+    "l": "#"
+  },
+  "erasure": {
+    "t": "纠删码 · Erasure Coding",
+    "d": "用编码块和校验块降低冗余成本的技术。",
+    "l": "#"
+  },
+  "consistency": {
+    "t": "一致性 · Consistency",
+    "d": "系统对读写可见顺序做出的承诺。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "一次写入对象存储，可能要经过路由、分片、复制、校验和元数据提交。用户看到的是一个 PUT，系统内部是一组协议。",
+    "nodes": [
+      {
+        "icon": "⬆",
+        "label": "PUT 对象",
+        "sub": "客户端"
+      },
+      {
+        "icon": "🧩",
+        "label": "分片/校验",
+        "sub": "数据平面"
+      },
+      {
+        "icon": "📚",
+        "label": "写多副本",
+        "sub": "AZ/机架"
+      },
+      {
+        "icon": "🗂",
+        "label": "提交元数据",
+        "sub": "命名空间"
+      },
+      {
+        "icon": "✅",
+        "label": "返回成功",
+        "sub": "语义承诺"
+      }
+    ],
+    "steps": [
+      {
+        "title": "客户端上传",
+        "body": "用户发起 PUT，携带对象 key、数据和元数据。",
+        "note": "对象接口把复杂存储隐藏在 HTTP 后面。",
+        "node": 0
+      },
+      {
+        "title": "切分与校验",
+        "body": "系统计算 checksum，可能切成 chunk 或使用纠删码。",
+        "note": "数据完整性先于性能。",
+        "node": 1
+      },
+      {
+        "title": "写入多个位置",
+        "body": "副本被放到不同磁盘、机架或可用区。",
+        "note": "可靠性来自故障域独立。",
+        "node": 2
+      },
+      {
+        "title": "提交命名空间",
+        "body": "元数据记录 key 指向哪些数据块及版本。",
+        "note": "很多一致性语义卡在元数据更新上。",
+        "node": 3
+      },
+      {
+        "title": "返回成功",
+        "body": "系统在满足写入策略后返回 200。",
+        "note": "这个时刻就是对应用的承诺边界。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "单副本",
+        "note": "便宜且快，但任何磁盘故障都可能丢数据。",
+        "metrics": [
+          {
+            "label": "成本",
+            "value": 22,
+            "warn": false
+          },
+          {
+            "label": "可靠性",
+            "value": 18,
+            "warn": true
+          },
+          {
+            "label": "写延迟",
+            "value": 24,
+            "warn": false
+          }
+        ],
+        "takeaway": "适合临时缓存，不适合真实数据。"
+      },
+      {
+        "name": "三副本",
+        "note": "常见默认点。空间成本高，但简单、可靠、修复直接。",
+        "metrics": [
+          {
+            "label": "成本",
+            "value": 72,
+            "warn": true
+          },
+          {
+            "label": "可靠性",
+            "value": 86,
+            "warn": false
+          },
+          {
+            "label": "写延迟",
+            "value": 48,
+            "warn": false
+          }
+        ],
+        "takeaway": "用空间买确定性，是工程里最常见的交易。"
+      },
+      {
+        "name": "纠删码",
+        "note": "用更少额外空间达到高可靠，适合冷数据，但读写和修复更复杂。",
+        "metrics": [
+          {
+            "label": "成本",
+            "value": 45,
+            "warn": false
+          },
+          {
+            "label": "可靠性",
+            "value": 90,
+            "warn": false
+          },
+          {
+            "label": "计算复杂度",
+            "value": 78,
+            "warn": true
+          }
+        ],
+        "takeaway": "对象存储冷层常用这条路。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "CLASSIFY",
+      "t": "给三类数据选存储",
+      "d": "日志、数据库、静态图片分别适合什么。"
+    },
+    {
+      "k": "REASON",
+      "t": "解释为什么三副本仍可能不可用",
+      "d": "区分持久性和可用性。"
+    },
+    {
+      "k": "DESIGN",
+      "t": "画一个对象写入路径",
+      "d": "包括校验、副本、元数据。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

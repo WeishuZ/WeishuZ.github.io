@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OS ↔ vLLM 速查 — Infra Learning Path</title>
+<meta name="description" content="vLLM 每个模块对应哪个 OS 概念、看哪本书、读哪个源码文件。一张大表 + 决策树，常驻参考。" />
+<link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="../index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+  <div class="nav-group"><div class="nav-label">起步</div><nav><ul>
+    <li><a href="../index.html"><span class="idx">/</span>主页 · 概览</a></li>
+    <li><a href="00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+    <li><a href="01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">6 个月主线</div><nav><ul>
+    <li><a href="02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+    <li><a href="03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+    <li><a href="04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+    <li><a href="05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+    <li><a href="06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+    <li><a href="09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">参考</div><nav><ul>
+    <li><a href="07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+    <li><a href="08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+  </ul></nav></div>
+  <div class="foot">源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a></div>
+</aside>
+
+<main class="content">
+
+<div class="crumbs">
+  <a href="../index.html">home</a><span class="sep">/</span>tutorial<span class="sep">/</span>OS 速查
+</div>
+
+<h1 class="page-title">OS ↔ vLLM 速查</h1>
+<p class="page-sub">遇到 vLLM 某模块卡住？反查这张表 → 找对应 OS 概念 → 用 OSTEP / 6.S081 补 → 回来继续读。</p>
+
+<p class="lede">
+  这页是常驻参考。<strong>不需要从头到尾读</strong>——
+  当你在 vLLM 源码里看到某个陌生模块时，回到这页查它在 OS 里对应什么，然后去补那一块。
+  把它收藏，6 个月里你会回来很多次。
+</p>
+
+<h2><span class="num">01</span>核心对照大表</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>vLLM 模块 / 概念</th>
+      <th>OS 对应</th>
+      <th>学习材料</th>
+      <th>vLLM 源码</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>PagedAttention KV cache</strong></td>
+      <td>虚拟内存 + 分页</td>
+      <td>OSTEP 13 / 15 / 18</td>
+      <td><code>vllm/v1/core/kv_cache_manager.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>Block table</strong></td>
+      <td>Page table</td>
+      <td>OSTEP 18 / 19</td>
+      <td><code>vllm/v1/core/block_pool.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>Block allocator (free list)</strong></td>
+      <td>Physical frame allocator / buddy</td>
+      <td>OSTEP 17</td>
+      <td><code>FreeKVCacheBlockQueue</code> in <code>block_pool.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>Prefix caching</strong></td>
+      <td>Page cache + COW</td>
+      <td>OSTEP 39 (file system intro)</td>
+      <td><code>cached_block_hash_to_block</code> in <code>block_pool.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>Prefix cache eviction</strong></td>
+      <td>Page replacement (LRU / Clock)</td>
+      <td>OSTEP 22</td>
+      <td><code>BlockPool.get_new_blocks()</code> 从 free_queue 尾</td>
+    </tr>
+    <tr>
+      <td><strong>Chain hash (Merkle-like)</strong></td>
+      <td>Hash chain · content-addressed</td>
+      <td>OSTEP 40-43 (FS basics)</td>
+      <td><code>hash_block_tokens()</code> in <code>kv_cache_utils.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>CPU offload / swap-out</strong></td>
+      <td>Swap to disk</td>
+      <td>OSTEP 21</td>
+      <td><code>vllm/v1/worker/cache_engine.py</code> · <code>swap_in / swap_out</code></td>
+    </tr>
+    <tr>
+      <td><strong>Continuous batching</strong></td>
+      <td>Process scheduler · time-sharing</td>
+      <td>OSTEP 7 / 8 / 9</td>
+      <td><code>vllm/v1/core/sched/scheduler.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>Preemption (recompute)</strong></td>
+      <td>Process termination + resubmit</td>
+      <td>OSTEP 7</td>
+      <td><code>Scheduler._preempt()</code> · 把 request 放回 waiting</td>
+    </tr>
+    <tr>
+      <td><strong>Preemption (swap-out)</strong></td>
+      <td>Process context switch + swap</td>
+      <td>OSTEP 21</td>
+      <td><code>cache_engine.swap_blocks()</code></td>
+    </tr>
+    <tr>
+      <td><strong>Token budget</strong></td>
+      <td>Quantum / time slice</td>
+      <td>OSTEP 8 (MLFQ)</td>
+      <td><code>SchedulerConfig.max_num_batched_tokens</code></td>
+    </tr>
+    <tr>
+      <td><strong>Chunked prefill</strong></td>
+      <td>Coarse-grained CPU sharing</td>
+      <td>(无直接 OS 对应)</td>
+      <td><code>scheduler.py</code> · <code>num_computed_tokens</code></td>
+    </tr>
+    <tr>
+      <td><strong>Engine main loop</strong></td>
+      <td>Kernel main loop / event loop</td>
+      <td>OSTEP 6</td>
+      <td><code>EngineCore.run_busy_loop()</code> in <code>core.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>HTTP server async</strong></td>
+      <td>I/O multiplexing (epoll / async)</td>
+      <td>OSTEP 39 · UNIX I/O models</td>
+      <td><code>vllm/entrypoints/openai/api_server.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>SSE streaming</strong></td>
+      <td>Pipe (chunked stream)</td>
+      <td>—</td>
+      <td><code>chat_completion_stream_generator()</code> in <code>serving_chat.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>Multi-process workers</strong></td>
+      <td>Process · fork / exec</td>
+      <td>OSTEP 4 / 5</td>
+      <td><code>vllm/v1/executor/multiproc_executor.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>ZMQ engine ↔ API IPC</strong></td>
+      <td>IPC (pipe / socket / message queue)</td>
+      <td>OSTEP 50</td>
+      <td><code>AsyncLLM</code> in <code>v1/engine/async_llm.py</code></td>
+    </tr>
+    <tr>
+      <td><strong>Scheduler 主锁</strong></td>
+      <td>Lock / monitor pattern</td>
+      <td>OSTEP 28 / 30</td>
+      <td><code>scheduler.py</code> · 主要靠 Python GIL + 单线程模型</td>
+    </tr>
+    <tr>
+      <td><strong>Multi-GPU (TP / PP)</strong></td>
+      <td>分布式系统 · RPC</td>
+      <td>OSTEP 48 (RPC) + Megatron 论文</td>
+      <td><code>vllm/distributed/</code> · NCCL allreduce</td>
+    </tr>
+    <tr>
+      <td><strong>Multi-LoRA</strong></td>
+      <td>多租户隔离 · 进程间内存共享</td>
+      <td>OSTEP 4 + S-LoRA 论文</td>
+      <td><code>vllm/lora/</code></td>
+    </tr>
+    <tr>
+      <td><strong>Weight loading (mmap)</strong></td>
+      <td>mmap · demand paging</td>
+      <td>OSTEP 22 · 39</td>
+      <td><code>vllm/model_executor/model_loader/</code></td>
+    </tr>
+    <tr>
+      <td><strong>CUDA graph capture</strong></td>
+      <td>(无直接 OS 对应) · 接近 batch syscall</td>
+      <td>CUDA docs · stream graph</td>
+      <td><code>vllm/v1/worker/gpu_model_runner.py</code> · <code>capture_model()</code></td>
+    </tr>
+    <tr>
+      <td><strong>FlashAttention IO-aware</strong></td>
+      <td>缓存友好的算法设计 / 数据局部性</td>
+      <td>CMU 15-418 lec 2 · OSTEP 40</td>
+      <td>外部依赖 <code>flash-attn</code></td>
+    </tr>
+    <tr>
+      <td><strong>NCCL allreduce</strong></td>
+      <td>Barrier + tree reduction</td>
+      <td>OSTEP 31 (semaphore)</td>
+      <td>外部依赖 NCCL，vLLM 调用</td>
+    </tr>
+    <tr>
+      <td><strong>Pinned memory</strong></td>
+      <td>Locked / non-pageable memory</td>
+      <td>OSTEP 17</td>
+      <td>实际 PyTorch <code>tensor.pin_memory()</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2><span class="num">02</span>OS 章节优先级</h2>
+
+<p>OSTEP 全书 700+ 页，但你<strong>只需要</strong>下面这些：</p>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>🔴 必读 (~150 页)</h3>
+    <ul>
+      <li><strong>Ch 4-5</strong> · 进程与 API（fork/exec/wait）</li>
+      <li><strong>Ch 7-10</strong> · 调度（FCFS/RR/MLFQ/CFS）</li>
+      <li><strong>Ch 13-22</strong> · 虚拟内存（选读 13/15/18/21/22）</li>
+      <li><strong>Ch 28-30</strong> · 同步原语（lock/CV/monitor）</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>🟡 用到再翻</h3>
+    <ul>
+      <li><strong>Ch 39-40</strong> · 文件 I/O 与 page cache 类比</li>
+      <li><strong>Ch 48-50</strong> · RPC / 一致性（多卡时）</li>
+      <li><strong>Ch 6</strong> · 系统调用机制（async 心智模型）</li>
+      <li><strong>Ch 26-27</strong> · 并发引论</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>🟢 略过</h3>
+    <ul>
+      <li>设备驱动、bootloader</li>
+      <li>FAT / ext2 内部结构</li>
+      <li>安全 / 权限子系统</li>
+      <li>C 内存安全 lab</li>
+      <li>shell 实现 lab</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>📺 视频替代</h3>
+    <p>看不进书时：MIT 6.S081 视频选这几节：</p>
+    <ul>
+      <li>Lec 4 · Virtual memory</li>
+      <li>Lec 9-10 · Scheduling</li>
+      <li>Lec 12 · Locking</li>
+      <li>Lec 15 · COW fork</li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="num">03</span>"我看到 X 了，该补什么"决策树</h2>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <defs>
+      <marker id="az" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <rect x="280" y="20" width="200" height="40" rx="4" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="380" y="44" text-anchor="middle" font-weight="700">读 vLLM 代码卡住</text>
+
+      <rect x="280" y="90" width="200" height="40" rx="4" fill="#f7f5ee" stroke="#a8a29e"/>
+      <text x="380" y="114" text-anchor="middle">是关于"内存 / 块"？</text>
+
+      <rect x="40" y="170" width="200" height="50" rx="4" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="140" y="190" text-anchor="middle" font-weight="600">→ OSTEP 13/15/18/21/22</text>
+      <text x="140" y="206" text-anchor="middle" font-size="11" fill="#166534">+ PagedAttention 论文</text>
+
+      <rect x="280" y="170" width="200" height="40" rx="4" fill="#f7f5ee" stroke="#a8a29e"/>
+      <text x="380" y="194" text-anchor="middle">是关于"调度 / batch"？</text>
+
+      <rect x="520" y="170" width="200" height="50" rx="4" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="620" y="190" text-anchor="middle" font-weight="600">→ OSTEP 7-10</text>
+      <text x="620" y="206" text-anchor="middle" font-size="11" fill="#166534">+ Orca / Sarathi 论文</text>
+
+      <rect x="280" y="240" width="200" height="40" rx="4" fill="#f7f5ee" stroke="#a8a29e"/>
+      <text x="380" y="264" text-anchor="middle">是关于"并发 / 锁 / 进程"？</text>
+
+      <rect x="40" y="320" width="200" height="50" rx="4" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="140" y="340" text-anchor="middle" font-weight="600">→ OSTEP 28-30 + 4-5</text>
+      <text x="140" y="356" text-anchor="middle" font-size="11" fill="#166534">+ Python asyncio docs</text>
+
+      <rect x="280" y="320" width="200" height="40" rx="4" fill="#f7f5ee" stroke="#a8a29e"/>
+      <text x="380" y="344" text-anchor="middle">是关于"GPU / CUDA / kernel"？</text>
+
+      <rect x="520" y="320" width="200" height="50" rx="4" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="620" y="340" text-anchor="middle" font-weight="600">→ CMU 15-418 lec 1-2</text>
+      <text x="620" y="356" text-anchor="middle" font-size="11" fill="#166534">+ FlashAttention + Triton</text>
+
+      <rect x="280" y="390" width="200" height="50" rx="4" fill="#fef2f2" stroke="#991b1b"/>
+      <text x="380" y="410" text-anchor="middle" font-weight="600">都不对？</text>
+      <text x="380" y="426" text-anchor="middle" font-size="11" fill="#991b1b">git grep 关键词 + Slack 问</text>
+
+      <g stroke="#78716c" stroke-width="1.5" fill="none">
+        <path d="M 380 60 L 380 90" marker-end="url(#az)"/>
+        <path d="M 280 110 L 240 170" marker-end="url(#az)"/>
+        <path d="M 480 110 L 480 170" marker-end="url(#az)"/>
+        <path d="M 480 170 L 520 170" marker-end="url(#az)"/>
+        <path d="M 380 130 L 380 170" marker-end="url(#az)"/>
+        <path d="M 280 190 L 240 220" marker-end="url(#az)"/>
+        <path d="M 380 210 L 380 240" marker-end="url(#az)"/>
+        <path d="M 280 260 L 240 320" marker-end="url(#az)"/>
+        <path d="M 480 260 L 520 320" marker-end="url(#az)"/>
+        <path d="M 380 280 L 380 320" marker-end="url(#az)"/>
+        <path d="M 380 360 L 380 390" marker-end="url(#az)"/>
+      </g>
+
+    </g>
+  </svg>
+</div>
+
+<h2><span class="num">04</span>四对"完美同构"的对照</h2>
+
+<p>下面 4 组在 OS 和 vLLM 里几乎是 1:1 重写。学透这 4 组，60% 的 vLLM 代码你能<strong>用 OS 语言重述</strong>。</p>
+
+<h3>4.1 虚拟内存 ↔ PagedAttention KV cache</h3>
+
+<table>
+  <thead><tr><th>问题</th><th>OS 解</th><th>vLLM 解</th></tr></thead>
+  <tbody>
+    <tr><td>程序要的内存大小不确定</td><td>虚拟地址空间随用随分配（demand paging）</td><td>KV blocks 随生成 token 翻页时分配</td></tr>
+    <tr><td>避免连续段碎片</td><td>固定大小页（4KB）</td><td>固定大小 block（16 token）</td></tr>
+    <tr><td>逻辑连续 vs 物理分散</td><td>页表（page table）</td><td>block table（每序列一份）</td></tr>
+    <tr><td>多进程共享代码段</td><td>共享映射（mmap MAP_SHARED）+ COW</td><td>prefix caching（block 引用计数共享）</td></tr>
+    <tr><td>物理内存压力</td><td>swap to disk</td><td>swap to host RAM / 或 preempt + recompute</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 进程调度 ↔ Continuous Batching</h3>
+
+<table>
+  <thead><tr><th>问题</th><th>OS 解 (CFS)</th><th>vLLM 解</th></tr></thead>
+  <tbody>
+    <tr><td>多任务公平共享 CPU/GPU</td><td>time slice，每次 ~10ms</td><td>token step，每次 ~20-50ms</td></tr>
+    <tr><td>新任务进入</td><td>插入红黑树，等下次 schedule</td><td>插入 waiting queue，下个 step 招进</td></tr>
+    <tr><td>任务完成</td><td>移出 runnable</td><td>移出 running，发 finish event</td></tr>
+    <tr><td>资源压力</td><td>nice / cgroup 限制</td><td>token budget + KV budget 双约束</td></tr>
+    <tr><td>实时性</td><td>RT scheduling class</td><td>(暂无强保证，priority hint)</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 Page Cache ↔ Prefix Cache</h3>
+
+<table>
+  <thead><tr><th>问题</th><th>OS Page Cache</th><th>vLLM Prefix Cache</th></tr></thead>
+  <tbody>
+    <tr><td>同一资源被反复读</td><td>(file, offset) → 内存中的页</td><td>(token chain) → 显存中的 block</td></tr>
+    <tr><td>查找命中</td><td>radix tree of inodes + offset map</td><td>chain hash → cached_block dict</td></tr>
+    <tr><td>命中粒度</td><td>4KB 页</td><td>16-token block</td></tr>
+    <tr><td>失效</td><td>file 写 / unlink</td><td>显存压力下被 evict</td></tr>
+    <tr><td>替换策略</td><td>active/inactive LRU</td><td>FreeKVCacheBlockQueue (LRU 双链表)</td></tr>
+  </tbody>
+</table>
+
+<h3>4.4 IPC / RPC ↔ ZMQ engine link</h3>
+
+<table>
+  <thead><tr><th>问题</th><th>OS / 分布式解</th><th>vLLM v1 解</th></tr></thead>
+  <tbody>
+    <tr><td>跨进程通信</td><td>pipe / socket / message queue</td><td>ZMQ socket (PUSH/PULL or DEALER/ROUTER)</td></tr>
+    <tr><td>消息序列化</td><td>protobuf / msgpack / pickle</td><td>msgpack (or pickle)</td></tr>
+    <tr><td>backpressure</td><td>queue size limit + flow control</td><td>ZMQ HWM + bounded queue</td></tr>
+    <tr><td>fault tolerance</td><td>heartbeat + reconnect</td><td>(单机进程对，崩了直接退出)</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">05</span>vLLM 没有 OS 直接对应的地方</h2>
+
+<p>不是所有 vLLM 概念都能在 OS 找到对应。这几条是 GPU/LLM 特有的，要单独补：</p>
+
+<table>
+  <thead><tr><th>vLLM 概念</th><th>性质</th><th>怎么补</th></tr></thead>
+  <tbody>
+    <tr><td><strong>CUDA Graph</strong></td><td>GPU 特有的"批量 syscall"机制</td><td>NVIDIA CUDA Programming Guide ch 4-5 + vLLM <code>capture_model()</code> 代码</td></tr>
+    <tr><td><strong>SM / Warp / Block 层级</strong></td><td>GPU 执行模型，跟 CPU 完全不同</td><td>CMU 15-418 lec 1-2 + PMPP 书 ch 4</td></tr>
+    <tr><td><strong>HBM 带宽 vs L2 vs SRAM</strong></td><td>GPU 内存层级，对 kernel 设计是核心</td><td>FlashAttention paper §2 + CMU 15-418</td></tr>
+    <tr><td><strong>FP16 / BF16 / FP8 数值</strong></td><td>训练/推理 dtype 选择</td><td>HF transformers docs + 任何 ML 训练 blog</td></tr>
+    <tr><td><strong>Quantization (AWQ / GPTQ / FP8)</strong></td><td>weight/activation 压缩</td><td>AWQ paper + vLLM quantization docs</td></tr>
+    <tr><td><strong>Speculative decoding</strong></td><td>draft model + verify 加速</td><td>Medusa / EAGLE 论文</td></tr>
+    <tr><td><strong>NCCL collective</strong></td><td>GPU 间通信原语</td><td>NCCL docs + Megatron paper</td></tr>
+    <tr><td><strong>Attention sink</strong></td><td>长 context 的偏置项</td><td>StreamingLLM 论文</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">06</span>常用补充材料 (优先级)</h2>
+
+<h3>🔴 必装备</h3>
+<ul>
+  <li><strong>OSTEP</strong> (Operating Systems: Three Easy Pieces) · <a href="https://pages.cs.wisc.edu/~remzi/OSTEP/" target="_blank">免费在线</a> — 计算机操作系统首选教材，写得轻松易读。</li>
+  <li><strong>vLLM 官方架构 blog</strong> · <a href="https://blog.vllm.ai/" target="_blank">blog.vllm.ai</a> — 看最新的 v1 架构、性能、新特性文章。</li>
+  <li><strong>PagedAttention 论文</strong> · <a href="https://arxiv.org/abs/2309.06180" target="_blank">SOSP 2023</a></li>
+</ul>
+
+<h3>🟡 当需要补</h3>
+<ul>
+  <li><strong>MIT 6.S081</strong> (视频 + lab) · <a href="https://pdos.csail.mit.edu/6.S081/" target="_blank">pdos.csail.mit.edu/6.S081/</a> — OS 视频替代，xv6 lab 实操。</li>
+  <li><strong>CMU 15-418</strong> Parallel Computing · <a href="http://15418.courses.cs.cmu.edu/" target="_blank">15418.courses.cs.cmu.edu</a> — GPU 架构 + 缓存层级深入。</li>
+  <li><strong>PMPP</strong> (Programming Massively Parallel Processors) · NVIDIA 的 CUDA 圣经，第 3 版 PDF 网上有。看 ch 1-5 + 8。</li>
+  <li><strong>Berkeley AISys Fa2024</strong> · <a href="https://ucbsky.github.io/aisys-fa2024/schedule/" target="_blank">schedule</a> — 现代 LLM 系统论文地图。</li>
+  <li><strong>Triton tutorial</strong> · <a href="https://triton-lang.org/main/getting-started/tutorials/index.html" target="_blank">triton-lang.org</a> — kernel 入门。</li>
+  <li><strong>CUDA C++ Programming Guide</strong> ch 4-6 · NVIDIA 官方，下午翻完。</li>
+</ul>
+
+<h3>🟢 偶尔翻翻</h3>
+<ul>
+  <li><strong>"Designing Data-Intensive Applications"</strong> · 分布式部分跟 vLLM TP/PP 调度相通。</li>
+  <li><strong>"Database Internals"</strong> · LSM tree / page replacement 跟 KV cache 相通。</li>
+  <li><strong>Linux 内核源码</strong> · mm/ 目录，<strong>不是</strong>用来读完的，是用来 grep 类比的。</li>
+</ul>
+
+<h2><span class="num">07</span>反原则 · 别这么干</h2>
+
+<ul>
+  <li>❌ 不要先把 OSTEP 整本刷完再来读 vLLM。<strong>不学到具体用处的概念都会忘</strong>。</li>
+  <li>❌ 不要按 AISys schedule 顺序读 24 篇论文。它是给学生一学期的，不是给你 6 个月的。</li>
+  <li>❌ 不要把笔记做成 PPT。每篇论文一段话 + 跟 vLLM 源码哪一行对得上，比精美笔记有用 10 倍。</li>
+  <li>❌ 不要等"准备好"才提 PR。Month 1 就交第一个，哪怕是 typo。</li>
+  <li>❌ 不要先建仓库再写代码。先在 single file 里把 mini-vLLM 跑起来，再切模块。</li>
+  <li>❌ 不要追新 paper 追到忘了读 OSTEP。基础概念是杠杆，新论文是兵器，<strong>没有杠杆，兵器再多也举不动</strong>。</li>
+</ul>
+
+<h2><span class="num">08</span>"对照表" 用法 · 三个场景</h2>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>场景 ① · 看不懂某行 vLLM 代码</h3>
+    <p>读到 <code>block_pool.evict()</code> 不懂为啥这么写？回这页查 "Block allocator" 行 → OSTEP 17 → 看 "free list / buddy allocator" → 半小时回来继续读 vLLM，理解了。</p>
+  </div>
+  <div class="card">
+    <h3>场景 ② · 准备面试</h3>
+    <p>面试官问"vLLM 怎么管 KV cache？" 你能<strong>用 OS 语言重述</strong>：page table → block table、page fault → 翻页、page cache → prefix cache。这样答案有结构、显出底子。</p>
+  </div>
+  <div class="card">
+    <h3>场景 ③ · 设计自己的项目</h3>
+    <p>写 mini-vLLM 时想：我要不要支持 swap？看 OS 怎么权衡 swap vs OOM kill → 知道 swap 复杂但灵活 → 决定 v0.1 先 recompute，v0.5 加 swap。</p>
+  </div>
+  <div class="card">
+    <h3>场景 ④ · 读新论文快速定位</h3>
+    <p>看一篇新的 KV cache 论文（如 Mooncake），先在脑里走对照表：它在哪个 cell 创新？是改 page table 还是改 page cache？立刻能定位作者贡献。</p>
+  </div>
+</div>
+
+<hr>
+
+<p class="muted small">
+  这页是常驻参考。<strong>书签它</strong>，6 个月里你会回来很多次。每次回来，对照表里你能"看懂"的格子会变多。
+  这是进步的真实度量。
+</p>
+
+<div class="pagenav">
+  <a class="prev" href="07-papers.html"><div class="dir">prev</div><div class="ttl">15 篇论文</div></a>
+  <a class="next" href="../index.html"><div class="dir">回到</div><div class="ttl">主页</div></a>
+</div>
+
+</main>
+</div>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

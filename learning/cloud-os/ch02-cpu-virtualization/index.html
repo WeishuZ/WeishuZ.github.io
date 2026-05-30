@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 2 章 · 幻觉机器：虚拟化 CPU — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="2">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part II · 一台机器 · 第 2 章</div>
+    <div class="ch-number">02</div>
+    <h1 class="ch-title">幻觉机器：虚拟化 CPU</h1>
+    <p class="ch-standfirst">一颗 CPU 如何让几十个程序都以为自己正在运行？答案不是“真的同时”，而是操作系统用中断、上下文切换和调度策略维护出来的高速幻觉。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> CS162 核心</span><span class="dot"></span>
+      <span><b>用时</b> 约 55 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 流程动画 · 调度取舍模拟器</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">一颗 CPU 如何让几十个程序都以为自己正在运行？答案不是“真的同时”，而是操作系统用中断、上下文切换和调度策略维护出来的高速幻觉。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>进程</b><span>程序运行起来之后的完整容器：代码、寄存器、栈、堆、打开的文件，以及它以为自己拥有的 CPU。</span></div>
+<div class="concept-card"><b>线程</b><span>进程里的执行流。多个线程共享同一份地址空间，但各自有自己的栈和寄存器现场。</span></div>
+<div class="concept-card"><b>上下文切换</b><span>操作系统把当前进程的寄存器现场保存起来，再恢复另一个进程的现场。幻觉的成本就在这里。</span></div>
+<div class="concept-card"><b>调度器</b><span>内核里决定“下一小段时间谁来用 CPU”的策略模块。公平、延迟、吞吐永远在拉扯。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">幻觉机器：虚拟化 CPU · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 2.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="2.1 CPU 没有变多，只是切得够快"><span class="sec-no">2.1</span>CPU 没有变多，只是切得够快</h2>
+    <p>一颗 CPU 在一个时刻只能执行一条指令流。多任务的第一层真相，是内核把时间切成很小的片段，在进程之间快速切换。人的感知粗糙，于是把“轮流”看成了“同时”。这和云的虚拟机很像：底下资源有限，上层看到的是被精心包装后的独占假象。</p>
+
+    <h2 id="s2" data-nav="2.2 进程是云服务的最小叙事单位"><span class="sec-no">2.2</span>进程是云服务的最小叙事单位</h2>
+    <p>第 1 章里 Web 服务器看起来是一台机器，本章把镜头推进去：真正处理请求的是某个进程。它拿到 socket，解析 HTTP，执行你的业务逻辑，再通过系统调用请内核收发网络和读写文件。理解进程，你才知道容器、Pod、serverless function 到底包住了什么。</p>
+
+    <h2 id="s3" data-nav="2.3 从用户态陷入内核态"><span class="sec-no">2.3</span>从用户态陷入内核态</h2>
+    <p>普通程序没有权限直接操作网卡、磁盘、页表或时钟。它必须通过系统调用进入内核态。这个边界是安全边界，也是性能边界：每次跨越都有成本，所以高性能服务器会批量 I/O、用 epoll、减少不必要的内核往返。</p>
+
+    <h2 id="s4" data-nav="2.4 调度不是排队，而是价值判断"><span class="sec-no">2.4</span>调度不是排队，而是价值判断</h2>
+    <p>短时间片让交互延迟更低，但上下文切换开销更高；长时间片吞吐更好，却可能让小请求排队。云上调度器、Kubernetes scheduler、vLLM continuous batching 都是在同一个问题上换了尺度：有限资源，先服务谁？</p>
+
+    <h2 id="s5" data-nav="2.5 本章和云的连接"><span class="sec-no">2.5</span>本章和云的连接</h2>
+    <p>虚拟机的 vCPU、容器里的 CPU limit、serverless 的并发上限，本质都继承了单机调度的约束。云把 CPU 包成商品，但并没有消除 CPU 的物理事实。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">幻觉机器：虚拟化 CPU · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 2.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>进程/线程</b></td><td>容器里的主进程、Pod 里的多个 worker</td><td>容器不是迷你虚拟机，它首先是一组被隔离和限制的进程。</td></tr>
+<tr><td><b>调度器</b></td><td>Kubernetes 调度、vLLM 请求调度</td><td>尺度变了，但核心问题仍是资源分配与排队。</td></tr>
+<tr><td><b>系统调用</b></td><td>高性能网络、存储、serverless 冷启动</td><td>云上性能瓶颈经常藏在用户态和内核态的边界。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>多任务不是 CPU 真的变多，而是时间被内核快速切片。</li>
+<li>进程是运行中程序的容器，线程是共享地址空间里的执行流。</li>
+<li>系统调用是用户态进入内核态的正门，也是性能和安全的边界。</li>
+<li>调度策略永远在延迟、吞吐、公平和开销之间做取舍。</li></ul>
+      <p class="muted" style="margin-bottom:0">下一章，我们把 CPU 旁边那块更会骗人的东西拆开：内存。每个进程为什么都以为自己拥有一整片连续的世界？</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch01-what-is-cloud/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">01 · 云是别人的电脑</span>
+      </a>
+      <a class="next" href="../ch03-virtual-memory/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">03 · 内存的海市蜃楼</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "process": {
+    "t": "进程 · Process",
+    "d": "一个正在运行的程序及其资源边界。",
+    "l": "#"
+  },
+  "syscall": {
+    "t": "系统调用 · System Call",
+    "d": "用户程序请求内核代办特权操作的接口。",
+    "l": "#"
+  },
+  "context": {
+    "t": "上下文切换 · Context Switch",
+    "d": "保存当前执行现场并恢复另一个执行现场的过程。",
+    "l": "#"
+  },
+  "scheduler": {
+    "t": "调度器 · Scheduler",
+    "d": "决定下一段 CPU 时间交给谁的内核模块。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "一次请求落进进程后，它并不是一路平滑地跑完。它会在用户态和内核态之间切换，也可能在等待 I/O 时让出 CPU。",
+    "nodes": [
+      {
+        "icon": "🌐",
+        "label": "请求到达",
+        "sub": "socket 可读"
+      },
+      {
+        "icon": "🧠",
+        "label": "用户态执行",
+        "sub": "解析与业务逻辑"
+      },
+      {
+        "icon": "🚪",
+        "label": "系统调用",
+        "sub": "陷入内核"
+      },
+      {
+        "icon": "⏱",
+        "label": "调度切换",
+        "sub": "保存/恢复现场"
+      },
+      {
+        "icon": "📤",
+        "label": "响应返回",
+        "sub": "继续用户态"
+      }
+    ],
+    "steps": [
+      {
+        "title": "请求到达",
+        "body": "网卡中断和内核网络栈把数据放到 socket 缓冲区，进程被唤醒。",
+        "note": "这里已经发生了一次从硬件到内核再到进程的接力。",
+        "node": 0
+      },
+      {
+        "title": "用户态处理",
+        "body": "你的代码在用户态解析请求、检查路由、准备访问数据库。",
+        "note": "用户态快且受限：不能直接碰硬件。",
+        "node": 1
+      },
+      {
+        "title": "系统调用",
+        "body": "进程调用 <code>read</code>、<code>send</code> 或 <code>epoll_wait</code>，CPU 切到内核态。",
+        "note": "这条门是安全的代价，也是性能优化的入口。",
+        "node": 2
+      },
+      {
+        "title": "等待时让出 CPU",
+        "body": "如果网络或磁盘还没准备好，内核把进程标记为 blocked，然后调度别的进程。",
+        "note": "云服务能高并发，靠的不是每个请求占一颗核，而是等待时让位。",
+        "node": 3
+      },
+      {
+        "title": "恢复并返回",
+        "body": "I/O 完成后进程重新进入 runnable 队列，调度器恢复它的寄存器现场，响应被发回客户端。",
+        "note": "所谓“同时服务很多请求”，就是这套机制不断循环。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "短时间片",
+        "note": "适合交互服务。每个任务很快得到响应，但 CPU 花更多时间做上下文切换。",
+        "metrics": [
+          {
+            "label": "尾延迟",
+            "value": 35,
+            "warn": false
+          },
+          {
+            "label": "吞吐",
+            "value": 62,
+            "warn": false
+          },
+          {
+            "label": "切换开销",
+            "value": 76,
+            "warn": true
+          }
+        ],
+        "takeaway": "低延迟不是免费午餐：你把时间片切碎，就会把更多预算交给内核管理。"
+      },
+      {
+        "name": "长时间片",
+        "note": "适合批处理或 CPU-bound 工作。上下文切换少，但小请求可能排队更久。",
+        "metrics": [
+          {
+            "label": "尾延迟",
+            "value": 78,
+            "warn": true
+          },
+          {
+            "label": "吞吐",
+            "value": 86,
+            "warn": false
+          },
+          {
+            "label": "切换开销",
+            "value": 25,
+            "warn": false
+          }
+        ],
+        "takeaway": "云上的批处理队列、离线训练任务，常常愿意牺牲交互体验换吞吐。"
+      },
+      {
+        "name": "I/O 感知",
+        "note": "把等待 I/O 的任务快速让出 CPU，让真正可运行的任务先跑。",
+        "metrics": [
+          {
+            "label": "尾延迟",
+            "value": 42,
+            "warn": false
+          },
+          {
+            "label": "吞吐",
+            "value": 80,
+            "warn": false
+          },
+          {
+            "label": "CPU 利用率",
+            "value": 88,
+            "warn": false
+          }
+        ],
+        "takeaway": "高并发服务最怕把 CPU 浪费在等待上。事件循环和异步 I/O 都是在扩大这条路。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "ASK",
+      "t": "能解释“同时运行”的幻觉",
+      "d": "说清楚 CPU、时间片、上下文切换三者的关系。"
+    },
+    {
+      "k": "READ",
+      "t": "看一次 <code>top</code> 或 Activity Monitor",
+      "d": "区分进程、线程、CPU 使用率和状态。"
+    },
+    {
+      "k": "BUILD",
+      "t": "写一个小调度模拟器",
+      "d": "用不同 quantum 比较平均等待时间和切换次数。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

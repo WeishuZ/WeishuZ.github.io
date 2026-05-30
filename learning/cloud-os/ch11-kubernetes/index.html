@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 11 章 · 编排：Kubernetes — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="11">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part IV · 分布式系统 · 第 11 章</div>
+    <div class="ch-number">11</div>
+    <h1 class="ch-title">编排：Kubernetes 与控制循环</h1>
+    <p class="ch-standfirst">Kubernetes 不只是“跑容器的工具”。它是一台把期望状态不断拉回现实状态的分布式控制机器。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> 云原生核心</span><span class="dot"></span>
+      <span><b>用时</b> 约 60 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 调和循环动画 · 声明式取舍</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">Kubernetes 不只是“跑容器的工具”。它是一台把期望状态不断拉回现实状态的分布式控制机器。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>声明式 API</b><span>你描述想要什么，而不是逐步命令系统怎么做。</span></div>
+<div class="concept-card"><b>控制循环</b><span>不断观察现实与期望差距，并采取动作缩小差距。</span></div>
+<div class="concept-card"><b>Pod</b><span>Kubernetes 最小调度单位，包住一个或多个容器。</span></div>
+<div class="concept-card"><b>Controller</b><span>负责某类资源调和的控制器，如 Deployment controller。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">编排：Kubernetes · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 11.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="11.1 Kubernetes 的灵魂是调和"><span class="sec-no">11.1</span>Kubernetes 的灵魂是调和</h2>
+    <p>你提交一个 Deployment，说“我要 3 个副本”。系统不是执行一次命令就结束，而是持续观察：如果只剩 2 个，就补；如果有 4 个，就删；如果节点挂了，就迁。</p>
+
+    <h2 id="s2" data-nav="11.2 API server 是全局事实入口"><span class="sec-no">11.2</span>API server 是全局事实入口</h2>
+    <p>所有组件通过 API server 读写期望状态和集群状态。etcd 保存强一致元数据。控制面不是一堆脚本，而是围绕 API 对象运转的分布式系统。</p>
+
+    <h2 id="s3" data-nav="11.3 Scheduler 只做绑定，不保证永远正确"><span class="sec-no">11.3</span>Scheduler 只做绑定，不保证永远正确</h2>
+    <p>调度器为未绑定 Pod 选择节点。之后节点坏了、资源变了，是其他 controller 和 kubelet 继续调和。K8s 的优雅来自职责切分。</p>
+
+    <h2 id="s4" data-nav="11.4 Service 稳定了不稳定的 Pod"><span class="sec-no">11.4</span>Service 稳定了不稳定的 Pod</h2>
+    <p>Pod 会被杀、替换、迁移，IP 也会变。Service 给一组 Pod 一个稳定入口，背后通过 label selector 和 kube-proxy/IPVS/iptables 把流量导过去。</p>
+
+    <h2 id="s5" data-nav="11.5 声明式系统适合自动化，也要求你尊重状态"><span class="sec-no">11.5</span>声明式系统适合自动化，也要求你尊重状态</h2>
+    <p>手动改线上机器是命令式冲动；K8s 会把它拉回声明状态。GitOps、operator、自愈都建立在同一个控制循环之上。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">编排：Kubernetes · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 11.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>etcd/共识</b></td><td>API server 状态存储</td><td>上一章的强一致日志支撑控制面的事实来源。</td></tr>
+<tr><td><b>Pod/Service</b></td><td>容器与网络抽象</td><td>第 7、8 章的机制在这里组合成部署单位。</td></tr>
+<tr><td><b>控制循环</b></td><td>Autoscaler、operator、云控制面</td><td>现代云平台几乎都是控制循环堆出来的。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>Kubernetes 是围绕声明式 API 运转的控制系统。</li>
+<li>控制循环不断比较期望状态和现实状态，并采取动作。</li>
+<li>Pod 会变，Service 提供稳定入口。</li>
+<li>Operator 把领域运维知识变成可运行的调和逻辑。</li></ul>
+      <p class="muted" style="margin-bottom:0">有了编排系统，下一步是让它在负载变化和故障面前保持体验：伸缩、重试、背压和韧性。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch10-distributed/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">10 · 当机器们意见不合</span>
+      </a>
+      <a class="next" href="../ch12-scaling-resilience/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">12 · 伸缩与韧性</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "reconcile": {
+    "t": "调和 · Reconcile",
+    "d": "让现实状态逐步逼近期望状态的循环。",
+    "l": "#"
+  },
+  "pod": {
+    "t": "Pod",
+    "d": "Kubernetes 最小调度单位。",
+    "l": "#"
+  },
+  "service": {
+    "t": "Service",
+    "d": "给一组 Pod 提供稳定访问入口。",
+    "l": "#"
+  },
+  "operator": {
+    "t": "Operator",
+    "d": "用自定义控制器自动管理复杂应用的模式。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "Kubernetes 的基本节拍是 observe → diff → act。它不是一次性部署器，而是持续运行的控制系统。",
+    "nodes": [
+      {
+        "icon": "📝",
+        "label": "期望状态",
+        "sub": "YAML/API"
+      },
+      {
+        "icon": "👀",
+        "label": "观察现实",
+        "sub": "watch"
+      },
+      {
+        "icon": "Δ",
+        "label": "计算差距",
+        "sub": "diff"
+      },
+      {
+        "icon": "🔧",
+        "label": "采取动作",
+        "sub": "create/delete"
+      },
+      {
+        "icon": "🔁",
+        "label": "再次观察",
+        "sub": "loop"
+      }
+    ],
+    "steps": [
+      {
+        "title": "提交期望",
+        "body": "用户创建 Deployment: replicas=3, image=v1。",
+        "note": "声明式 API 记录的是目标。",
+        "node": 0
+      },
+      {
+        "title": "控制器观察",
+        "body": "Deployment controller 通过 watch 看到期望状态。",
+        "note": "组件不是轮询文件，而是订阅 API 变化。",
+        "node": 1
+      },
+      {
+        "title": "发现差距",
+        "body": "当前只有 0 个 Pod，目标是 3 个。",
+        "note": "K8s 的动作来自差距，不是来自用户脚本。",
+        "node": 2
+      },
+      {
+        "title": "创建资源",
+        "body": "controller 创建 ReplicaSet/Pod，scheduler 绑定节点，kubelet 拉镜像启动容器。",
+        "note": "多个控制循环接力完成一件事。",
+        "node": 3
+      },
+      {
+        "title": "持续调和",
+        "body": "如果节点挂了，现实再次偏离，循环继续补齐。",
+        "note": "自愈不是魔法，是循环没有停。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "命令式运维",
+        "note": "直接 SSH 改机器，快，但状态不可复现，容易漂移。",
+        "metrics": [
+          {
+            "label": "即时速度",
+            "value": 88,
+            "warn": false
+          },
+          {
+            "label": "可审计性",
+            "value": 24,
+            "warn": true
+          },
+          {
+            "label": "漂移风险",
+            "value": 86,
+            "warn": true
+          }
+        ],
+        "takeaway": "救火可以，长期系统会变成记忆游戏。"
+      },
+      {
+        "name": "声明式 YAML",
+        "note": "状态可审计、可回滚、可自动调和，但需要理解资源模型。",
+        "metrics": [
+          {
+            "label": "可审计性",
+            "value": 82,
+            "warn": false
+          },
+          {
+            "label": "自动化",
+            "value": 86,
+            "warn": false
+          },
+          {
+            "label": "学习成本",
+            "value": 62,
+            "warn": true
+          }
+        ],
+        "takeaway": "K8s 把运维问题转化为建模问题。"
+      },
+      {
+        "name": "Operator",
+        "note": "把领域知识写进控制器，让系统自动管理复杂有状态服务。",
+        "metrics": [
+          {
+            "label": "自动化",
+            "value": 94,
+            "warn": false
+          },
+          {
+            "label": "复杂度",
+            "value": 88,
+            "warn": true
+          },
+          {
+            "label": "一致性",
+            "value": 76,
+            "warn": false
+          }
+        ],
+        "takeaway": "Operator 是把人类 runbook 编译成控制循环。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "TRACE",
+      "t": "从 Deployment 到 Pod",
+      "d": "按 Deployment→ReplicaSet→Pod→Node 顺序说明。"
+    },
+    {
+      "k": "DEBUG",
+      "t": "解释 CrashLoopBackOff",
+      "d": "把期望状态、现实状态和 kubelet 行为分开。"
+    },
+    {
+      "k": "DESIGN",
+      "t": "给数据库写 operator 思路",
+      "d": "说明观察什么、差距是什么、动作是什么。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

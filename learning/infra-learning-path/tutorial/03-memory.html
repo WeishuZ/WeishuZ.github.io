@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>M2 · 内存 · PagedAttention — Infra Learning Path</title>
+<meta name="description" content="vLLM 皇冠章节。从 KV cache 的数学讲起，对照 OS 虚拟内存，深读 BlockPool / KVCacheManager / paged_attention kernel，把 PagedAttention 学透。" />
+<link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="../index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+  <div class="nav-group"><div class="nav-label">起步</div><nav><ul>
+    <li><a href="../index.html"><span class="idx">/</span>主页 · 概览</a></li>
+    <li><a href="00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+    <li><a href="01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">6 个月主线</div><nav><ul>
+    <li><a href="02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+    <li><a href="03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+    <li><a href="04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+    <li><a href="05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+    <li><a href="06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+    <li><a href="09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">参考</div><nav><ul>
+    <li><a href="07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+    <li><a href="08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+  </ul></nav></div>
+  <div class="foot">源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a></div>
+</aside>
+
+<main class="content">
+
+<div class="crumbs">
+  <a href="../index.html">home</a><span class="sep">/</span>tutorial<span class="sep">/</span>M2 内存
+</div>
+
+<h1 class="page-title">Month 2 · PagedAttention <span style="color:var(--accent);">★</span></h1>
+<p class="page-sub">皇冠章节。这一个月学透，后面所有内容都顺。</p>
+
+<p class="lede">
+  这是 vLLM 之所以是 vLLM 的核心 idea。论文（Kwon et al., SOSP'23）的副标题是
+  <em>"Efficient Memory Management for Large Language Model Serving with PagedAttention"</em>。
+  注意是 <strong>Memory Management</strong>——这是一篇系统论文，不是机器学习论文。
+  作者用 OS 虚拟内存做类比，把 KV cache 的利用率从 ~40% 拉到 ~96%，端到端 throughput 提升 2–4×。
+  这一章把这套思路完整重建：从 KV cache 的数学，到 OS 分页的原理，到 vLLM 怎么把两者拼到一起。
+</p>
+
+<div class="callout q">
+  <div class="label">驱动问题</div>
+  在 LLM 推理时，每生成一个 token，模型每一层 attention 都要看"之前所有 token 的 K 和 V"。
+  把它们缓存（KV cache）下来是必须的。
+  问：<strong>如果给每个请求预分配 max_len × hidden_size 的连续显存来存 KV，会出什么问题？至少说 3 个。</strong>
+</div>
+
+<details class="predict">
+  <summary>写下你的 3 个回答，再展开</summary>
+  <div class="body">
+    <ol>
+      <li><strong>内部碎片</strong> · 大部分请求实际 token 数远小于 max_len，未用的槽位浪费。</li>
+      <li><strong>外部碎片</strong> · 请求结束释放出来的"洞"未必能装下下一个声明 max_len 更大的请求。</li>
+      <li><strong>无法共享</strong> · 两个请求 prefix 相同（system prompt 一样），KV 没法复用。</li>
+      <li>(隐藏奖励) <strong>不能动态长度</strong> · 同一个 batch 里如果不同请求当前长度差距大，没法 vectorize。</li>
+    </ol>
+    <p>这四个问题——任何看过 OS 教材的人都会脱口而出："这<strong>就是</strong>早期 OS 给进程分配内存的痛苦"。</p>
+    <p>论文里有一张<strong>真实数据</strong>：朴素分配下显存利用率仅 20–40%，因为最长 prompt 的<em>预算</em>统治了所有槽位。这就是这一章要解的问题。</p>
+  </div>
+</details>
+
+<h2><span class="num">01</span>本章导航</h2>
+
+<p>这一章很长，因为内容是 vLLM 的核心。按下面的顺序走：</p>
+
+<ol>
+  <li><a href="#kv-math">§02 KV cache 的数学</a> · 先把"KV cache 到底有多大"算清楚。</li>
+  <li><a href="#naive">§03 朴素实现为什么失败</a> · 把驱动问题量化。</li>
+  <li><a href="#os-vm">§04 OS 虚拟内存复习</a> · 这是 vLLM 的"母概念"。</li>
+  <li><a href="#paged">§05 PagedAttention 设计</a> · 一对一对照映射。</li>
+  <li><a href="#code">§06 代码深读</a> · KVCacheManager、BlockPool、attention kernel。</li>
+  <li><a href="#prefix">§07 Prefix caching 深读</a> · "page cache"的现代版。</li>
+  <li><a href="#swap">§08 CPU offload / Swap</a> · 当显存真的不够。</li>
+  <li><a href="#cousins">§09 同类设计的对比</a> · SGLang RadixAttention、H2O。</li>
+  <li><a href="#lab">§10 动手实验</a> · 跑出真实数字。</li>
+  <li><a href="#pitfalls">§11 常见误解</a> · 把"以为懂"挤出来。</li>
+  <li><a href="#pr">§12 本月 PR 候选</a></li>
+  <li><a href="#check">§13 自检</a></li>
+</ol>
+
+<h2 id="kv-math"><span class="num">02</span>KV cache 到底是什么、有多大</h2>
+
+<p>读 vLLM 源码前，先把这个对象的<strong>大小</strong>算清楚。这一步省了，后面看 block_size 选 16 的讨论会觉得云里雾里。</p>
+
+<h3>2.1 数学定义</h3>
+
+<p>Transformer 的每一层都有自己的 K 和 V。对一个 token，每层产生一份 K 向量和一份 V 向量（每个 attention head 各一份）：</p>
+
+<div class="diagram">
+  <pre style="text-align:left; background:transparent; border:none; font-size:13px;"><code>     模型每一层：
+
+     输入 token 的 embedding x  ─→  Q = x @ W_q       (这一步不需要 cache)
+                                ─→  K = x @ W_k       ← 这个要 cache
+                                ─→  V = x @ W_v       ← 这个要 cache
+
+     未来 token i 算 attention：
+
+        attn = softmax(Q_i @ K_{:i}^T / √d) @ V_{:i}
+                              ─────┬─────         ┬──
+                              过去所有 K        过去所有 V    ← 必须从 cache 里取</code></pre>
+</div>
+
+<p>所以单个 token 在<strong>整个模型</strong>占的 KV cache 大小是：</p>
+
+<pre><code>per_token_kv_bytes = 2 × num_layers × num_kv_heads × head_dim × dtype_size
+                     │   │            │              │          │
+                     │   │            │              │          └ fp16 → 2 字节
+                     │   │            │              └ 每个 head 的维度（通常 128）
+                     │   │            └ KV 头数（GQA 模型 ≠ 注意力头数）
+                     │   └ 层数（Llama 3.1 8B = 32）
+                     └ K 和 V 各一份</code></pre>
+
+<p>累计到 <code>seq_len</code> 个 token + 一个序列时：</p>
+
+<pre><code>seq_kv_bytes = per_token_kv_bytes × seq_len</code></pre>
+
+<h3>2.2 实际数字 · Llama 3.1 8B (GQA)</h3>
+
+<p>把 Llama 3.1 8B 代入，立刻能算：</p>
+
+<table>
+  <thead><tr><th>参数</th><th>值</th><th>来源</th></tr></thead>
+  <tbody>
+    <tr><td>num_layers</td><td>32</td><td>config.json · num_hidden_layers</td></tr>
+    <tr><td>num_kv_heads</td><td>8</td><td>config.json · num_key_value_heads (GQA)</td></tr>
+    <tr><td>head_dim</td><td>128</td><td>hidden_size / num_attention_heads = 4096/32</td></tr>
+    <tr><td>dtype</td><td>fp16 / bf16</td><td>2 字节</td></tr>
+  </tbody>
+</table>
+
+<pre><code>per_token_kv_bytes = 2 × 32 × 8 × 128 × 2 = 131072 bytes ≈ 128 KB / token</code></pre>
+
+<p>把它代入"我能装多长 / 多少并发"的问题：</p>
+
+<table>
+  <thead><tr><th>显存预算</th><th>能装多少 token</th><th>典型并发场景</th></tr></thead>
+  <tbody>
+    <tr><td>1 GB</td><td>~8K tokens</td><td>1 个 8K 上下文 / 4 个 2K 对话</td></tr>
+    <tr><td>10 GB</td><td>~80K tokens</td><td>40 个 2K 用户 / 8 个 10K 用户</td></tr>
+    <tr><td>20 GB (A10 减权重后)</td><td>~160K tokens</td><td>典型 7B 单卡 serving 的可用预算</td></tr>
+  </tbody>
+</table>
+
+<div class="callout tip">
+  <div class="label">💡 GQA 是省 KV cache 的大功臣</div>
+  Llama 3.1 8B 有 32 个 attention head 但只有 8 个 KV head（4:1 group）。
+  如果是<strong>没有 GQA 的等价架构</strong>，KV cache 会是现在的 4×（每 token 512 KB）。
+  这就是为什么 Llama 2 → Llama 3 时 KV cache 急剧瘦身。<br>
+  长 context（&gt;100K）模型几乎全用 GQA 或 MLA（Multi-head Latent Attention，DeepSeek 用的）就是这个原因。
+</div>
+
+<h3>2.3 70B / 长 context 的麻烦</h3>
+
+<p>同样算法，对 Llama 3.1 70B（80 层、8 KV head、head_dim 128）：</p>
+
+<pre><code>per_token_kv_bytes = 2 × 80 × 8 × 128 × 2 = 327680 bytes ≈ 320 KB / token</code></pre>
+
+<p>一个 32K 的 prompt 单序列 KV ≈ <strong>10 GB</strong>。一张 A100 80GB 减掉权重（140 GB / 2 卡 TP = 70 GB / 卡，所以放不下；实际要 8 卡 TP，每卡承担 ~18 GB 权重），KV 预算就更紧。<br>
+所以"KV cache 利用率"这种听起来抽象的指标，<strong>直接决定了你能 serve 几个用户</strong>。</p>
+
+<h2 id="naive"><span class="num">03</span>朴素实现为什么失败（把驱动问题量化）</h2>
+
+<p>把 §02 的数字应用到"朴素 contiguous KV"，每个问题都能算出具体百分比：</p>
+
+<h3>3.1 内部碎片 · 量化</h3>
+
+<p>假设朴素策略：每个请求来时按 <code>max_model_len = 4096</code> 预分配。如果用户实际只生成 100 token：</p>
+
+<pre><code>分配槽位 = 4096 × 128 KB = 512 MB / 请求
+实际使用 = 100 × 128 KB =  12.5 MB / 请求
+利用率 = 12.5 / 512 = 2.4%</code></pre>
+
+<p>论文 Figure 2 显示真实 workload 下利用率长期在 20–40%。<strong>大部分显存在等永远不会来的 token</strong>。</p>
+
+<h3>3.2 外部碎片</h3>
+
+<p>请求 A 用完 512 MB 段释放回内存池。下一个请求 B 想要 <code>max_model_len=8192</code>，需要 1 GB 连续段。即使总自由内存有 2 GB，分散在 4 个 512 MB 小段里，依然装不下 B。<strong>这是经典 buddy allocator 痛点</strong>。</p>
+
+<h3>3.3 无法共享 prefix</h3>
+
+<p>"你是一个客服" 这种 system prompt 在 100 个并发请求里被算 100 次 KV，存 100 份。如果能共享，节省 = 100 × (system prompt 长度 × per_token_kv)。 system prompt 100 token、并发 100 时，能省 100 × 12.5 MB = <strong>1.25 GB</strong>，几乎一整张消费级 GPU 的容量。</p>
+
+<h3>3.4 不能动态适配 batch 长度</h3>
+
+<p>同一个 batch 里请求长度参差不齐（一个 100 token、一个 3000 token）。朴素做法 = padding 到最长。3000 token 的 batch 矩阵：</p>
+
+<pre><code>(batch_size × 3000 × hidden_size) 的输入
+其中 99% 是 padding，浪费的 FLOPs ≈ 99%</code></pre>
+
+<p>结论：<strong>四个问题都是数量级浪费</strong>，加起来轻松 60-80% 资源被烧。这就是 PagedAttention 之前 LLM serving 的现实。</p>
+
+<div class="callout q">
+  <div class="label">现在反过来问</div>
+  这四个问题，1960s 的 OS 设计师有没有遇到过？<br>
+  <strong>答：完全一样。</strong>"程序需要的内存有限但不可预测、释放后碎片化、不同进程能共享代码段"——这正是<strong>分页虚拟内存被发明的动机</strong>。
+  <br>下一节我们把 OS 解法搬过来。
+</div>
+
+<h2 id="os-vm"><span class="num">04</span>OS 虚拟内存复习（必要的母概念）</h2>
+
+<p>如果你完全没接触过虚拟内存，下面这段速通；学过的扫一眼当复习。后面的对应才能立刻生效。</p>
+
+<h3>4.1 为什么发明分页</h3>
+
+<p>1960 年代的计算机：每个程序看到的是物理内存的<strong>连续段</strong>。运行多个程序很难，因为它们要竞争同一块物理 RAM 的不同区段。解法 = <strong>把"程序看到的地址" 和 "实际物理位置" 解耦</strong>：</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 700 320" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <!-- left: program view -->
+      <text x="100" y="20" text-anchor="middle" font-weight="700" font-size="13">程序眼里的"虚拟地址空间"</text>
+      <rect x="40" y="40" width="120" height="40" fill="#fff7ed" stroke="#fdba74"/>
+      <text x="100" y="64" text-anchor="middle">虚拟页 V0</text>
+      <rect x="40" y="80" width="120" height="40" fill="#fff7ed" stroke="#fdba74"/>
+      <text x="100" y="104" text-anchor="middle">虚拟页 V1</text>
+      <rect x="40" y="120" width="120" height="40" fill="#fff7ed" stroke="#fdba74"/>
+      <text x="100" y="144" text-anchor="middle">虚拟页 V2</text>
+      <rect x="40" y="160" width="120" height="40" fill="#fff7ed" stroke="#fdba74"/>
+      <text x="100" y="184" text-anchor="middle">虚拟页 V3</text>
+      <text x="100" y="220" text-anchor="middle" fill="#78716c" font-size="11">连续、易理解</text>
+
+      <!-- middle: page table -->
+      <text x="350" y="20" text-anchor="middle" font-weight="700" font-size="13">页表 (page table)</text>
+      <g transform="translate(260,40)">
+        <rect width="180" height="40" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="50" y="24" font-family="monospace" font-size="11">V0</text>
+        <text x="100" y="24" font-family="monospace" font-size="11">→</text>
+        <text x="140" y="24" font-family="monospace" font-size="11">P7</text>
+
+        <rect y="40" width="180" height="40" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="50" y="64" font-family="monospace" font-size="11">V1</text>
+        <text x="100" y="64" font-family="monospace" font-size="11">→</text>
+        <text x="140" y="64" font-family="monospace" font-size="11">P2</text>
+
+        <rect y="80" width="180" height="40" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="50" y="104" font-family="monospace" font-size="11">V2</text>
+        <text x="100" y="104" font-family="monospace" font-size="11">→</text>
+        <text x="140" y="104" font-family="monospace" font-size="11">P11</text>
+
+        <rect y="120" width="180" height="40" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="50" y="144" font-family="monospace" font-size="11">V3</text>
+        <text x="100" y="144" font-family="monospace" font-size="11">→</text>
+        <text x="140" y="144" font-family="monospace" font-size="11">P0</text>
+      </g>
+      <text x="350" y="220" text-anchor="middle" fill="#78716c" font-size="11">每进程一份，OS 维护</text>
+
+      <!-- right: physical mem -->
+      <text x="600" y="20" text-anchor="middle" font-weight="700" font-size="13">物理 RAM</text>
+      <g font-family="monospace" font-size="11">
+        <rect x="540" y="40" width="120" height="20" fill="#f5f5f4" stroke="#a8a29e"/><text x="600" y="55" text-anchor="middle">P0  (= V3)</text>
+        <rect x="540" y="60" width="120" height="20" fill="#fef2f2" stroke="#a8a29e"/><text x="600" y="75" text-anchor="middle">P1  (other proc)</text>
+        <rect x="540" y="80" width="120" height="20" fill="#f5f5f4" stroke="#a8a29e"/><text x="600" y="95" text-anchor="middle">P2  (= V1)</text>
+        <rect x="540" y="100" width="120" height="20" fill="#fef2f2" stroke="#a8a29e"/><text x="600" y="115" text-anchor="middle">P3</text>
+        <rect x="540" y="120" width="120" height="20" fill="#fef2f2" stroke="#a8a29e"/><text x="600" y="135" text-anchor="middle">P4</text>
+        <rect x="540" y="140" width="120" height="20" fill="#fef2f2" stroke="#a8a29e"/><text x="600" y="155" text-anchor="middle">P5</text>
+        <rect x="540" y="160" width="120" height="20" fill="#fef2f2" stroke="#a8a29e"/><text x="600" y="175" text-anchor="middle">P6</text>
+        <rect x="540" y="180" width="120" height="20" fill="#f5f5f4" stroke="#a8a29e"/><text x="600" y="195" text-anchor="middle">P7  (= V0)</text>
+        <text x="600" y="220" text-anchor="middle" fill="#78716c" font-size="11">分散、混合多进程</text>
+      </g>
+
+      <!-- arrows -->
+      <g stroke="#78716c" stroke-width="1" fill="none">
+        <path d="M 160 60 L 260 60"/>
+        <path d="M 440 60 L 540 50"/>
+      </g>
+    </g>
+  </svg>
+  <div class="caption">虚拟页连续、物理页分散，靠页表桥接。代价是每次访问要查表（TLB 缓存这个）。</div>
+</div>
+
+<h3>4.2 关键带走的 4 点</h3>
+
+<ul>
+  <li><strong>固定大小的页</strong>（典型 4KB）让分配/释放变简单 —— 永远只对齐到 page boundary，外部碎片消失。</li>
+  <li><strong>页表是 indirection 层</strong> —— 应用看到的连续地址不是真的连续。</li>
+  <li><strong>页可以共享</strong> —— 两个进程的页表项指向同一个物理页（典型场景：共享库、COW fork）。</li>
+  <li><strong>页可以延迟分配 (demand paging)</strong> —— 程序声明 4GB 虚拟空间，OS 只在你真访问到某页时才给物理页。Page fault 触发分配。</li>
+</ul>
+
+<h3>4.3 TLB · 页表的代价</h3>
+
+<p>查页表本身要访问内存，每次内存访问<strong>变两次</strong>（一次查表、一次取数据）。为了不爆炸，CPU 有 <strong>TLB（Translation Lookaside Buffer）</strong>——硬件 cache，存最近用过的 V→P 映射，~64-512 项，几个 cycle 命中。TLB miss → 重新走页表 → 慢 ~100 cycle。</p>
+
+<p>这一点要记住：<strong>indirection 是有成本的</strong>。后面我们会看到 vLLM 在 GPU 上"模拟 TLB"的方式（其实是直接把整个 block table 塞进 kernel 的常量参数）。</p>
+
+<h3>4.4 COW Fork · prefix caching 的祖宗</h3>
+
+<p>Unix <code>fork()</code> 复制整个进程。复制 4GB 地址空间太慢，所以现代实现是 <strong>copy-on-write</strong>：父子进程的页表初始指向同一份物理页，标记只读；任一方写时才真的复制。</p>
+
+<p>这就是 <strong>prefix caching</strong> 的原型：两个请求 prompt 相同时，它们的 block table 指向同一份物理 KV，谁开始生成不同的 token 谁分裂出新 block。我们在 §07 详细看。</p>
+
+<div class="callout tip">
+  <div class="label">💡 速补虚拟内存</div>
+  没系统学过的，直接读 OSTEP 第 13、15、18、21、22 章（共 ~80 页）。
+  <a href="https://pages.cs.wisc.edu/~remzi/OSTEP/" target="_blank">免费在线</a>。
+  这是 6 个月里你需要"啃书"的<strong>唯一</strong>章节。MIT 6.S081 lecture 4 是视频替代。
+</div>
+
+<h2 id="paged"><span class="num">05</span>PagedAttention：把上面这套搬到 KV cache</h2>
+
+<p>vLLM 的做法<strong>结构上完全平行</strong>：</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 420" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <!-- Sequence A logical blocks -->
+      <text x="100" y="30" text-anchor="middle" font-weight="700" font-size="13" fill="#c2410c">Sequence A · 逻辑块</text>
+      <text x="100" y="46" text-anchor="middle" fill="#78716c" font-size="10">"Hello, how are you ..."</text>
+      <g transform="translate(40,60)">
+        <rect width="120" height="30" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="60" y="20" text-anchor="middle">L0 · tokens 0-15</text>
+        <rect y="30" width="120" height="30" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="60" y="50" text-anchor="middle">L1 · tokens 16-31</text>
+        <rect y="60" width="120" height="30" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="60" y="80" text-anchor="middle">L2 · tokens 32-39</text>
+      </g>
+
+      <!-- Sequence A block table -->
+      <text x="300" y="30" text-anchor="middle" font-weight="700" font-size="13">A 的 block table</text>
+      <g transform="translate(240,60)" font-family="monospace" font-size="11">
+        <rect width="120" height="30" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="60" y="20" text-anchor="middle">L0 → P3</text>
+        <rect y="30" width="120" height="30" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="60" y="50" text-anchor="middle">L1 → P7</text>
+        <rect y="60" width="120" height="30" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="60" y="80" text-anchor="middle">L2 → P1</text>
+      </g>
+
+      <!-- Sequence B logical blocks -->
+      <text x="100" y="200" text-anchor="middle" font-weight="700" font-size="13" fill="#16a34a">Sequence B · 逻辑块</text>
+      <text x="100" y="216" text-anchor="middle" fill="#78716c" font-size="10">"Hello, how are you ..." 同 prompt</text>
+      <g transform="translate(40,230)">
+        <rect width="120" height="30" fill="#f0fdf4" stroke="#16a34a"/>
+        <text x="60" y="20" text-anchor="middle">L0 · tokens 0-15</text>
+        <rect y="30" width="120" height="30" fill="#f0fdf4" stroke="#16a34a"/>
+        <text x="60" y="50" text-anchor="middle">L1 · tokens 16-31</text>
+        <rect y="60" width="120" height="30" fill="#f0fdf4" stroke="#16a34a"/>
+        <text x="60" y="80" text-anchor="middle">L2 · tokens 32-?</text>
+      </g>
+
+      <!-- Sequence B block table -->
+      <text x="300" y="200" text-anchor="middle" font-weight="700" font-size="13">B 的 block table</text>
+      <g transform="translate(240,230)" font-family="monospace" font-size="11">
+        <rect width="120" height="30" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="60" y="20" text-anchor="middle">L0 → P3 ★</text>
+        <rect y="30" width="120" height="30" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="60" y="50" text-anchor="middle">L1 → P7 ★</text>
+        <rect y="60" width="120" height="30" fill="#eff6ff" stroke="#60a5fa"/>
+        <text x="60" y="80" text-anchor="middle">L2 → P5</text>
+      </g>
+
+      <text x="300" y="370" text-anchor="middle" fill="#78716c" font-size="11">★ A 和 B 的 prefix 相同 ⇒ block 共享</text>
+
+      <!-- Physical KV pool -->
+      <text x="560" y="30" text-anchor="middle" font-weight="700" font-size="13" fill="#1e40af">GPU 显存 · 物理块池</text>
+      <g transform="translate(480,50)" font-family="monospace" font-size="11">
+        <rect width="160" height="30" fill="#fef2f2" stroke="#a8a29e"/><text x="80" y="20" text-anchor="middle">P0</text>
+        <rect y="30" width="160" height="30" fill="#dcfce7" stroke="#a8a29e"/><text x="80" y="50" text-anchor="middle">P1  ← A:L2</text>
+        <rect y="60" width="160" height="30" fill="#fef2f2" stroke="#a8a29e"/><text x="80" y="80" text-anchor="middle">P2</text>
+        <rect y="90" width="160" height="30" fill="#fed7aa" stroke="#a8a29e"/><text x="80" y="110" text-anchor="middle">P3  ← A:L0 + B:L0 ★</text>
+        <rect y="120" width="160" height="30" fill="#fef2f2" stroke="#a8a29e"/><text x="80" y="140" text-anchor="middle">P4</text>
+        <rect y="150" width="160" height="30" fill="#dcfce7" stroke="#a8a29e"/><text x="80" y="170" text-anchor="middle">P5  ← B:L2</text>
+        <rect y="180" width="160" height="30" fill="#fef2f2" stroke="#a8a29e"/><text x="80" y="200" text-anchor="middle">P6</text>
+        <rect y="210" width="160" height="30" fill="#fed7aa" stroke="#a8a29e"/><text x="80" y="230" text-anchor="middle">P7  ← A:L1 + B:L1 ★</text>
+        <rect y="240" width="160" height="30" fill="#fef2f2" stroke="#a8a29e"/><text x="80" y="260" text-anchor="middle">P8</text>
+        <rect y="270" width="160" height="30" fill="#fef2f2" stroke="#a8a29e"/><text x="80" y="290" text-anchor="middle">P9 (free)</text>
+      </g>
+
+      <!-- arrows from block tables to physical -->
+      <g stroke="#78716c" stroke-width="0.8" fill="none" stroke-dasharray="2 2">
+        <path d="M 360 75 L 480 65"/>
+        <path d="M 360 105 L 480 105"/>
+        <path d="M 360 135 L 480 65" stroke="#c2410c"/>
+        <path d="M 360 245 L 480 65" stroke="#16a34a"/>
+        <path d="M 360 275 L 480 215" stroke="#16a34a"/>
+      </g>
+    </g>
+  </svg>
+  <div class="caption">两个序列、各自的 block table、共享物理块池。注意 P3/P7 被两个序列同时引用——这就是 prefix caching。</div>
+</div>
+
+<h3>5.1 把 OS 概念逐行映射到 vLLM</h3>
+
+<table>
+  <thead><tr><th>OS</th><th>vLLM</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>virtual address space</td><td>sequence 的 token 序列</td><td>程序眼中的"连续"</td></tr>
+    <tr><td>virtual page (4KB)</td><td>logical block (16 tokens)</td><td>固定大小切片</td></tr>
+    <tr><td>physical frame</td><td>physical block</td><td>显存里实际的存储槽</td></tr>
+    <tr><td>page table</td><td>block table</td><td>每 sequence 一份，记录 L → P 映射</td></tr>
+    <tr><td>page fault</td><td>新 token 跨入下一个 block 时分配</td><td>vLLM 是"懒分配"</td></tr>
+    <tr><td>shared page (COW)</td><td>prefix cache 命中的共享 block</td><td>"复制时分裂"做法不同</td></tr>
+    <tr><td>page replacement (LRU)</td><td>prefix cache eviction</td><td>见 §07</td></tr>
+    <tr><td>swap to disk</td><td>swap to host RAM / NVMe</td><td>见 §08</td></tr>
+    <tr><td>TLB</td><td>(没有专门的——block table 直接在 GPU)</td><td>查找开销直接在 kernel 里</td></tr>
+    <tr><td>kmalloc / buddy allocator</td><td>BlockPool（free list + ref count）</td><td>分配粒度变粗（一块 = 16 token KV，几十-几百 KB）</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 一个 physical block 物理上是什么</h3>
+
+<p>vLLM 把整个 GPU 显存的 KV 区域看成一个<strong>大 tensor</strong>，按 block 切：</p>
+
+<pre><code>kv_cache = torch.zeros(
+    num_blocks,          # 池里有多少块
+    block_size,          # 一块装多少 token（16）
+    num_kv_heads,        # 8
+    head_dim,            # 128
+    dtype=torch.float16,
+)
+# K 和 V 各一份，所以模型每层有两个这样的 tensor
+# shape 在新版可能略不同（layout: NHD vs HND），但大小一样</code></pre>
+
+<p>从这个 layout 你可以反算<strong>单块大小</strong>：</p>
+
+<pre><code>block_bytes = block_size × num_kv_heads × head_dim × dtype_size × 2_for_KV
+            = 16 × 8 × 128 × 2 × 2 = 65536 bytes = 64 KB / block / layer
+全模型一块：
+            = 64 KB × 32 layers = 2 MB / block / sequence_token-coverage_16</code></pre>
+
+<p>所以 vLLM 启动时打的日志 <code>GPU KV cache size: X tokens</code>，X = num_blocks × block_size。<strong>从此你看到这个数字会立刻能解读</strong>。</p>
+
+<h3>5.3 Block size 为什么是 16</h3>
+
+<p>这是 PagedAttention 论文 §6.4 实验出来的 sweet spot。trade-off：</p>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>太小（如 4）</h3>
+    <ul>
+      <li>✅ 内部碎片更少</li>
+      <li>❌ Block table 太大，序列越长 lookup 越多</li>
+      <li>❌ Attention kernel 每次 gather KV 的 block 数量增加 4×</li>
+      <li>❌ Prefix cache hash 粒度太细，命中率低（短 prompt 共享不到）</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>太大（如 256）</h3>
+    <ul>
+      <li>✅ Block table 短，kernel 干净</li>
+      <li>❌ 内部碎片回来了：用户只生成 17 token 就 EOS，浪费 239 个槽位</li>
+      <li>❌ Prefix cache 命中粒度太粗（短 prefix 用不上）</li>
+      <li>❌ Preemption 颗粒变大（要释放就一次释放 256 token）</li>
+    </ul>
+  </div>
+</div>
+
+<p>论文图 18 显示 4/8/16/32 几乎相当，64+ 开始掉。<strong>16 是最甜的点</strong>，对 16-token Llama tokenizer 的 BPE 分布也对得齐（平均一个英文词 4 token，约 4 个词 = 一句话短语）。</p>
+
+<h3>5.4 attention kernel 怎么用 block table</h3>
+
+<p>读到这里你应该好奇：朴素 attention 一个 <code>torch.matmul(Q, K.transpose(-1,-2))</code> 就完事，要求 K 是连续 tensor。<strong>如果 K 散在 16 块物理 block 里，怎么矩阵乘？</strong></p>
+
+<p>答案：<strong>kernel 内部 gather</strong>。论文叫 "PagedAttention kernel"。伪代码：</p>
+
+<pre><code># 每个 query token 一个 thread block
+# 任务：算这个 token 对过去所有 KV 的 attention
+
+q = load_query()                       # 一次性加载（query 只有 1 个 token）
+running_max = -inf
+running_sum = 0
+out = 0
+
+for logical_block_idx in range(my_seq_len // 16):
+    # 关键的间接寻址：查 block table
+    physical_block_idx = block_table[seq_id, logical_block_idx]
+
+    # 从物理块加载 16 个 token 的 K 和 V
+    K_block = kv_cache_K[physical_block_idx]   # shape (16, n_kv_heads, head_dim)
+    V_block = kv_cache_V[physical_block_idx]
+
+    # 算这块的 attention scores
+    scores = q @ K_block.T / sqrt(d)           # shape (16,)
+
+    # online softmax 累加（FlashAttention 的核心 trick，见 M4）
+    block_max = max(scores)
+    new_max = max(running_max, block_max)
+    correction = exp(running_max - new_max)
+    running_sum = running_sum * correction + sum(exp(scores - new_max))
+    out = out * correction + (exp(scores - new_max) @ V_block)
+    running_max = new_max
+
+return out / running_sum</code></pre>
+
+<p>关键就是 <code>block_table[seq_id, logical_block_idx]</code> 这一行 <strong>indirection</strong>。它把"逻辑上连续的 KV"翻译成"物理上分散的 block 号"。<strong>这就是 OS 页表在 GPU 上的样子</strong>。</p>
+
+<div class="callout tip">
+  <div class="label">💡 为什么 prefill 不用 PagedAttention（多数情况）</div>
+  Prefill 时整个 prompt 在一个 forward 里算，<strong>K 和 V 本来就是连续生成的</strong>，没分散问题。
+  所以 prefill 通常调 FlashAttention 这类标准 kernel。<br>
+  Decode 才是 PagedAttention 大展身手的地方——前序 KV 早就散在 64 MB 的 block pool 里了。
+</div>
+
+<h2 id="code"><span class="num">06</span>代码深读 · KV cache 子系统</h2>
+
+<p>下面的 anchor 是这个月的主菜。按顺序读，期间随时回头看上面的图和数字。<strong>5 段加起来 ~10-12 小时</strong>，分 3-4 天完成。</p>
+
+<h3>6.1 第一遍 · 整体结构</h3>
+
+<div class="code-anchor">
+  <div class="label">读 ① · 2 小时 · 入口</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/core/kv_cache_manager.py" target="_blank">vllm/v1/core/kv_cache_manager.py</a></div>
+  这是 v1 引擎里 KV cache 的总管。先<strong>不深究算法</strong>，只看 <code>KVCacheManager</code> 类的方法签名：
+  <ul>
+    <li><code>allocate_slots(request, num_tokens) → KVCacheBlocks</code> — 给一个 request 在这一步多要几个 token 的槽</li>
+    <li><code>free(request)</code> — 请求结束，释放它的所有 block</li>
+    <li><code>get_computed_blocks(request)</code> — prefix cache 命中查询</li>
+    <li><code>cache_blocks(request, num_tokens)</code> — 把已经算完的 block 注册到 prefix cache</li>
+  </ul>
+  注意 v1 把 KV cache 的"账本"完全留在 scheduler 进程里（CPU 侧），<strong>worker 拿到的只是"用第几块"的指示</strong>。这是 v0 → v1 一个重要重构。
+  <div class="ask">"allocate" 在 vLLM 里是<strong>什么动作</strong>？跟 malloc 区别在哪？(答：它不分配显存，只是登记"哪几块归你"。显存在启动时就分配好了。)</div>
+</div>
+
+<h3>6.2 第二遍 · BlockPool</h3>
+
+<div class="code-anchor">
+  <div class="label">读 ② · 2 小时 · 块池</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/core/block_pool.py" target="_blank">vllm/v1/core/block_pool.py</a></div>
+  实际的 free list + hash-based 共享。重点看：
+  <ul>
+    <li><code>BlockPool.__init__</code> — 一次性建出所有 <code>num_blocks</code> 个 <code>KVCacheBlock</code>。注意这是 Python 对象，<strong>不是显存</strong>（显存在 worker 上预分配）。</li>
+    <li><code>self.free_block_queue</code> — 一个双向链表（FreeKVCacheBlockQueue），实现 O(1) 的 pop_head / append。LRU 用的。</li>
+    <li><code>self.cached_block_hash_to_block</code> — dict[hash → block]，prefix cache 的查找表。</li>
+    <li><code>get_new_blocks(num)</code> — 从 free_queue 头部取若干块。</li>
+    <li><code>free_block(block)</code> — 引用计数减一，到 0 就放回 free_queue。</li>
+    <li><code>get_cached_block(hash) → block | None</code> — 看 prefix 是否已被缓存。</li>
+  </ul>
+  <div class="ask">两个 sequence 怎么<strong>发现</strong>它们 prefix 相同？hash 怎么算的（搜 <code>hash_block_tokens</code>）？</div>
+</div>
+
+<p>关键发现：<strong>free 不等于丢弃</strong>。一个 block 引用计数到 0、回到 free_queue 之后，如果还<strong>没被覆盖</strong>，它依然在 cached_block_hash_to_block 里——下次同 prefix 进来命中，可以从 free 列表里"救回"它。这就是 prefix cache 在 free 状态下仍然能命中的原因。</p>
+
+<h3>6.3 第三遍 · Hash 怎么算</h3>
+
+<p>Prefix cache 的命中靠 hash。<strong>同样的 token 序列必须 hash 到同一个 key</strong>。关键代码：</p>
+
+<pre><code># 类似实现（具体函数名以源码为准，搜 hash_block_tokens）
+def hash_block_tokens(parent_block_hash, token_ids):
+    """链式 hash —— 一块的 hash 依赖上一块的 hash。
+
+    这样保证: 只有"从开头到这块"完全相同的两个序列才会撞 hash。
+    避免: 只是"中间一段相同"被错误命中。
+    """
+    return hash((parent_block_hash, tuple(token_ids)))</code></pre>
+
+<p>这是<strong>chain hash</strong>，跟 Merkle tree 的思路一样。每一块的指纹包含了它的父块指纹，保证 prefix 一致性。</p>
+
+<div class="callout q">
+  <div class="label">思考</div>
+  如果不用 chain hash，只 hash 当前块的 token，会出什么问题？<br>
+  <strong>答</strong>：序列 A = "你好世界" 和 B = "再见世界" 的最后一块都是 "世界"，会被错误地共享 KV。
+  但 "世界" 在 A 和 B 的语境中的 attention 应该不一样（因为前面 K 不同），共享后输出会错。
+</div>
+
+<h3>6.4 第四遍 · 每序列的"翻页"逻辑</h3>
+
+<div class="code-anchor">
+  <div class="label">读 ③ · 1.5 小时 · 序列状态</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/core/kv_cache_utils.py" target="_blank">vllm/v1/core/kv_cache_utils.py</a> 或 single_type_kv_cache_manager.py</div>
+  <strong>每个序列的 block table 是怎么存的</strong>。看每次新增 token 是怎么决定 "需不需要再申请一块"。
+  关键逻辑：
+  <pre><code># 伪代码
+def append_token(request, new_token):
+    request.token_ids.append(new_token)
+    # 当前 token 数已经填到第几块的第几格？
+    num_blocks_needed = ceil(len(request.token_ids) / block_size)
+    while len(request.block_ids) &lt; num_blocks_needed:
+        new_block = block_pool.get_new_blocks(1)[0]
+        request.block_ids.append(new_block.id)</code></pre>
+  <div class="ask">block size 是 16 token，意味着每 16 个 token 才会"翻页"。这个数字为啥不能更大或更小？(回看 §5.3)</div>
+</div>
+
+<h3>6.5 第五遍 · 走到 GPU 端</h3>
+
+<div class="code-anchor">
+  <div class="label">读 ④ · 1 小时 · worker 接口</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu_model_runner.py" target="_blank">vllm/v1/worker/gpu_model_runner.py</a></div>
+  Worker 怎么把 block table 喂给 attention kernel。搜 <code>block_table</code> 和 <code>slot_mapping</code> 这两个变量。
+  <ul>
+    <li><code>block_table</code> · 形状 (num_seqs, max_num_blocks)，每行是一个序列的 logical → physical 映射。</li>
+    <li><code>slot_mapping</code> · 形状 (total_tokens,)，对<strong>这一步要写入</strong>的每个新 token，给出"该写到哪个 (physical_block, offset_in_block)"。</li>
+  </ul>
+  <div class="ask">attention kernel 拿到一个 query token 后，<strong>怎么找到它对应的所有 KV</strong>？这两个变量分别答了什么问题？(block_table 答"读哪里"，slot_mapping 答"写哪里")</div>
+</div>
+
+<h3>6.6 attention kernel 端绑定</h3>
+
+<div class="code-anchor">
+  <div class="label">读 ⑤ · 1.5 小时 · 走到 CUDA</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/csrc/attention/paged_attention_v1.cu" target="_blank">csrc/attention/paged_attention_v1.cu</a></div>
+  这个 kernel 是 vLLM 自己写的 paged-attention kernel。<strong>不要试图全部看懂</strong>，看以下几点：
+  <ul>
+    <li>kernel 签名里有 <code>block_tables</code> 和 <code>seq_lens</code> 参数</li>
+    <li>外层循环遍历 KV 的 block</li>
+    <li>每次循环用 <code>block_tables[seq_idx][block_idx]</code> 算出物理块的内存地址</li>
+    <li>从该地址 load K, V 到 shared memory，做 dot product</li>
+    <li>online softmax 累加（这是 FlashAttention 的核心，M4 详讲）</li>
+  </ul>
+  这就是 §5.4 的伪代码在 CUDA 里的真身。看不懂细节没关系，<strong>认出结构就够</strong>。
+</div>
+
+<h2 id="prefix"><span class="num">07</span>Prefix Caching · "page cache" 的现代版</h2>
+
+<p>OS 里 page cache 是：<strong>"读过的磁盘块缓存在内存，下次再读直接命中"</strong>。
+vLLM 里 prefix cache 是：<strong>"算过的 prompt 的 KV 缓存在显存，下个共享 prompt 的请求直接命中"</strong>。</p>
+
+<h3>7.1 命中的时机线</h3>
+
+<div class="diagram">
+  <pre style="text-align:left; background:transparent; border:none; font-size:13px;"><code>请求 1 prompt:  [system: 你是一个客服] + [user: 怎么退货?]
+                ─────────────── 16 tokens ───────────────  +  ─── 5 tokens ───
+请求 2 prompt:  [system: 你是一个客服] + [user: 怎么改地址?]
+                ─────────────── 16 tokens ───────────────  +  ─── 6 tokens ───
+
+   前 16 tokens 的 KV 完全相同
+   →  请求 1 算完后，把 P3 这块标记为可共享 (cache_blocks 写入 hash 表)
+   →  请求 2 进来 hash 一对：命中！直接引用 P3，跳过 prefill 这一段
+   →  延迟降低（少算 16 token 的 prefill）、显存少占（少存 16 token 的 KV）</code></pre>
+</div>
+
+<h3>7.2 三种状态</h3>
+
+<p>每个 block 在生命周期里有三种状态：</p>
+
+<table>
+  <thead><tr><th>状态</th><th>ref_count</th><th>在 hash 表？</th><th>能被 reuse 吗</th></tr></thead>
+  <tbody>
+    <tr><td>USED (in-flight)</td><td>≥1</td><td>是</td><td>能被命中（share）</td></tr>
+    <tr><td>EVICTABLE (free 但还热)</td><td>0</td><td>是</td><td>能命中（"救回"）；也能被新请求覆盖</td></tr>
+    <tr><td>FRESH (新分配 / 已被覆盖)</td><td>≥1</td><td>否</td><td>计算前不能命中</td></tr>
+  </tbody>
+</table>
+
+<p>关键设计：<strong>EVICTABLE 状态让 prefix cache 的"命中率"不依赖于请求并发</strong>。即使两个共享 prefix 的请求<strong>错开</strong>到达（请求 1 已经结束、请求 2 后来），只要中间没把 P3 覆盖掉，请求 2 还能命中。</p>
+
+<h3>7.3 Eviction 策略</h3>
+
+<p>显存有限。free_queue 是双向链表，head 是最近释放的、tail 是最久没用的。<strong>取新块从 head 取（LRU 的 fresh-first）；如果不够，从 tail 强制 evict（覆盖掉旧的 EVICTABLE block）</strong>。</p>
+
+<p>这和 OS page cache 完全是同一个算法（Linux 用的是 active/inactive LRU 链表，思路相同）。差别只在<strong>粒度</strong>（4KB vs 16 token KV）。</p>
+
+<h3>7.4 OS page cache vs vLLM prefix cache · 完整对照</h3>
+
+<table>
+  <thead><tr><th></th><th>OS page cache</th><th>vLLM prefix cache</th></tr></thead>
+  <tbody>
+    <tr><td>cache key</td><td>(file inode, offset)</td><td>chain hash(token sequence)</td></tr>
+    <tr><td>命中粒度</td><td>4KB 页</td><td>16 tokens 块</td></tr>
+    <tr><td>失效</td><td>写文件、删除</td><td>显存压力下被 evict（LRU）</td></tr>
+    <tr><td>读延迟收益</td><td>SSD → 几 µs</td><td>跳过整个 prefill 段，几十-几百 ms</td></tr>
+    <tr><td>命中前提</td><td>同一文件 + offset</td><td>同 prefix (chain hash 一致)</td></tr>
+    <tr><td>写回机制</td><td>dirty bit + flush</td><td>不需要（KV 是 cache 不是 store）</td></tr>
+    <tr><td>典型命中率</td><td>~80% (热数据)</td><td>~30-70% (取决于 workload，system prompt 共享多则高)</td></tr>
+  </tbody>
+</table>
+
+<h3>7.5 限制：只能命中 block-aligned prefix</h3>
+
+<p>vLLM 的 prefix cache 是<strong>整块粒度</strong>。如果两个 prompt 在第 17 个 token 才分叉（第 16 个 token 之后），只能共享前 16 token 的那一块（因为 chain hash 是按 16-token 块算的）。第 17 token 那块的 hash 已经因为该 token 不同而完全不同。</p>
+
+<p>SGLang 的 RadixAttention 用细粒度 radix tree 解了这个问题——但代价是 lookup 更慢、实现更复杂。当 prompt 共享是<strong>动态分叉</strong>（agent 多分支推理）时 SGLang 优；当 prompt 共享是<strong>固定 system prompt</strong>（90% serving 场景）时 vLLM 的简单方案足够。</p>
+
+<h2 id="swap"><span class="num">08</span>CPU Offload / Swap · 当显存真的不够</h2>
+
+<p>分页解决了"碎片"，prefix 共享解决了"重复"。但<strong>如果新请求来了、所有可 evict 的 block 都已经被 evict、仍然不够呢</strong>？两条路：</p>
+
+<ol>
+  <li><strong>Preempt</strong>（M3 主题）—— 把某个 RUNNING 请求挤出去，让新请求/高优先级请求进来</li>
+  <li><strong>Swap</strong>（本节）—— 把不活跃的 block 从 GPU 显存搬到 host RAM 或 NVMe，腾出空间</li>
+</ol>
+
+<h3>8.1 Swap 的工程现实</h3>
+
+<table>
+  <thead><tr><th>层级</th><th>带宽</th><th>典型容量</th><th>swap 一块 (64 KB × 32 layer = 2MB) 用时</th></tr></thead>
+  <tbody>
+    <tr><td>GPU HBM ↔ Host RAM (PCIe Gen4)</td><td>32 GB/s</td><td>无限大</td><td>~62 µs</td></tr>
+    <tr><td>GPU HBM ↔ Host RAM (PCIe Gen5)</td><td>64 GB/s</td><td>无限大</td><td>~31 µs</td></tr>
+    <tr><td>GPU HBM ↔ NVMe (Direct Storage)</td><td>~14 GB/s</td><td>巨大</td><td>~140 µs</td></tr>
+  </tbody>
+</table>
+
+<p>看似还行。但 swap 是<strong>全模型</strong>那么大：一个序列 4K context 大约 4096/16 = 256 块 × 2 MB = 512 MB。swap 一个 4K 序列 ~16 ms，**比一次 decode step (~10ms) 还慢**。所以 swap 必须<strong>提前异步</strong>，否则 decode 直接 stall。</p>
+
+<h3>8.2 代码入口</h3>
+
+<div class="code-anchor">
+  <div class="label">读 · CPU offload</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/" target="_blank">vllm/v1/worker/</a> · 搜 swap_in / swap_out / cpu_offload</div>
+  vLLM 的 swap 实现散在 worker 端（实际做 GPU↔CPU 拷贝）和 scheduler 端（决定何时 swap）。v1 把这部分简化了不少 —— 默认 preempt 走 recompute，swap 是可选项。
+  <div class="ask">Recompute 跟 swap 各适合什么场景？(短请求 recompute 划算；长请求且显存压力是阵发的，swap 更省。M3 会重新讨论。)</div>
+</div>
+
+<h2 id="cousins"><span class="num">09</span>同类设计的对比 · 横向看 KV 管理</h2>
+
+<p>把 PagedAttention 放回大家族里：</p>
+
+<table>
+  <thead><tr><th>设计</th><th>核心思路</th><th>命中粒度</th><th>典型场景</th></tr></thead>
+  <tbody>
+    <tr><td>朴素 contiguous</td><td>每请求预分配 max_len 连续段</td><td>—</td><td>HuggingFace generate(), 早期 Triton Inference</td></tr>
+    <tr><td><strong>PagedAttention</strong> (vLLM)</td><td>固定块 + block table，OS 分页类比</td><td>block (16 token)</td><td>大部分线上 serving，system prompt 共享强</td></tr>
+    <tr><td>RadixAttention (SGLang)</td><td>Radix tree 索引 token 序列</td><td>token 级</td><td>多分支推理、Tree of Thoughts、长 agent 对话</td></tr>
+    <tr><td>H2O eviction</td><td>只保留 heavy-hitter token 的 KV，其他丢</td><td>token 级 (drop)</td><td>极长 context 容量受限场景，可接受少量精度损失</td></tr>
+    <tr><td>StreamingLLM</td><td>固定 sliding window + attention sink</td><td>token 级 (drop)</td><td>无限 context 流式输出，对早期 token 不依赖</td></tr>
+    <tr><td>Mooncake (Moonshot)</td><td>把 KV cache 跨节点共享 (分布式 KV)</td><td>块级</td><td>大集群多 host serving</td></tr>
+  </tbody>
+</table>
+
+<p>把这张表收藏 —— 看新论文时先定位"它在哪一行"。Prompt 看不出来? <strong>看它怎么处理 KV cache</strong>，方向立刻明白。</p>
+
+<h2 id="lab"><span class="num">10</span>动手 · 复现碎片对比</h2>
+
+<p>这是本月的硬核作业。<strong>跑通它，PagedAttention 就刻进肌肉里了。</strong></p>
+
+<h3>10.1 实验设计</h3>
+
+<ol>
+  <li>租 A10 (24 GB)，跑 Llama 3.1 8B fp16，max_model_len = 4096。</li>
+  <li>启动 vLLM 时打开日志：能看到 <code>GPU KV cache size: X tokens</code>，<code>Maximum concurrency: Y</code>。把这两个数字记下来。</li>
+  <li>用 <code>benchmarks/benchmark_serving.py</code> 跑三组 workload：
+    <ul>
+      <li><strong>A · 短输出</strong>：100 个请求，prompt 50 tokens，max_tokens=10</li>
+      <li><strong>B · 长输出</strong>：100 个请求，prompt 50 tokens，max_tokens=2000</li>
+      <li><strong>C · 共享 prompt</strong>：100 个请求，prompt = 同一个 200 token system prompt + 不同 20 token 短问 ，max_tokens=100</li>
+    </ul>
+  </li>
+  <li>对每组记录：throughput (tok/s)、TTFT (time to first token p50/p99)、平均显存利用率（看 nvidia-smi 或 vLLM metrics）。</li>
+  <li>再跑一遍 <strong>C 但加 <code>--no-enable-prefix-caching</code></strong>，看 throughput 差多少。</li>
+</ol>
+
+<h3>10.2 命令样例</h3>
+
+<pre><code># Terminal 1: 起 server
+vllm serve meta-llama/Llama-3.1-8B-Instruct \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.85 \
+  --enable-prefix-caching
+
+# Terminal 2: benchmark
+python benchmarks/benchmark_serving.py \
+  --backend vllm \
+  --model meta-llama/Llama-3.1-8B-Instruct \
+  --dataset-name sonnet \
+  --dataset-path benchmarks/sonnet.txt \
+  --num-prompts 100 \
+  --request-rate 10 \
+  --save-result</code></pre>
+
+<h3>10.3 期待的数字</h3>
+
+<div class="callout check">
+  <div class="label">✓ 应该看到</div>
+  <ul>
+    <li><strong>A 比 B 在 throughput 上高 3-5×</strong>（B 显存压力大、动态分配 + eviction 多）。</li>
+    <li><strong>C 跟 A 类似的 throughput，但 prefix cache hit rate &gt; 80%</strong>（看 vLLM metrics 里 <code>prefix_cache_hits</code>）。</li>
+    <li><strong>C 关掉 prefix caching</strong> ⇒ throughput 砍半，TTFT 升 2-3×。</li>
+  </ul>
+  数字对不上？回去看你的 prompt 是不是真的有共享 prefix。
+</div>
+
+<h3>10.4 进阶 · 看 metrics</h3>
+
+<p>vLLM 暴露 Prometheus metrics（默认开在 :8000/metrics）：</p>
+
+<pre><code>curl http://localhost:8000/metrics | grep vllm
+# vllm:num_requests_running
+# vllm:num_requests_waiting
+# vllm:gpu_cache_usage_perc
+# vllm:cpu_cache_usage_perc
+# vllm:num_preemptions_total
+# vllm:prefix_cache_hits_total
+# vllm:prefix_cache_queries_total</code></pre>
+
+<p>这些指标值得每个一看。<strong>prefix_cache_hits_total / queries_total = 命中率</strong>，这是你下次调参的关键数字。</p>
+
+<h2 id="pitfalls"><span class="num">11</span>常见误解 · 把"以为懂"挤出来</h2>
+
+<details class="predict">
+  <summary>"PagedAttention 就是一个新的 attention 算子"</summary>
+  <div class="body">
+    错。PagedAttention 是 <strong>kernel + memory layout 的协同设计</strong>。
+    Kernel 是普通的 attention，唯一区别是它能从非连续地址<em>聚集</em> K 和 V。
+    真正的 idea 在 memory layout（block table 那一层 indirection），不在数学。
+    去掉 indirection 这层、kernel 还是同一个 attention。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"block size 越小越好，碎片越少"</summary>
+  <div class="body">
+    错。block 太小 → block table 太大、attention kernel 的 gather 循环变长、prefix cache 命中粒度太细。
+    16 是 vLLM 实验出来的 sweet spot。如果你的 workload 平均输出极短（&lt;16 token），可以试 8；
+    长 context 用 32 也无伤大雅。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"prefix caching 总是开着是赚的"</summary>
+  <div class="body">
+    几乎是，但代价是 <strong>hash + 引用计数的 CPU 开销</strong>。
+    在 prompt 完全没重复的场景（个性化高的 chat），收益接近 0、开销仍在。
+    vLLM 默认开是因为大部分线上场景有 system prompt。
+    高度个性化的场景（每用户独立 prompt template）可以关掉省 CPU。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"GPU memory utilization 高 = throughput 高"</summary>
+  <div class="body">
+    不严格成立。memory utilization 是<strong>占用</strong>不是<strong>有效使用</strong>。
+    所有 block 都被占着但 90% 是 idle 的低优先级请求 = 占用 100%、吞吐 = 0。
+    更准的指标是 <code>num_requests_running</code> 和 <code>gpu_cache_usage_perc</code>，搭配 throughput 看。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"vLLM 的 swap 跟 OS 的 swap 一样"</summary>
+  <div class="body">
+    几乎，但 vLLM 的 swap 粒度是<strong>整个序列的所有 block</strong>（要么全留要么全走），不像 OS 可以单页 swap。
+    原因：attention 必须看到完整 KV，不能用一半。
+    一些研究系统（FlexGen）做了"按 token 分片 swap"，但工程复杂，主流 vLLM/SGLang 还没采用。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"GQA / MLA 让 PagedAttention 没意义了，KV 已经够小"</summary>
+  <div class="body">
+    反了。GQA 让单序列 KV 变小 = 一张卡能装更多并发 = 调度复杂度上升 = PagedAttention 更重要。
+    MLA (DeepSeek) 把 KV 进一步压缩到 latent 维度，块大小也跟着变，但 paged 思路不变。
+  </div>
+</details>
+
+<h2 id="pr"><span class="num">12</span>本月 PR 候选方向</h2>
+
+<p>Month 2 的 KPI 是<strong>一个内存子系统相关的 PR</strong>。难度梯度：</p>
+
+<h3>12.1 入门（500-行内，1-2 周）</h3>
+
+<ul>
+  <li>给 <code>BlockPool</code> 加一个 metric（block 池碎片率、平均 block 寿命）暴露到 Prometheus。</li>
+  <li>给某条错误信息加上上下文（"failed to allocate X blocks，pool has Y free, Z evictable" 比 "OOM" 有用 10×）。</li>
+  <li>给 <code>kv_cache_manager.py</code> 写测试覆盖未测函数（搜 <code>--cov-report</code> 看 coverage gap）。</li>
+  <li>修文档：架构图示，<code>docs/source/design/</code> 下加一个 prefix cache 的内部图。</li>
+</ul>
+
+<h3>12.2 中等（一两周 + 设计讨论）</h3>
+
+<ul>
+  <li>修一个 prefix cache hash 的 edge case（搜 issue tracker <code>prefix-cache</code> label）。常见 case：tokenizer 加 special token 时 hash 没考虑。</li>
+  <li>给 <code>BlockPool</code> 加一个新策略选项（如 ARC、Clock-PRO），跟 LRU 对照 benchmark。</li>
+  <li>改进 swap_out 的 IO（用 cudaMemcpyAsync + pinned memory，看能不能降低延迟）。</li>
+</ul>
+
+<h3>12.3 高难（vLLM RFC 级，1+ 月）</h3>
+
+<ul>
+  <li>实现一个细粒度 prefix cache 变种（接近 SGLang RadixAttention 但更轻量）。需要 RFC 提案。</li>
+  <li>把 prefix cache 扩展到跨进程/跨 host（Mooncake 风格 KV 共享）。</li>
+</ul>
+
+<div class="callout tip">
+  <div class="label">💡 找 issue 的诀窍</div>
+  Issue tracker 用：<code>is:open is:issue label:kv-cache</code> 或 <code>label:prefix-caching</code>。<br>
+  按 most-commented 排，前 3 页通常是大家都觉得该做但没人开始的。挑一个评论里 "good first issue" / "help wanted" 的，主动到 Slack 的 #vllm-dev 频道认领。
+</div>
+
+<h2 id="check"><span class="num">13</span>本页自检 · 这是个长清单</h2>
+
+<div class="selfcheck">
+  <h4>Month 2 结束时这些应该全部 ✓</h4>
+  <ul>
+    <li><input type="checkbox" id="m1"/><label for="m1">我能<strong>不查资料</strong>画出 OS 虚拟内存的页表三件套（虚拟页 / 页表 / 物理页）。</label></li>
+    <li><input type="checkbox" id="m2"/><label for="m2">同样地，我能画出 vLLM 的 logical block / block table / physical block。</label></li>
+    <li><input type="checkbox" id="m3"/><label for="m3">"为什么 block size = 16" 我能讲出至少 3 个 trade-off（碎片 / lookup / prefix 命中粒度 / kernel 效率）。</label></li>
+    <li><input type="checkbox" id="m4"/><label for="m4">给定 model config，我能心算出 per_token_kv_bytes（公式 + 数字）。</label></li>
+    <li><input type="checkbox" id="m5"/><label for="m5">prefix caching 的 chain hash 怎么避免碰撞？我能用 5 句话讲清楚。</label></li>
+    <li><input type="checkbox" id="m6"/><label for="m6">attention kernel 拿到 <code>block_table</code> 和 <code>slot_mapping</code>，<strong>分别用来干什么</strong>，我能说清。</label></li>
+    <li><input type="checkbox" id="m7"/><label for="m7">"显存满了"会发生什么？vLLM 是 crash、evict、preempt、还是 swap？四种之间的判断逻辑我清楚。</label></li>
+    <li><input type="checkbox" id="m8"/><label for="m8">我已经把 PagedAttention 论文从头读到尾<strong>至少一遍</strong>。Section 6.4 的 block size 实验我能复述。</label></li>
+    <li><input type="checkbox" id="m9"/><label for="m9">§10 的 benchmark 实验跑过，数字记在笔记里，跟"期待数字"对照过。</label></li>
+    <li><input type="checkbox" id="m10"/><label for="m10">我能讲出 PagedAttention vs RadixAttention vs H2O 三者各自适合的场景。</label></li>
+    <li><input type="checkbox" id="m11"/><label for="m11">本月已有 PR 在 review 或 merged。</label></li>
+  </ul>
+</div>
+
+<h2><span class="num">14</span>延伸阅读</h2>
+
+<ul>
+  <li><strong>PagedAttention 原论文</strong> · Kwon et al., SOSP 2023 · <a href="https://arxiv.org/abs/2309.06180" target="_blank">arxiv.org/abs/2309.06180</a> — §3 设计动机、§4 系统设计、§6.4 block size 消融。</li>
+  <li><strong>vLLM 官方架构 blog</strong> · <a href="https://blog.vllm.ai/" target="_blank">blog.vllm.ai</a> — 看最新的 v1 架构文章。</li>
+  <li><strong>SGLang / RadixAttention</strong> · <a href="https://arxiv.org/abs/2312.07104" target="_blank">arxiv.org/abs/2312.07104</a> — 对照学。</li>
+  <li><strong>H2O · Heavy Hitter Oracle</strong> · <a href="https://arxiv.org/abs/2306.14048" target="_blank">arxiv.org/abs/2306.14048</a> — KV cache 的 working set 视角。</li>
+  <li><strong>Mooncake KV Cache disaggregation</strong> · <a href="https://arxiv.org/abs/2407.00079" target="_blank">arxiv.org/abs/2407.00079</a> — Moonshot 的分布式 KV cache。</li>
+  <li><strong>OSTEP Ch 18 / 19 / 21 / 22</strong> · <a href="https://pages.cs.wisc.edu/~remzi/OSTEP/" target="_blank">pages.cs.wisc.edu/~remzi/OSTEP/</a> — OS 虚拟内存权威教材。</li>
+  <li><strong>MLA · DeepSeek-V2</strong> · <a href="https://arxiv.org/abs/2405.04434" target="_blank">arxiv.org/abs/2405.04434</a> — KV 压缩到 latent 维度，长 context 杀器。</li>
+</ul>
+
+<div class="pagenav">
+  <a class="prev" href="02-entrypoints.html"><div class="dir">prev</div><div class="ttl">M1 · 入口</div></a>
+  <a class="next" href="04-scheduler.html"><div class="dir">next</div><div class="ttl">M3 · 调度器</div></a>
+</div>
+
+</main>
+</div>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

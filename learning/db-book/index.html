@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Systems · CS186 螺旋式图解教材</title>
+<link rel="stylesheet" href="styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▦</text></svg>">
+</head>
+<body>
+<div class="cover db-cover">
+  <div class="cover-inner">
+    <div class="cover-top">
+      <div class="cover-kicker">CS186 · Illustrated Textbook</div>
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+    </div>
+
+    <h1>Data Systems,<br><span class="accent">from SQL down to bytes.</span></h1>
+    <p class="sub">不是把 Berkeley CS186 笔记换个皮，而是把数据库系统里最抽象的“代价、页、索引、事务、恢复”做成能读、能看、能推演的图解教材。</p>
+    <p class="cover-lead">路线是螺旋式的：先建立全局地图，再用关键图解打穿每个机制，最后回到现代系统里的 trade-off。B+ 树保留交互沙盒，其余章节转成更省心的静态图文。</p>
+    <div class="cover-cta">
+      <a class="btn primary" href="ch01-sql/index.html">从第 1 章开始</a>
+      <a class="btn" href="#toc">看全书结构</a>
+    </div>
+
+    <div class="cover-stats">
+      <div class="s"><b>12</b><span>核心章节</span></div>
+      <div class="s"><b>3</b><span>学习螺旋</span></div>
+      <div class="s"><b>12</b><span>已完成章节</span></div>
+      <div class="s"><b>0</b><span>照搬课件</span></div>
+    </div>
+  </div>
+</div>
+
+<section class="toc-wrap" id="toc">
+  <div class="toc-grid">
+    <h2>全书结构</h2>
+    <p class="toc-intro">先把数据库看成“一个 SQL 请求如何变成页 I/O”，再向下钻索引和存储，向上回到优化器、事务、恢复与分布式系统。</p>
+
+    <div class="part-block">
+      <div class="part-head"><span class="pno">I</span><span class="pt">查询语言</span><span class="pd">先知道你问了什么</span></div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch01-sql/index.html"><span class="badge ready">ready</span><span class="cno">01</span><span class="ct">SQL：声明式接口</span><span class="cd">SQL 为什么不是“怎么做”，而是“我要什么”。</span></a>
+        <a class="ch-card" href="ch02-relational-model/index.html"><span class="badge ready">ready</span><span class="cno">02</span><span class="ct">关系模型与代数</span><span class="cd">优化器真正操作的那门小语言。</span></a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head"><span class="pno">II</span><span class="pt">存储与索引</span><span class="pd">把逻辑请求落到字节</span></div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch03-disks-files-buffers/index.html"><span class="badge ready">ready</span><span class="cno">03</span><span class="ct">磁盘、文件、Buffer Pool</span><span class="cd">页、slot、eviction，把“表”拆回物理结构。</span></a>
+        <a class="ch-card" href="ch04-cost-indexes/index.html"><span class="badge ready">ready</span><span class="cno">04</span><span class="ct">代价模型与索引选择</span><span class="cd">为什么数据库最关心的不是 CPU，而是 I/O。</span></a>
+        <a class="ch-card" href="ch05-btree/index.html"><span class="badge ready">ready</span><span class="cno">05</span><span class="ct">B+ 树：十亿行里一步命中</span><span class="cd">插入、分裂、范围扫描、fan-out、B+Tree vs LSM。</span></a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head"><span class="pno">III</span><span class="pt">查询执行</span><span class="pd">把计划跑成数据流</span></div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch06-sorting-hashing/index.html"><span class="badge ready">ready</span><span class="cno">06</span><span class="ct">排序与哈希</span><span class="cd">外排序、Grace Hashing，以及为什么内存不够才有趣。</span></a>
+        <a class="ch-card" href="ch07-joins-iterators/index.html"><span class="badge ready">ready</span><span class="cno">07</span><span class="ct">Joins 与 Iterator 模型</span><span class="cd">Nested loop 到 hash join，统一成 next() 的数据流。</span></a>
+        <a class="ch-card" href="ch08-query-optimization/index.html"><span class="badge ready">ready</span><span class="cno">08</span><span class="ct">查询优化器</span><span class="cd">枚举计划、估计选择率、在指数空间里找便宜路径。</span></a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head"><span class="pno">IV</span><span class="pt">事务系统</span><span class="pd">让并发和故障都像没发生</span></div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch09-locking/index.html"><span class="badge ready">ready</span><span class="cno">09</span><span class="ct">事务、锁与隔离</span><span class="cd">Serializability、2PL、deadlock、MVCC 的共同问题。</span></a>
+        <a class="ch-card" href="ch10-recovery/index.html"><span class="badge ready">ready</span><span class="cno">10</span><span class="ct">Recovery 与 ARIES</span><span class="cd">WAL、redo/undo、checkpoint，崩了也能回来。</span></a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head"><span class="pno">V</span><span class="pt">分布式与现代系统</span><span class="pd">从单机 DB 到数据平台</span></div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch11-distributed-txns/index.html"><span class="badge ready">ready</span><span class="cno">11</span><span class="ct">2PC、Paxos 与分布式事务</span><span class="cd">一旦机器不止一台，commit 就变成协议。</span></a>
+        <a class="ch-card" href="ch12-nosql-modern/index.html"><span class="badge ready">ready</span><span class="cno">12</span><span class="ct">NoSQL、Spark 与现代系统</span><span class="cd">把 CS186 的古典内核接到 LSM、lakehouse、OLAP。</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="howto">
+  <div class="howto-inner">
+    <h2>学习方式</h2>
+    <div class="howto-grid">
+      <div class="howto-item"><div class="ic">1</div><h4>先跑一遍</h4><p>先用交互模型建立画面，不急着背定义。</p></div>
+      <div class="howto-item"><div class="ic">2</div><h4>再写不变量</h4><p>把每个系统组件压成 3 到 5 条 invariant。</p></div>
+      <div class="howto-item"><div class="ic">3</div><h4>最后算代价</h4><p>CS186 真正的肌肉记忆，是把概念转成 I/O cost。</p></div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-foot">Built as a local interactive CS186 companion.</footer>
+<script src="lib/components.js"></script>
+</body>
+</html>

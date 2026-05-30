@@ -1,0 +1,1165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>15 篇论文导读 — Infra Learning Path</title>
+<meta name="description" content="vLLM / AI infra 必读论文清单，按读的顺序，每篇含问题—方法—代码对应—追问。" />
+<link rel="stylesheet" href="../assets/style.css" />
+<style>
+  /* ===== Paper navigator (concept map + axis filter) ===== */
+  .pnav { margin: 26px 0 10px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; box-shadow: var(--shadow-sm); }
+  .pnav-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 13px 18px; background: var(--bg-soft); border-bottom: 1px solid var(--border); }
+  .pnav-head .t { font-weight: 600; font-size: 14px; }
+  .pnav-head .hint { font-size: 12px; color: var(--fg-muted); }
+  .axis-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .axis-chip { font-size: 12px; font-family: var(--font-mono); padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border-strong); cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; background: var(--bg); transition: all .12s; color: var(--fg-soft); }
+  .axis-chip .sw { width: 9px; height: 9px; border-radius: 2px; }
+  .axis-chip[aria-pressed="false"] { opacity: .35; }
+  .axis-chip:hover { border-color: var(--accent); }
+  .pmap-wrap { padding: 10px 8px 2px; overflow-x: auto; }
+  .pmap { display: block; margin: 0 auto; max-width: 100%; height: auto; min-width: 660px; }
+  .pmap .node rect { transition: opacity .15s; }
+  .pmap .node { cursor: pointer; }
+  .pmap .node text { pointer-events: none; }
+  .pmap .node:hover rect { filter: brightness(.96); }
+  .pmap.lit .edge { opacity: .1; }
+  .pmap.lit .edge.hot { opacity: 1; }
+  .pmap.lit .node:not(.hot):not(:hover) rect { opacity: .3; }
+  .pmap .node.off rect, .pmap .node.off text { opacity: .16; }
+  .pmap .edge.off { opacity: .05 !important; }
+  .pmap .elabel { font-size: 9px; fill: var(--fg-muted); opacity: 0; transition: opacity .15s; }
+  .pmap .edge.hot + .elabel, .pmap .elabel.hot { opacity: 1; }
+  .pnav-foot { font-size: 12px; color: var(--fg-muted); padding: 4px 18px 12px; }
+
+  /* ===== Reading tracker ===== */
+  .readtrack { padding: 15px 18px 18px; border-top: 1px solid var(--border); }
+  .readtrack .rt-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+  .readtrack .rt-top .rt-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-muted); }
+  .rt-count { font-family: var(--font-mono); font-size: 13px; color: var(--accent); font-weight: 600; }
+  .readtrack .bar { height: 8px; border-radius: 6px; background: var(--bg-code); overflow: hidden; margin: 0 0 14px; border: 1px solid var(--border); }
+  .readtrack .bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .35s ease; }
+  .rt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+  @media (max-width: 620px) { .rt-grid { grid-template-columns: 1fr; } }
+  .rt-item { display: flex; align-items: center; gap: 9px; padding: 6px 0; font-size: 13px; cursor: pointer; border-bottom: 1px dashed var(--border); }
+  .rt-item input { accent-color: var(--accent); flex-shrink: 0; margin: 0; }
+  .rt-item .dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .rt-item .n { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
+  .rt-item a { border: none; color: var(--fg); flex: 1; }
+  .rt-item a:hover { color: var(--accent); }
+  .rt-item.done a { text-decoration: line-through; color: var(--fg-muted); }
+  .rt-reset { font-size: 11px; font-family: var(--font-mono); color: var(--fg-muted); background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0; }
+  .rt-reset:hover { color: var(--accent); }
+
+  /* ===== Interactive lab (shared) ===== */
+  .lab { border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 0 var(--radius) var(--radius) 0; background: var(--bg); padding: 16px 18px; margin: 22px 0; box-shadow: var(--shadow-sm); }
+  .lab .lab-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--green); margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+  .lab .lab-h .pill { font-size: 10px; background: var(--green-bg); border: 1px solid var(--green); color: var(--green); padding: 1px 7px; border-radius: 20px; font-weight: 600; }
+  .lab .ctrl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+  .lab button.step { font-family: var(--font-mono); font-size: 13px; padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; transition: background .12s; }
+  .lab button.step:hover { background: #9a3412; }
+  .lab button.ghost { font-family: var(--font-mono); font-size: 13px; padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--bg); color: var(--fg-soft); cursor: pointer; }
+  .lab button.ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .lab button:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* softmax lab */
+  .sl-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+  .sl-tile { border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 7px 9px; min-width: 58px; text-align: center; background: var(--bg-soft); transition: all .18s; }
+  .sl-tile.active { border-color: var(--green); background: var(--green-bg); box-shadow: 0 0 0 2px var(--green-bg); }
+  .sl-tile.done { opacity: .5; }
+  .sl-tile .s { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--fg); }
+  .sl-tile .v { font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); }
+  .sl-state { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+  @media (max-width: 560px) { .sl-state { grid-template-columns: 1fr; } }
+  .sl-cell { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--bg-soft); }
+  .sl-cell .k { font-size: 11px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: .04em; }
+  .sl-cell .val { font-family: var(--font-mono); font-size: 19px; font-weight: 700; color: var(--accent); margin-top: 2px; }
+  .sl-cell .sub { font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); margin-top: 2px; min-height: 13px; }
+  .sl-log { font-family: var(--font-mono); font-size: 12px; line-height: 1.7; background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-top: 6px; color: var(--fg-soft); white-space: pre-wrap; min-height: 56px; }
+  .sl-verdict { margin-top: 10px; font-size: 13px; }
+  .sl-verdict.ok { color: var(--green); font-weight: 600; }
+
+  /* spec-decode calculator */
+  .specd { border: 1px solid var(--border); border-left: 3px solid var(--blue); border-radius: 0 var(--radius) var(--radius) 0; background: var(--bg); padding: 16px 18px; margin: 22px 0; box-shadow: var(--shadow-sm); }
+  .specd .lab-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--blue); margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+  .specd .lab-h .pill { font-size: 10px; background: var(--blue-bg); border: 1px solid var(--blue); color: var(--blue); padding: 1px 7px; border-radius: 20px; font-weight: 600; }
+  .specd .row { display: grid; grid-template-columns: 150px 1fr 64px; gap: 10px; align-items: center; margin: 10px 0; }
+  @media (max-width: 560px) { .specd .row { grid-template-columns: 1fr; gap: 3px; } }
+  .specd .row label { font-size: 13px; color: var(--fg-soft); }
+  .specd .row label small { color: var(--fg-muted); font-size: 11px; display: block; }
+  .specd input[type=range] { width: 100%; accent-color: var(--blue); }
+  .specd .rv { font-family: var(--font-mono); font-size: 14px; color: var(--blue); font-weight: 600; text-align: right; }
+  .specd-out { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  @media (max-width: 560px) { .specd-out { grid-template-columns: 1fr; } }
+  .specd-out .o { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; background: var(--bg-soft); text-align: center; }
+  .specd-out .o .n { font-family: var(--font-mono); font-size: 26px; font-weight: 700; color: var(--blue); line-height: 1; }
+  .specd-out .o .l { font-size: 12px; color: var(--fg-muted); margin-top: 5px; }
+  .specd-note { font-size: 12px; color: var(--fg-muted); margin-top: 10px; line-height: 1.6; }
+
+  /* axis tag inline */
+  .ax { display: inline-block; font-family: var(--font-mono); font-size: 10px; padding: 1px 7px; border-radius: 20px; vertical-align: 2px; border: 1px solid; }
+  .ax.mem { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-bg); }
+  .ax.sched { color: var(--blue); border-color: var(--blue); background: var(--blue-bg); }
+  .ax.compute { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+  .ax.parallel { color: #854d0e; border-color: var(--yellow-border); background: var(--yellow-bg); }
+
+  .pmap .node text { fill: var(--fg); }
+  .pmap .node .chk { fill: var(--green); font-weight: 700; opacity: 0; }
+  .pmap .node.read .chk { opacity: 1; }
+  .pmap .node.read rect { stroke: var(--green) !important; stroke-width: 2; }
+
+  @media (max-width: 620px) {
+    .content { padding-left: 22px; padding-right: 22px; max-width: 100%; overflow-x: hidden; }
+    .page-title { font-size: 31px; overflow-wrap: anywhere; }
+    .page-sub, .lede, p, li { overflow-wrap: anywhere; }
+    table { display: block; max-width: 100%; overflow-x: auto; }
+    th, td { min-width: 138px; }
+    .pnav-head { align-items: flex-start; }
+    .axis-legend { margin-left: 0; width: 100%; }
+    .pmap { min-width: 600px; }
+    .specd .rv { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="../index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+  <div class="nav-group"><div class="nav-label">起步</div><nav><ul>
+    <li><a href="../index.html"><span class="idx">/</span>主页 · 概览</a></li>
+    <li><a href="00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+    <li><a href="01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">6 个月主线</div><nav><ul>
+    <li><a href="02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+    <li><a href="03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+    <li><a href="04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+    <li><a href="05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+    <li><a href="06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+    <li><a href="09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">参考</div><nav><ul>
+    <li><a href="07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+    <li><a href="08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+  </ul></nav></div>
+  <div class="foot">源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a></div>
+</aside>
+
+<main class="content">
+
+<div class="crumbs">
+  <a href="../index.html">home</a><span class="sep">/</span>tutorial<span class="sep">/</span>15 篇论文
+</div>
+
+<h1 class="page-title">15 篇论文导读 · 两圈阅读顺序</h1>
+<p class="page-sub">第一圈 10 篇打地基 + 第二圈 5 篇追前沿。每篇 1-2 小时，读法：找出"问题—方法—代码对应"三段。</p>
+
+<p class="lede">
+  AI infra 这条线，<strong>读完第一圈 10 篇 ≈ 拿到 80% 的工程语言</strong>，能当 framework 去快速吸收新论文；
+  第二圈 5 篇把这两年最热的方向（投机解码、PD 分离、量化）补上。
+  顺序经过设计：每一篇都引出下一篇要回答的新问题——下面的
+  <a href="#frame">坐标系</a>、<a href="#frame">关系图</a>和几个<strong>可交互的小实验</strong>（online softmax、投机解码加速比）就是帮你把这张网看清。
+</p>
+
+<div class="callout tip">
+  <div class="label">💡 怎么读 infra 论文 · 90 分钟法</div>
+  <strong>不要</strong>从摘要读到引用。AI infra 论文几乎统一是这个结构：
+  <ol>
+    <li><strong>Intro 最后一段</strong> → 拿走 contribution 列表（看作者觉得自己解了啥）</li>
+    <li><strong>Motivation / Background</strong> → 拿走"现状什么不好"，一定有 figure 1 量化它</li>
+    <li><strong>Design 主体</strong> → 找<strong>第一张系统图</strong>，看懂它</li>
+    <li><strong>Implementation</strong> → 略读，知道用了什么技术栈就行</li>
+    <li><strong>Evaluation 第一张图</strong> → 拿走"性能提升幅度"</li>
+    <li><strong>Related work</strong> → <strong>跳过</strong>，等你自己做研究时再回看</li>
+    <li><strong>Discussion / Limitations</strong> → 必读！这是作者自己承认的边界</li>
+  </ol>
+  全程不超过 90 分钟。写 200 字三段笔记：问题 / 方法 / 跟 vLLM 哪行代码对应。
+</div>
+
+<h2 id="frame"><span class="num">00</span>先建坐标系：4 条优化轴</h2>
+
+<p>
+  下面这些论文乍看很散——有的讲内存，有的讲调度，有的写 CUDA。
+  但它们其实都在攻同<strong>一台机器上的 4 个瓶颈</strong>之一。先把这张坐标系装进脑子，
+  之后每读一篇，第一件事就是问："它在动哪条轴？" 这是把孤立论文连成知识网的关键。
+</p>
+
+<table>
+  <thead><tr><th>轴</th><th>瓶颈是什么</th><th>典型手段</th><th>本页对应论文</th></tr></thead>
+  <tbody>
+    <tr><td><span class="ax mem">显存</span> capacity</td><td>KV cache / 权重 / adapter 把 HBM 撑爆，能并发的请求数被显存卡住</td><td>分页、共享前缀、丢 token、量化</td><td>PagedAttention · RadixAttention · H2O · S-LoRA · 量化</td></tr>
+    <tr><td><span class="ax sched">调度</span> latency</td><td>请求长短不齐、prefill 与 decode 互相拖累，throughput↔latency 拉扯</td><td>iteration-level batching、chunked prefill、PD 分离</td><td>Orca · Sarathi-Serve · PD-disaggregation</td></tr>
+    <tr><td><span class="ax compute">算力</span> kernel</td><td>GPU 跑不满——要么 memory-bound 卡在 HBM 带宽，要么 kernel launch / 图开销大</td><td>IO-aware kernel、算子融合、编译、投机解码</td><td>FlashAttention(1/2/3) · torch.compile · Speculative Decoding</td></tr>
+    <tr><td><span class="ax parallel">并行</span> scale-out</td><td>单卡装不下 / 算不动，要跨卡甚至跨机，通信成新瓶颈</td><td>TP / PP / 数据与状态分片、PD 跨节点</td><td>ZeRO · Megatron-LM · (PD-disaggregation)</td></tr>
+  </tbody>
+</table>
+
+<div class="callout tip">
+  <div class="label">📐 一组反复出现的指标 · 先记住</div>
+  <ul>
+    <li><strong>TTFT</strong>（Time To First Token）= prefill 时延。主要由 <span class="ax compute">算力</span> + <span class="ax sched">调度</span> 决定。</li>
+    <li><strong>ITL / TPOT</strong>（Inter-Token Latency / Time Per Output Token）= decode 每步时延。decode 是 <strong>memory-bound</strong>，由 KV cache 大小 + 带宽决定。</li>
+    <li><strong>Throughput</strong> = 单位时间出的总 token 数。跟 batch 大小强相关，受 <span class="ax mem">显存</span> 容量上限约束。</li>
+    <li><strong>arithmetic intensity</strong>（算术强度）= FLOPs / 字节。低 = memory-bound（如 decode、朴素 attention），高 = compute-bound。<strong>判断一篇 kernel 论文省的是 FLOPs 还是带宽，就看它动的是分子还是分母。</strong></li>
+  </ul>
+  这几个词在 vLLM issue、论文 evaluation、面试里天天出现。看不懂指标，就读不懂"提升了多少"。
+</div>
+
+<h3>论文关系图 · 每一篇引出下一篇</h3>
+
+<p>
+  顺序不是随机的：解决一个瓶颈，会把下一个瓶颈顶到台面上。
+  <strong>hover 节点看它"逼出了谁"，点节点跳到对应导读。</strong>点上方色块可按轴筛选。
+</p>
+
+<div class="pnav">
+  <div class="pnav-head">
+    <span class="t">论文导航盘</span>
+    <span class="hint">hover = 看引出关系 · 点击 = 跳转</span>
+    <div class="axis-legend" id="axisLegend"></div>
+  </div>
+  <div class="pmap-wrap"><svg class="pmap" id="paperMap" viewBox="0 5 600 505" role="img" aria-label="论文关系图"></svg></div>
+  <div class="pnav-foot" id="mapFoot">实线箭头 = "前者解决后暴露的新问题，由后者回答"。虚线 = 同一思路的工程迭代 / 复用。</div>
+
+  <div class="readtrack">
+    <div class="rt-top">
+      <span class="rt-label">阅读进度 · 自动保存到本机</span>
+      <span class="rt-count" id="rtCount">0 / 0</span>
+    </div>
+    <div class="bar"><i id="rtBar"></i></div>
+    <div class="rt-grid" id="rtGrid"></div>
+    <div style="margin-top:12px;"><button class="rt-reset" id="rtReset">清空进度</button></div>
+  </div>
+</div>
+
+<h2><span class="num">01</span>必读 7 篇 · 按月对齐</h2>
+
+<h3 id="paged">① PagedAttention (vLLM) · SOSP 2023 <span class="tag red">M2</span> <span class="ax mem">显存</span></h3>
+
+<p><strong>Kwon et al.</strong> · "Efficient Memory Management for Large Language Model Serving with PagedAttention"<br>
+<a href="https://arxiv.org/abs/2309.06180" target="_blank">arxiv.org/abs/2309.06180</a> · <a href="https://github.com/vllm-project/vllm" target="_blank">github.com/vllm-project/vllm</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：朴素 KV cache 给每请求预分配 max_len 连续段，内/外部碎片 + 无法共享 prefix，显存利用率 ~20-40%。</li>
+  <li><strong>方法</strong>：固定 block (16 token) + block table，OS 虚拟内存的 GPU 重写。Attention kernel 内通过 block table indirection 读取 KV。配合 prefix caching 实现 COW-like 共享。</li>
+  <li><strong>结果</strong>：throughput 提升 2-4×（相比 FasterTransformer），显存利用率 ~96%。</li>
+</ul>
+
+<h4>关键图</h4>
+<ul>
+  <li><strong>Fig 2</strong>：朴素 KV cache 利用率分布——20-40% 是论文给出的"未优化前数字"。</li>
+  <li><strong>Fig 5</strong>：block table 示意图，跟 OS 页表完全平行。</li>
+  <li><strong>Fig 18 (§6.4)</strong>：block size 消融实验，4-32 几乎一样，64+ 掉。</li>
+</ul>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li><code>vllm/v1/core/kv_cache_manager.py</code> — 总管</li>
+  <li><code>vllm/v1/core/block_pool.py</code> — free list + hash 共享</li>
+  <li><code>csrc/attention/paged_attention_v1.cu</code> — kernel 端的 indirection</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>block size 为什么是 16？(论文 §6.4，回看 <a href="03-memory.html#paged">M2 §5.3</a>)</li>
+  <li>为什么 prefill 通常不用 PagedAttention kernel？</li>
+  <li>swap-out 比 recompute 在哪些 workload 下更优？(论文 §5.4)</li>
+</ol>
+
+<h3 id="orca">② Orca · OSDI 2022 <span class="tag red">M3</span> <span class="ax sched">调度</span></h3>
+
+<p><strong>Yu et al.</strong> · "Orca: A Distributed Serving System for Transformer-Based Generative Models"<br>
+<a href="https://www.usenix.org/conference/osdi22/presentation/yu" target="_blank">usenix.org/conference/osdi22</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：传统 batching 等齐再跑（request-level scheduling），长短不齐时 batch 中"短请求要等长请求结束"，浪费严重。</li>
+  <li><strong>方法</strong>：iteration-level scheduling —— 每个 token step 重新决定 batch 成员。selective batching —— 同一 batch 中不同请求的 prefill/decode 可以混跑。</li>
+  <li><strong>结果</strong>：throughput vs latency Pareto 优于静态 batching 大约 2-4×（数据集而异）。</li>
+</ul>
+
+<h4>关键图</h4>
+<ul>
+  <li><strong>Fig 1</strong>：朴素 batching vs iteration-level，能直观看出"等待时间"的差异。</li>
+  <li><strong>Fig 6</strong>：selective batching 的逻辑——同 step 内不同请求阶段不同。</li>
+</ul>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li><code>vllm/v1/core/sched/scheduler.py</code> · <code>schedule()</code> — vLLM 的 iteration-level scheduler</li>
+  <li>注意 vLLM 没用 selective batching 的全部细节（chunked prefill 是另一种思路，见 Sarathi-Serve）</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>Orca 的 selective batching 跟 Sarathi-Serve 的 chunked prefill 解的是同一个问题吗？哪个更通用？</li>
+  <li>iteration-level scheduling 的代价是什么？(每 step 都要 reschedule + 重组 batch tensor)</li>
+</ol>
+
+<h3 id="sarathi">③ Sarathi-Serve · OSDI 2024 <span class="tag red">M3</span> <span class="ax sched">调度</span></h3>
+
+<p><strong>Agrawal et al.</strong> · "Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve"<br>
+<a href="https://arxiv.org/abs/2403.02310" target="_blank">arxiv.org/abs/2403.02310</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：Continuous batching 里 prefill 跟 decode 混 batch 时，prefill 的高 compute 让整个 batch 慢下来 —— decode 请求 TTFT/ITL 翻倍。</li>
+  <li><strong>方法</strong>：chunked prefill —— 把一个长 prompt 的 prefill 切成多个固定大小的 chunk，每个 chunk 跟若干 decode 一起跑。这样每个 step 的计算量稳定。</li>
+  <li><strong>结果</strong>：固定 ITL（inter-token latency）下 throughput 提升 2-3×。</li>
+</ul>
+
+<h4>关键图</h4>
+<ul>
+  <li><strong>Fig 1</strong>：prefill 混入 decode batch 后单步 latency 暴涨的真实测量。</li>
+  <li><strong>Fig 4</strong>：chunked prefill 的调度时间线，跟 vLLM 实现完全对得上。</li>
+</ul>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li>vLLM scheduler.py 里搜 <code>chunked_prefill</code> 或 <code>num_computed_tokens</code></li>
+  <li><code>SchedulerOutput.scheduled_tokens</code> 字段</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>chunk size 怎么选？跟 token budget 是什么关系？</li>
+  <li>chunked prefill 啥时候<strong>不</strong>该开？(很短 prompt 的 workload；chunk 太多 overhead 反而升)</li>
+</ol>
+
+<h3 id="radix">④ SGLang / RadixAttention · NeurIPS 2024 <span class="tag red">M2</span> <span class="ax mem">显存</span></h3>
+
+<p><strong>Zheng et al.</strong> · "SGLang: Efficient Execution of Structured Language Model Programs"<br>
+<a href="https://arxiv.org/abs/2312.07104" target="_blank">arxiv.org/abs/2312.07104</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：vLLM 的 prefix caching 只能命中"整块前缀"。在<strong>结构化场景</strong>（多 agent 分支、tree of thoughts、self-consistency 多采样）下，prefix 在 token 级别分叉，块级命中浪费。</li>
+  <li><strong>方法</strong>：用 <strong>radix tree</strong>（基数树）做 token 级 KV 索引。每个 prompt 的 KV 沿 tree 路径存储，分叉点自然共享，叶子节点不同则各自占用。</li>
+  <li><strong>结果</strong>：在多分支推理 workload 下，throughput 2-5× of vLLM 同期版本。</li>
+</ul>
+
+<h4>关键图</h4>
+<ul>
+  <li><strong>Fig 5</strong>：Radix tree 示意 —— prompt 的 KV 像 trie 一样组织。</li>
+  <li><strong>Fig 9</strong>：vs vLLM 在 tree-of-thoughts workload 上的吞吐对比。</li>
+</ul>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li><code>sglang/srt/mem_cache/radix_cache.py</code></li>
+  <li>跟 vLLM 的 <code>block_pool.py</code> 对照学</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>RadixAttention 对 system-prompt-only 共享场景有优势吗？(几乎没有；vLLM 的整块命中已经够)</li>
+  <li>Radix tree 的 lookup 开销是 O(树深)，会成为瓶颈吗？(实测一般不会，因为同 prefix 的请求会聚集)</li>
+  <li>vLLM 社区有人在做 RadixAttention 风格的改进吗？(搜 issue tracker)</li>
+</ol>
+
+<h3 id="flash">⑤ FlashAttention (v1) · NeurIPS 2022 <span class="tag red">M4</span> <span class="ax compute">算力</span></h3>
+
+<p><strong>Dao et al.</strong> · "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness"<br>
+<a href="https://arxiv.org/abs/2205.14135" target="_blank">arxiv.org/abs/2205.14135</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：朴素 attention 把 N×N 的 attention matrix 实例化到 HBM，对长序列（N=4K-32K）HBM 流量爆炸，attention 变成 memory-bound。</li>
+  <li><strong>方法</strong>：tile 划分 Q/K/V，在 SRAM 里增量计算 + online softmax 校正，N×N matrix 从不落 HBM。</li>
+  <li><strong>结果</strong>：长序列 attention 提速 2-4×；HBM 流量从 O(N²) 降到 O(N·d / SRAM)。</li>
+</ul>
+
+<h4>关键图</h4>
+<ul>
+  <li><strong>Fig 1</strong>：HBM 流量对比 —— 朴素 vs FlashAttention 的关键 trade-off。</li>
+  <li><strong>Fig 2</strong>：tile 划分示意。</li>
+  <li><strong>Alg 1</strong>：完整的 forward 伪代码 —— 这是面试的高频考点。</li>
+  <li><strong>Appendix A</strong>：online softmax 等价性证明 —— 不必背公式，但要知道"为什么可分块"。</li>
+</ul>
+
+<div class="lab" id="softmaxLab">
+  <div class="lab-h"><span class="pill">交互</span>online softmax · 为什么 attention 能分块</div>
+  <p style="font-size:14px;margin:6px 0 4px;">
+    朴素 softmax 要先扫一遍拿到全局 <code>max</code> 和 <code>Σexp</code>，所以必须把整行 N 个分数都拿在手里——这正是 N×N 矩阵落 HBM 的根源。
+    FlashAttention 的 trick：<strong>维护「running max <em>m</em>」「running 分母 ℓ」「running 输出 <em>o</em>」，每来一块就用一个缩放因子 <code>e^(m_old−m_new)</code> 把旧结果校正一下</strong>，于是分数永远只需在 SRAM 里放一小块。
+    一步步走完，结果跟一次性算的 softmax <strong>数值一致</strong>。
+  </p>
+  <p style="font-size:13px;color:var(--fg-muted);margin:0 0 6px;">下面是一行 6 个 attention 分数，切成 3 块（每块 2 个），每块带一个标量 value。点「下一块」喂入一块，看 <em>m / ℓ / o</em> 怎么增量更新。</p>
+  <div class="sl-tiles" id="slTiles"></div>
+  <div class="sl-state">
+    <div class="sl-cell"><div class="k">running max <em>m</em></div><div class="val" id="slM">—</div><div class="sub" id="slMsub"></div></div>
+    <div class="sl-cell"><div class="k">running 分母 ℓ</div><div class="val" id="slL">—</div><div class="sub" id="slLsub"></div></div>
+    <div class="sl-cell"><div class="k">running 输出 <em>o</em> = (Σ p·v)/ℓ</div><div class="val" id="slO">—</div><div class="sub" id="slOsub"></div></div>
+  </div>
+  <div class="sl-log" id="slLog">点「下一块」开始。</div>
+  <div class="ctrl">
+    <button class="step" id="slStep">下一块 ▶</button>
+    <button class="ghost" id="slReset">重置</button>
+  </div>
+  <div class="sl-verdict" id="slVerdict"></div>
+</div>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li><code>Dao-AILab/flash-attention</code> 的 csrc 是工业级 CUDA，先看 Triton 实现（如果有）</li>
+  <li>vLLM 的 Triton attention kernel：<code>vllm/v1/attention/ops/...</code></li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>FlashAttention 不省 FLOPs，省什么？</li>
+  <li>v1 → v2 主要改了什么？(work partitioning，把 head 维度的归约放到 outer loop)</li>
+  <li>v3 加了什么 Hopper 特性？(TMA + WGMMA + 异步)</li>
+</ol>
+
+<h3 id="h2o">⑥ H2O · NeurIPS 2023 <span class="tag yellow">M2/M3 之间</span> <span class="ax mem">显存</span></h3>
+
+<p><strong>Zhang et al.</strong> · "H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models"<br>
+<a href="https://arxiv.org/abs/2306.14048" target="_blank">arxiv.org/abs/2306.14048</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：长 context（&gt;32K）下 KV cache 撑爆显存，单序列就能吃掉一张卡。能不能丢一些 token 的 KV？</li>
+  <li><strong>方法</strong>：观察 attention score 分布 —— 只有少数 "heavy hitter" token 被频繁关注。基于历史 attention score 选 top-k 保留，其他丢弃。</li>
+  <li><strong>结果</strong>：KV cache 减少 5-10×，精度损失 &lt;1% (BLEU/ROUGE)。</li>
+</ul>
+
+<h4>OS 对照</h4>
+<p>这其实是 working set theory + LRU 的现代版。OS 上 "working set" 指进程实际用到的页面集合；H2O 上 "heavy hitter" 指 attention 实际关注的 token。eviction 决策从"最少用"变成"最低 attention score"。</p>
+
+<h4>追问</h4>
+<ol>
+  <li>vLLM 当前 evict 策略是 H2O 风格吗？(<strong>不是</strong>，vLLM 用整块 LRU。H2O 思想在 SnapKV、StreamingLLM 等论文里更接近)</li>
+  <li>"丢 KV"会损失什么？什么 workload 不能用？(需要长期记忆的任务，如代码、长文档 QA)</li>
+</ol>
+
+<h3 id="slora">⑦ S-LoRA · MLSys 2024 <span class="tag yellow">M5+</span> <span class="ax mem">显存</span></h3>
+
+<p><strong>Sheng et al.</strong> · "S-LoRA: Serving Thousands of Concurrent LoRA Adapters"<br>
+<a href="https://arxiv.org/abs/2311.03285" target="_blank">arxiv.org/abs/2311.03285</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：LoRA 让每个用户都能有一个 fine-tune 的小补丁（&lt;1% 参数）。但 1000 个用户 = 1000 个 adapter，怎么同时 serve？朴素切换 adapter 的开销巨大。</li>
+  <li><strong>方法</strong>：unified memory pool 存所有 adapter；custom CUDA kernel 让一个 batch 内不同请求用不同 adapter；统计上多 adapter 可以共 batch。</li>
+  <li><strong>结果</strong>：1000+ LoRA 同时 serve，throughput 比 PEFT 朴素 serving 高 30×。</li>
+</ul>
+
+<h4>OS 对照</h4>
+<p>多租户隔离 + 资源共享。OS 的 namespace / cgroup 让不同租户用同一份内核；S-LoRA 让不同 adapter 用同一份 base model。</p>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li><code>vllm/lora/</code> — vLLM 的 LoRA 实现</li>
+  <li><code>punica</code> kernel — multi-LoRA 的 fused matmul kernel</li>
+</ul>
+
+<h2><span class="num">02</span>选读 3 篇 · 看兴趣选支</h2>
+
+<h3 id="zero">⑧ ZeRO · SC 2020 <span class="tag green">训练向</span> <span class="ax parallel">并行</span></h3>
+
+<p><strong>Rajbhandari et al.</strong> · "ZeRO: Memory Optimizations Toward Training Trillion Parameter Models"<br>
+<a href="https://arxiv.org/abs/1910.02054" target="_blank">arxiv.org/abs/1910.02054</a></p>
+
+<ul>
+  <li>大模型训练的内存分片经典。把 optimizer state（最大头）、gradient、parameter 分别 shard 到多卡。</li>
+  <li>OS 思维浓 —— 跟"虚拟内存 + RDMA 远程内存"是同一个抽象。</li>
+  <li><strong>推理岗</strong>面试也可能问，知道 ZeRO-1/2/3 的差异即可（state / +gradient / +param 分级）。</li>
+  <li><strong>看完读</strong>：DeepSpeed 仓库 README + 一篇 ZeRO-Infinity 综述。</li>
+</ul>
+
+<h3 id="megatron">⑨ Megatron-LM (TP/PP) · 系列论文 <span class="tag green">训练向</span> <span class="ax parallel">并行</span></h3>
+
+<ul>
+  <li><strong>Tensor parallelism (TP)</strong>：把单个矩阵切片到多卡协同算（典型：把 W_qkv 沿 head 维度切 N 份）。</li>
+  <li><strong>Pipeline parallelism (PP)</strong>：把模型层切到多卡，流水执行 batch 的不同 micro-batch。</li>
+  <li>vLLM 的多卡推理用 TP（PP 在推理里少见，主要训练）。看 <code>vllm/distributed/</code>。</li>
+  <li><strong>追问</strong>：为什么 inference 主要用 TP？(PP 的 bubble 在小 batch 下太大；TP 通信量大但 inference 数据小)</li>
+</ul>
+
+<h3 id="compile">⑩ torch.compile / Inductor · ASPLOS 2024 <span class="tag blue">编译器向</span> <span class="ax compute">算力</span></h3>
+
+<p><strong>Ansel et al.</strong> · "PyTorch 2: Faster Machine Learning Through Dynamic Python Bytecode Transformation and Graph Compilation"<br>
+<a href="https://pytorch.org/assets/pytorch2-2.pdf" target="_blank">pytorch.org/assets/pytorch2-2.pdf</a></p>
+
+<ul>
+  <li>如果你想往编译器方向走，这是入口。Dynamo（前端 trace）+ Inductor（后端 codegen，生成 Triton）。</li>
+  <li>vLLM 在某些路径已经用 <code>torch.compile</code>（model forward 部分）。看 <code>vllm/compilation/</code>。</li>
+  <li><strong>当成 Month 7+ 的桥梁论文读</strong>，决定是不是要深入编译器线。</li>
+</ul>
+
+<h2 id="frontier"><span class="num">03</span>第二圈 · 2023–2025 前沿（再读 5 篇）</h2>
+
+<p class="lede" style="font-size:16px;border:none;padding:0;margin:0 0 8px;">
+  上面 10 篇是<strong>地基</strong>。但 serving 这两年最热的几个方向，地基里只埋了伏笔没展开。
+  走完第一圈、能用 4 条轴给论文归类之后，再来读这 5 篇——你会发现它们每一篇都精确地站在前面某篇的"追问"上。这就是螺旋上升的第二圈。
+</p>
+
+<div class="callout q">
+  <div class="label">读这一圈之前，先自问</div>
+  decode 阶段 GPU 算力其实<strong>大量闲置</strong>（memory-bound，卡在搬 KV 而不是算），为什么？
+  如果一次 forward 的成本主要花在"把权重和 KV 从 HBM 搬进来"，那<strong>顺带多算几个 token 几乎不要钱</strong>——这句话能引出下面整整两篇。
+</div>
+
+<h3 id="specd">⑪ Speculative Decoding · ICML 2023 <span class="tag red">M3/M4</span> <span class="ax compute">算力</span></h3>
+
+<p><strong>Leviathan et al.</strong> · "Fast Inference from Transformers via Speculative Decoding"（Google）· 同期 DeepMind 有等价的 "Accelerating LLM Decoding with Speculative Sampling"<br>
+<a href="https://arxiv.org/abs/2211.17192" target="_blank">arxiv.org/abs/2211.17192</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：autoregressive decode 一次只出 1 个 token，每个 token 都要把整个模型的权重 + KV 从 HBM 过一遍。大模型 decode 是 <strong>memory-bound</strong>，算力闲着，纯粹被带宽卡住。</li>
+  <li><strong>方法</strong>：用一个<strong>小 draft 模型</strong>便宜地猜 γ 个 token，再用<strong>大 target 模型一次 forward 并行验证</strong>这 γ 个。配合一个精心设计的接受/拒绝采样，保证输出分布跟"只用大模型"<strong>完全一致</strong>（无损）。猜对的连发，猜错的从分歧点重来。</li>
+  <li><strong>结果</strong>：典型 2–3× 端到端加速，输出分布零偏差。后续 Medusa / EAGLE / draft-free 把"哪来的 draft"做得更省。</li>
+</ul>
+
+<h4>关键直觉</h4>
+<ul>
+  <li>它<strong>不省 FLOPs，反而多算</strong>（draft + 部分被拒的 token 白算了）。它换的是：把"N 次 memory-bound 的小 forward"压成"少数几次能吃满算力的大 forward"。<strong>跟 FlashAttention 一样，都是拿闲置算力换带宽。</strong></li>
+  <li>接受率 α 越高、draft 越便宜，越赚。下面这个小算盘把这层关系做成可调的：</li>
+</ul>
+
+<div class="specd" id="specdCalc">
+  <div class="lab-h"><span class="pill">交互</span>投机解码加速比 · 拉一拉看拐点</div>
+  <div class="row">
+    <label>接受率 α <small>draft 每个 token 被接受的概率</small></label>
+    <input type="range" id="sdA" min="0.3" max="0.95" step="0.01" value="0.7">
+    <span class="rv" id="sdAv">0.70</span>
+  </div>
+  <div class="row">
+    <label>draft 长度 γ <small>一次猜几个 token</small></label>
+    <input type="range" id="sdG" min="1" max="10" step="1" value="4">
+    <span class="rv" id="sdGv">4</span>
+  </div>
+  <div class="row">
+    <label>draft 成本比 c <small>draft 单步耗时 ÷ target 单步</small></label>
+    <input type="range" id="sdC" min="0" max="0.5" step="0.01" value="0.15">
+    <span class="rv" id="sdCv">0.15</span>
+  </div>
+  <div class="specd-out">
+    <div class="o"><div class="n" id="sdTok">—</div><div class="l">每次 target forward 平均出几个 token<br>E = (1−α<sup>γ+1</sup>)/(1−α)</div></div>
+    <div class="o"><div class="n" id="sdSpd">—</div><div class="l">实际加速比<br>E ÷ (1 + γ·c)</div></div>
+  </div>
+  <div class="specd-note" id="sdNote"></div>
+</div>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li><code>vllm/v1/spec_decode/</code> — vLLM 的投机解码（ngram / EAGLE / Medusa 多种 proposer）</li>
+  <li>搜 <code>num_speculative_tokens</code>、<code>rejection_sampler</code> —— 接受/拒绝的核心逻辑</li>
+  <li>对照看：proposer 接口怎么插进 scheduler 的一个 step</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>为什么接受采样能保证"分布无损"？（提示：modified rejection sampling，对 draft 概率高估的部分按比例回退）</li>
+  <li>什么 workload 下投机解码<strong>反而变慢</strong>？（α 低 + γ 大 + draft 不便宜——拉上面的算盘到 α=0.4、γ=8 试试）</li>
+  <li>EAGLE / Medusa 跟原始投机解码差在哪？（draft 不再是独立小模型，而是复用 target 的隐藏态做轻量预测头）</li>
+</ol>
+
+<h3 id="pddisagg">⑫ Prefill–Decode 分离 · OSDI 2024 等 <span class="tag red">M3</span> <span class="ax sched">调度</span> <span class="ax parallel">并行</span></h3>
+
+<p><strong>DistServe</strong>（Zhong et al., OSDI 2024）· <strong>Splitwise</strong>（ISCA 2024）· <strong>Mooncake</strong>（Moonshot/Kimi, FAST 2025）<br>
+<a href="https://arxiv.org/abs/2401.09670" target="_blank">DistServe arxiv.org/abs/2401.09670</a> · <a href="https://arxiv.org/abs/2407.00079" target="_blank">Mooncake arxiv.org/abs/2407.00079</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：prefill 是 compute-bound（一口气算长 prompt），decode 是 memory-bound（一步一个 token）。两者塞进同一组 GPU、同一个 batch，<strong>互相拖累</strong>——Sarathi 的 chunked prefill 是在"混着跑"里调和，但天花板还在。而且 TTFT 和 ITL 想分别保 SLO，本质需求是冲突的。</li>
+  <li><strong>方法</strong>：干脆把两阶段<strong>拆到不同的 GPU 池</strong>。prefill 池专心吃算力，decode 池专心保低延迟，各自独立扩缩容、独立选并行度。KV cache 通过高速互联（NVLink / RDMA）从 prefill 节点<strong>传</strong>给 decode 节点。Mooncake 更进一步：以 KV cache 为中心做全局缓存池 + 调度。</li>
+  <li><strong>结果</strong>：在严格 TTFT/ITL 双 SLO 下，有效吞吐（goodput）显著优于合跑；大规模线上（Kimi）验证了 KV-centric 架构的可行性。</li>
+</ul>
+
+<h4>OS / 系统对照</h4>
+<p>这是把"一个进程干所有活"拆成<strong>专用流水线阶段 + 阶段间显式传递中间态</strong>——很像 OS 里把通用 CPU 路径拆成 DMA 引擎 / 专用协处理器，再用共享内存或总线传数据。瓶颈也随之从"计算"挪到"KV cache 怎么搬得快、放得下"。</p>
+
+<h4>看完读的代码 / 实战</h4>
+<ul>
+  <li>vLLM 的 <code>disaggregated prefilling</code> / <code>kv_transfer</code> 模块（搜 connector、<code>KVConnector</code>）</li>
+  <li>跑一个 1P1D（1 prefill + 1 decode）的最小 demo，量一下 KV 传输占了多少时间</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>KV cache 跨节点传输的开销，什么时候会吃掉分离带来的收益？（短 prompt / 小模型时）</li>
+  <li>分离架构下，PagedAttention 的 block 还需要吗？（需要——但现在还多了一层"跨节点的块迁移"）</li>
+  <li>跟 Sarathi 的 chunked prefill 是替代还是互补？（互补：一个管"合跑时怎么调和"，一个管"该不该合跑"）</li>
+</ol>
+
+<h3 id="quant">⑬ 量化：AWQ / SmoothQuant / FP8 / KV 量化 <span class="tag yellow">M2/M4</span> <span class="ax mem">显存</span> <span class="ax compute">算力</span></h3>
+
+<p><strong>SmoothQuant</strong>（Xiao et al., ICML 2023）· <strong>AWQ</strong>（Lin et al., MLSys 2024 best paper）· <strong>KIVI</strong>（KV cache 量化, 2024）<br>
+<a href="https://arxiv.org/abs/2306.00978" target="_blank">AWQ arxiv.org/abs/2306.00978</a> · <a href="https://arxiv.org/abs/2211.10438" target="_blank">SmoothQuant arxiv.org/abs/2211.10438</a></p>
+
+<h4>三段摘要</h4>
+<ul>
+  <li><strong>问题</strong>：权重和 KV cache 用 fp16 太占显存 + 太占带宽。直接量到 int8/int4 会掉精度，难点在<strong>少数 outlier 通道</strong>幅值极大，一刀切量化会把它们毁掉。</li>
+  <li><strong>方法</strong>：<strong>SmoothQuant</strong> 把激活的难度"搬"一部分到权重上（等价变换），让两边都好量化。<strong>AWQ</strong> 观察到不是所有权重一样重要——按激活幅值找出 ~1% 的 salient 通道，给它们留更高精度（per-channel scaling），其余 int4。<strong>KIVI</strong> 把这套思路用到 KV cache（key 按通道、value 按 token 量化）。</li>
+  <li><strong>结果</strong>：W4A16（4-bit 权重）几乎无损 + 显存腰斩；KV 量化让长 context 容量翻几倍。FP8（Hopper/Blackwell 原生支持）则是另一条更"硬件友好"的路。</li>
+</ul>
+
+<h4>关键直觉</h4>
+<ul>
+  <li>量化省两样东西，看场景：decode 是 memory-bound，<strong>W4 主要省的是「搬权重」的带宽</strong>（顺带省显存）→ 直接加速 decode；prefill compute-bound 时，得靠 <strong>FP8/INT8 的低精度 Tensor Core</strong> 才真省算力。</li>
+  <li>量化和 PagedAttention 是<strong>正交</strong>的：一个减每个 token 的字节数，一个管这些字节怎么排布。两者叠加。</li>
+</ul>
+
+<h4>看完读的代码</h4>
+<ul>
+  <li><code>vllm/model_executor/layers/quantization/</code> — awq / gptq / fp8 等后端</li>
+  <li>跑一次：同一个模型 fp16 vs AWQ-int4，量 throughput / 显存 / 输出质量三个数</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>为什么 KV cache 量化里 key 和 value 用<strong>不同</strong>的量化粒度？（提示：outlier 在 key 上沿通道分布）</li>
+  <li>W4A16 在 prefill（compute-bound）阶段还省时间吗？（不一定——反量化开销可能吃掉收益）</li>
+  <li>量化和投机解码能叠加吗？draft 模型用量化是不是天作之合？</li>
+</ol>
+
+<h3 id="fa23">⑭ FlashAttention-2 / 3 <span class="tag red">M4</span> <span class="ax compute">算力</span></h3>
+
+<p><strong>Dao</strong>, "FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning"（2023）· <strong>Shah et al.</strong>, "FlashAttention-3"（NeurIPS 2024，Hopper 专用）<br>
+<a href="https://arxiv.org/abs/2307.08691" target="_blank">FA2 arxiv.org/abs/2307.08691</a> · <a href="https://arxiv.org/abs/2407.08608" target="_blank">FA3 arxiv.org/abs/2407.08608</a></p>
+
+<p>原页把 v2/v3 塞进了 FlashAttention 的"追问"，但它们其实是<strong>读懂现代 GPU 编程的钥匙</strong>，值得单列：</p>
+<ul>
+  <li><strong>v1 → v2</strong>：减少非 matmul 的浮点运算、把 work partition 换到沿 sequence 维度并行（更好喂满 SM）、warp 之间少同步。GPU 利用率从 v1 的 ~30% 提到 ~70%。<strong>这是"算法没变、把硬件喂饱"的典范。</strong></li>
+  <li><strong>v2 → v3</strong>：吃满 Hopper 的新特性——<strong>TMA</strong>（异步搬数据）、<strong>WGMMA</strong>（warpgroup 级矩阵乘）、warp 专精 + 计算/搬运重叠流水，并用上 FP8。</li>
+  <li>读法：先把 v1 的 online softmax（上面那个交互）吃透，再看 v2 的伪代码 diff，最后 v3 当"Hopper 编程模型导读"读。</li>
+</ul>
+
+<h4>追问</h4>
+<ol>
+  <li>v2 为什么把并行维度从 batch×head 扩到 sequence？（长序列、小 batch 时 SM 喂不满）</li>
+  <li>TMA 解决了 v2 的什么痛点？（搬数据和算 overlap 不起来，SM 等数据）</li>
+</ol>
+
+<h3 id="frontier-extra">⑮ 看兴趣加餐 · 两条岔路 <span class="tag green">选读</span></h3>
+<ul>
+  <li><strong>MoE serving</strong>（DeepSeek-V3 / Mixtral 工程）——稀疏激活把"显存装得下全部专家、但每 token 只算几个"变成新的<span class="ax sched">调度</span>+<span class="ax parallel">并行</span>难题（expert parallelism、token routing 负载均衡）。vLLM 已支持，看 <code>fused_moe</code> kernel。</li>
+  <li><strong>线性注意力 / SSM</strong>（Mamba, Mamba-2）——干脆绕开 KV cache 的 O(N) 增长，把状态压成固定大小。是"换掉 attention 本身"这条更激进的路，决定要不要深入再读。</li>
+</ul>
+
+<div class="callout check">
+  <div class="label">✓ 第二圈读完，你应该能回答</div>
+  给定一个 workload（比如"长 prompt、短输出、高并发"或"短 prompt、长输出、低延迟"），你能说出<strong>该上这 15 篇里的哪几招、为什么、按什么顺序</strong>——这就是 serving 工程师的核心判断力。下一节直接来测。
+</div>
+
+<h2 id="drill"><span class="num">04</span>面试速测 · 主动回忆</h2>
+
+<p>页面里反复说"面试高频考点"。光看不算会——<strong>先在心里（或纸上）答完，再点开对答案</strong>。答不上来的，回对应论文重读。</p>
+
+<details class="predict">
+  <summary>Q1 · 一句话讲清 PagedAttention 解决了什么、用了什么 OS 概念</summary>
+  <div class="body">
+    朴素 KV cache 给每请求预分配连续 max_len 段 → 内/外碎片 + 无法共享，显存利用率仅 20–40%。PagedAttention 借<strong>虚拟内存分页</strong>：固定大小 block + block table 间接寻址，按需分配、前缀可共享（COW-like），利用率拉到 ~96%，吞吐 2–4×。对应 OS 的<strong>页表</strong>，prefix caching 对应 <strong>page cache / COW</strong>。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>Q2 · FlashAttention 省的是 FLOPs 还是带宽？为什么能分块？</summary>
+  <div class="body">
+    省<strong>带宽</strong>（HBM 流量从 O(N²) 降到 O(N·d)），FLOPs 不减反略增。能分块是因为 <strong>online softmax</strong>：维护 running max / running 分母，每来一块用 <code>e^(m_old−m_new)</code> 校正旧的部分和，于是 N×N 矩阵永不落 HBM。结果与一次性 softmax 数值一致（见上面的交互）。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>Q3 · Orca 的 iteration-level scheduling 和 Sarathi 的 chunked prefill，各解决什么？</summary>
+  <div class="body">
+    <strong>Orca</strong>：static batching 里短请求要等长请求，浪费大 → 每个 token step 重新组 batch（continuous batching），出一个进一个。<strong>Sarathi</strong>：continuous batching 里 prefill 一旦混进 decode batch，会把那一步的延迟拉爆 → 把长 prompt 的 prefill 切 chunk，跟若干 decode 拼成计算量稳定的 step，稳住 ITL。前者管"何时进出 batch"，后者管"prefill 怎么不拖累 decode"。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>Q4 · decode 为什么是 memory-bound？这把哪两篇前沿论文"逼"了出来？</summary>
+  <div class="body">
+    decode 一步只算 1 个 token，但要把<strong>整个模型权重 + 全部 KV</strong> 从 HBM 搬一遍——计算量极小、搬运量极大，算术强度低 → 卡在带宽。由此引出：<strong>投机解码</strong>（用闲置算力一次验证多个 token，把多次小 forward 压成少数大 forward）和<strong>量化</strong>（直接减少要搬的字节数）。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>Q5 · 为什么要把 prefill 和 decode 拆到不同 GPU？代价是什么？</summary>
+  <div class="body">
+    prefill compute-bound、decode memory-bound，合跑互相拖累，且 TTFT/ITL 双 SLO 本质冲突。拆开后各自独立优化并行度与扩缩容，goodput 更高（DistServe/Splitwise/Mooncake）。<strong>代价</strong>：KV cache 要跨节点传输（NVLink/RDMA），短 prompt / 小模型时传输开销可能吃掉收益。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>Q6 · block size 为什么常取 16？太大太小各有什么问题？</summary>
+  <div class="body">
+    太小 → block table 项变多、元数据 + 间接寻址开销升、kernel 里 gather 更碎。太大 → 回到内部碎片（一个 block 没填满就浪费）、前缀共享粒度变粗。论文 §6.4 消融：4–32 几乎持平，64+ 掉。16 是吞吐与碎片的折中。
+  </div>
+</details>
+
+<details class="predict">
+  <summary>Q7 · 给你"长 prompt、短输出、超高并发"的 workload，你会上哪几招？</summary>
+  <div class="body">
+    瓶颈在 prefill 算力 + 高并发的显存。优先：<strong>chunked prefill</strong>（稳住延迟）、<strong>prefix caching / RadixAttention</strong>（长 prompt 多半共享系统提示）、<strong>PD 分离</strong>（prefill 池专吃算力）、<strong>FP8/量化</strong> 提 prefill 算力与容量。投机解码收益小（输出短）。这种"按轴开药方"的能力就是面试想考的判断力。
+  </div>
+</details>
+
+<h2 id="notes"><span class="num">05</span>论文笔记模板</h2>
+
+<p>每篇读完，在 <code>~/infra/papers/</code> 建一个 .md 文件，固定 4 段：</p>
+
+<pre><code># &lt;论文名&gt; · &lt;会议&gt; · &lt;读完日期&gt;
+
+## 问题 (50 字)
+现状是什么；现状不好在哪。最好一个具体数字（"X% 浪费" / "Y× 慢"）。
+
+## 方法 (100 字)
+核心 idea 一句话；最关键的 mechanism (机制) 一段。
+画一张超简单的草图（手绘扫描或 ascii art）。
+
+## 对账 (50 字)
+跟 vLLM 哪行代码 / 哪个模块对得上？
+找不到也写"对应模块是 X，但 vLLM 还没实现这个"。
+
+## 我学到了 (100 字 可选)
+反直觉点、巧妙工程、可以借用到 mini-vLLM 的地方。
+对未来要不要深入这个方向的判断。</code></pre>
+
+<div class="callout check">
+  <div class="label">✓ 论文阅读量目标</div>
+  6 个月走完，你应该有 ~15-20 篇论文笔记（这页的 10 篇地基 + 5 篇前沿 + 你自己 follow 的）。
+  这是 senior infra 工程师的"概念资本"。<strong>面试时随手能援引 = 真的懂</strong>。
+</div>
+
+<h2 id="follow"><span class="num">06</span>跟踪谁的 Twitter / arXiv / blog</h2>
+
+<h3>4.1 必关注的人 (vLLM/serving 圈)</h3>
+<ul>
+  <li><strong>Woosuk Kwon</strong> · vLLM 第一作者，Twitter @woosuk_k</li>
+  <li><strong>Zhuohan Li</strong> · vLLM 创始人之一，Twitter @zhuohan123</li>
+  <li><strong>Tri Dao</strong> · FlashAttention v1/v2 作者，Twitter @tri_dao</li>
+  <li><strong>Lianmin Zheng</strong> · SGLang 作者，Twitter @lm_sys</li>
+  <li><strong>Hao Zhang (UCSD)</strong> · 推理优化系列论文，Twitter @haozhangml</li>
+  <li><strong>Amey Agrawal</strong> · Sarathi 作者</li>
+</ul>
+
+<h3>4.2 必关注的 blog</h3>
+<ul>
+  <li><a href="https://blog.vllm.ai/" target="_blank">blog.vllm.ai</a> — 官方架构 + 性能文章</li>
+  <li><a href="https://lmsys.org/blog/" target="_blank">lmsys.org/blog</a> — Chatbot Arena / SGLang 团队</li>
+  <li><a href="https://horace.io/" target="_blank">horace.io</a> (Horace He) — PyTorch / kernel 深度好文</li>
+  <li><a href="https://blog.eleuther.ai/" target="_blank">blog.eleuther.ai</a> — 开源 LLM 训练实战</li>
+  <li><a href="https://www.anyscale.com/blog" target="_blank">Anyscale blog</a> — 系统层 ML（continuous batching 原始博客就在这）</li>
+</ul>
+
+<h3>4.3 arXiv 关键分类</h3>
+<ul>
+  <li><code>cs.DC</code> Distributed Computing — 分布式 serving / 训练</li>
+  <li><code>cs.LG</code> Machine Learning — 模型/算法</li>
+  <li><code>cs.PF</code> Performance — kernel / 优化</li>
+  <li><code>cs.AR</code> Architecture — 偶尔有 GPU 架构相关</li>
+</ul>
+<p>用 <a href="https://arxiv.org/list/cs.DC/recent" target="_blank">arxiv.org/list/cs.DC/recent</a> 每周扫一次标题。看到带 "LLM" / "serving" / "inference" / "KV" / "attention" / "speculative" / "disaggregat" / "quantization" / "MoE" 的，标个星，周末批量读。</p>
+
+<h2 id="venues"><span class="num">07</span>会议时间表</h2>
+
+<p>infra 论文集中在这几个会议，知道时间能预判什么时候关注什么：</p>
+
+<table>
+  <thead><tr><th>会议</th><th>关注度</th><th>截稿月</th><th>论文出炉</th></tr></thead>
+  <tbody>
+    <tr><td><strong>OSDI</strong> (USENIX OS)</td><td>顶级</td><td>5月/12月</td><td>7月/4月</td></tr>
+    <tr><td><strong>SOSP</strong> (ACM OS)</td><td>顶级，偶年</td><td>5月</td><td>10月</td></tr>
+    <tr><td><strong>NSDI</strong> (网络系统)</td><td>顶级</td><td>9月</td><td>4月</td></tr>
+    <tr><td><strong>MLSys</strong></td><td>核心</td><td>10月</td><td>5月</td></tr>
+    <tr><td><strong>ASPLOS</strong></td><td>核心 (编译器/系统/架构)</td><td>滚动</td><td>4月/10月</td></tr>
+    <tr><td><strong>NeurIPS / ICLR / ICML</strong></td><td>偶有 infra 论文 (在 system track)</td><td>各月</td><td>各月</td></tr>
+    <tr><td><strong>EuroSys</strong></td><td>欧洲 OS / 系统</td><td>10月</td><td>4月</td></tr>
+  </tbody>
+</table>
+
+<p>读 paper 的实战：OSDI / SOSP / MLSys 出新 issue 时去翻 program，标几个跟你方向相关的，加进 papers/ todo。</p>
+
+<h2 id="anti"><span class="num">08</span>读论文的反原则</h2>
+
+<ul>
+  <li>❌ 不要从第一作者最早的论文按时间读到最新。先读最有名的（被引最多 / SOTA 公认的）。</li>
+  <li>❌ 不要试图全篇看懂。一篇好 paper 你能用 5 句话讲清核心就过了。</li>
+  <li>❌ 不要光看 paper 不看代码。infra paper 的 design 和 code 经常对不上（paper 写得理想，code 长得现实）。</li>
+  <li>❌ 不要存 PDF 不写笔记。两周后你会忘 80%。写笔记是给未来的你看。</li>
+  <li>❌ 不要按 "AISys Fa2024" schedule 顺序读 24 篇。它是给学生 1 学期的，不是给你 6 个月的。</li>
+</ul>
+
+<div class="pagenav">
+  <a class="prev" href="09-frontier-serving.html"><div class="dir">prev</div><div class="ttl">M6 · 前沿 serving</div></a>
+  <a class="next" href="08-os-bridge.html"><div class="dir">next</div><div class="ttl">OS ↔ vLLM 速查</div></a>
+</div>
+
+</main>
+</div>
+
+<script src="../assets/app.js"></script>
+<script>
+/* ============================================================
+   07-papers · interactive widgets (vanilla, no deps)
+   ============================================================ */
+(function () {
+  'use strict';
+
+  const AXES = {
+    mem:      { label: '显存', color: '#c2410c' },
+    sched:    { label: '调度', color: '#1e40af' },
+    compute:  { label: '算力', color: '#166534' },
+    parallel: { label: '并行', color: '#854d0e' }
+  };
+
+  // n = circled number, t = short title, axis, x/y = center on viewBox.
+  // nomap entries appear only in the reading tracker.
+  const PAPERS = [
+    { id: 'paged',     n: '①', t: 'PagedAttention',   axis: 'mem',      x: 100, y: 50  },
+    { id: 'orca',      n: '②', t: 'Orca',             axis: 'sched',    x: 100, y: 140 },
+    { id: 'sarathi',   n: '③', t: 'Sarathi-Serve',    axis: 'sched',    x: 100, y: 230 },
+    { id: 'pddisagg',  n: '⑫', t: 'PD 分离',           axis: 'sched',    x: 100, y: 320 },
+    { id: 'radix',     n: '④', t: 'RadixAttention',   axis: 'mem',      x: 305, y: 50  },
+    { id: 'h2o',       n: '⑥', t: 'H2O',              axis: 'mem',      x: 305, y: 140 },
+    { id: 'slora',     n: '⑦', t: 'S-LoRA',           axis: 'mem',      x: 305, y: 230 },
+    { id: 'quant',     n: '⑬', t: '量化',              axis: 'mem',      x: 305, y: 320 },
+    { id: 'flash',     n: '⑤', t: 'FlashAttention',   axis: 'compute',  x: 510, y: 50  },
+    { id: 'fa23',      n: '⑭', t: 'FlashAttn 2/3',    axis: 'compute',  x: 510, y: 140 },
+    { id: 'specd',     n: '⑪', t: 'Speculative Dec.', axis: 'compute',  x: 510, y: 230 },
+    { id: 'compile',   n: '⑩', t: 'torch.compile',    axis: 'compute',  x: 510, y: 320 },
+    { id: 'megatron',  n: '⑨', t: 'Megatron TP/PP',   axis: 'parallel', x: 510, y: 410 },
+    { id: 'zero',      n: '⑧', t: 'ZeRO',             axis: 'parallel', x: 510, y: 470 },
+    { id: 'extra',     n: '⑮', t: 'MoE / Mamba 加餐',  axis: 'compute',  nomap: true, anchor: 'frontier-extra' }
+  ];
+
+  // directed "leads-to" relationships. dash = engineering reuse/iteration, not a new problem.
+  const EDGES = [
+    ['paged', 'orca',     '显存够了 → 瓶颈转向批处理'],
+    ['orca', 'sarathi',   'prefill 拖累 decode'],
+    ['orca', 'pddisagg',  '双 SLO 冲突 → 拆到不同卡'],
+    ['sarathi', 'pddisagg', '合跑仍有天花板', true],
+    ['paged', 'radix',    '块级共享太粗 → token 级'],
+    ['paged', 'h2o',      'KV 仍爆 → 丢 token'],
+    ['paged', 'quant',    'KV/权重仍占 → 压精度'],
+    ['paged', 'slora',    '分页思想 → 分页 adapter', true],
+    ['orca', 'specd',     'decode 算力闲置 → 投机'],
+    ['flash', 'fa23',     '喂满 GPU 的工程迭代', true],
+    ['megatron', 'pddisagg', '并行 = 分布式 serving 基础', true]
+  ];
+
+  const byId = {};
+  PAPERS.forEach(p => byId[p.id] = p);
+  const HW = 64, HH = 17; // half width / height of node box
+
+  // ---------- concept map ----------
+  const svg = document.getElementById('paperMap');
+  const foot = document.getElementById('mapFoot');
+  const FOOT_DEFAULT = foot ? foot.innerHTML : '';
+  let activeAxes = new Set(Object.keys(AXES));
+
+  function anchorPoints(s, t) {
+    if (t.x > s.x)  return [s.x + HW, s.y, t.x - HW, t.y];
+    if (t.x < s.x)  return [s.x - HW, s.y, t.x + HW, t.y];
+    return [s.x, s.y + HH, t.x, t.y - HH];
+  }
+
+  function buildMap() {
+    if (!svg) return;
+    let edgeSvg = '';
+    EDGES.forEach((e, i) => {
+      const s = byId[e[0]], t = byId[e[1]];
+      if (!s || !t || s.nomap || t.nomap) return;
+      const [x1, y1, x2, y2] = anchorPoints(s, t);
+      edgeSvg += `<line class="edge" data-from="${e[0]}" data-to="${e[1]}" data-i="${i}" ` +
+        `x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#78716c" stroke-width="1.3" ` +
+        `${e[3] ? 'stroke-dasharray="4 3" ' : ''}marker-end="url(#pmArrow)" opacity="0.4"/>`;
+    });
+    let nodeSvg = '';
+    PAPERS.forEach(p => {
+      if (p.nomap) return;
+      const c = AXES[p.axis].color;
+      nodeSvg += `<g class="node" data-id="${p.id}" data-axis="${p.axis}">` +
+        `<rect x="${p.x - HW}" y="${p.y - HH}" width="${HW * 2}" height="${HH * 2}" rx="6" ` +
+        `fill="${c}" fill-opacity="0.10" stroke="${c}" stroke-width="1.4"/>` +
+        `<text x="${p.x}" y="${p.y + 4}" text-anchor="middle" font-size="11" font-weight="600">${p.n} ${p.t}</text>` +
+        `<text class="chk" x="${p.x + HW - 9}" y="${p.y - HH + 12}" text-anchor="middle" font-size="11">✓</text>` +
+        `</g>`;
+    });
+    svg.innerHTML =
+      `<defs><marker id="pmArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">` +
+      `<path d="M0 0 L10 5 L0 10 z" fill="#78716c"/></marker></defs>` +
+      `<g>${edgeSvg}</g><g>${nodeSvg}</g>`;
+
+    svg.querySelectorAll('.node').forEach(g => {
+      const id = g.getAttribute('data-id');
+      g.addEventListener('mouseenter', () => hoverNode(id));
+      g.addEventListener('mouseleave', clearHover);
+      g.addEventListener('click', () => {
+        const a = byId[id].anchor || id;
+        location.hash = a;
+      });
+    });
+  }
+
+  function hoverNode(id) {
+    if (!svg) return;
+    svg.classList.add('lit');
+    const outs = EDGES.filter(e => e[0] === id && !byId[e[1]].nomap);
+    const hotTargets = new Set([id]);
+    svg.querySelectorAll('.edge').forEach(l => {
+      const on = l.getAttribute('data-from') === id;
+      l.classList.toggle('hot', on);
+      if (on) hotTargets.add(l.getAttribute('data-to'));
+    });
+    svg.querySelectorAll('.node').forEach(g => {
+      g.classList.toggle('hot', hotTargets.has(g.getAttribute('data-id')));
+    });
+    if (foot) {
+      if (outs.length) {
+        const list = outs.map(e => `<strong>${byId[e[1]].t}</strong>（${e[2]}）`).join('，');
+        foot.innerHTML = `<strong>${byId[id].t}</strong> 引出 → ${list}`;
+      } else {
+        foot.innerHTML = `<strong>${byId[id].t}</strong> 是一条线的终点（或独立支线）。点击跳到导读。`;
+      }
+    }
+  }
+
+  function clearHover() {
+    if (!svg) return;
+    svg.classList.remove('lit');
+    svg.querySelectorAll('.edge.hot, .node.hot').forEach(el => el.classList.remove('hot'));
+    if (foot) foot.innerHTML = FOOT_DEFAULT;
+  }
+
+  function applyAxisFilter() {
+    if (!svg) return;
+    svg.querySelectorAll('.node').forEach(g => {
+      g.classList.toggle('off', !activeAxes.has(g.getAttribute('data-axis')));
+    });
+    svg.querySelectorAll('.edge').forEach(l => {
+      const f = byId[l.getAttribute('data-from')], t = byId[l.getAttribute('data-to')];
+      const off = !activeAxes.has(f.axis) || !activeAxes.has(t.axis);
+      l.classList.toggle('off', off);
+    });
+  }
+
+  // ---------- axis legend ----------
+  const legend = document.getElementById('axisLegend');
+  if (legend) {
+    Object.keys(AXES).forEach(k => {
+      const chip = document.createElement('button');
+      chip.className = 'axis-chip';
+      chip.type = 'button';
+      chip.setAttribute('aria-pressed', 'true');
+      chip.dataset.axis = k;
+      chip.innerHTML = `<span class="sw" style="background:${AXES[k].color}"></span>${AXES[k].label}`;
+      chip.addEventListener('click', () => {
+        if (activeAxes.has(k)) activeAxes.delete(k); else activeAxes.add(k);
+        if (activeAxes.size === 0) activeAxes = new Set(Object.keys(AXES)); // never empty
+        Object.keys(AXES).forEach(a => {
+          const c = legend.querySelector(`[data-axis="${a}"]`);
+          if (c) c.setAttribute('aria-pressed', activeAxes.has(a) ? 'true' : 'false');
+        });
+        applyAxisFilter();
+      });
+      legend.appendChild(chip);
+    });
+  }
+
+  // ---------- reading tracker (persisted) ----------
+  const RT_KEY = 'papers:read:v2';
+  const grid = document.getElementById('rtGrid');
+  const bar = document.getElementById('rtBar');
+  const count = document.getElementById('rtCount');
+  let readState = {};
+  try { readState = JSON.parse(localStorage.getItem(RT_KEY) || '{}'); } catch (e) { readState = {}; }
+
+  function syncMapRead() {
+    if (!svg) return;
+    svg.querySelectorAll('.node').forEach(g => {
+      g.classList.toggle('read', !!readState[g.getAttribute('data-id')]);
+    });
+  }
+  function refreshProgress() {
+    const total = PAPERS.length;
+    const done = PAPERS.filter(p => readState[p.id]).length;
+    if (count) count.textContent = `${done} / ${total}`;
+    if (bar) bar.style.width = (done / total * 100) + '%';
+  }
+  function buildTracker() {
+    if (!grid) return;
+    grid.innerHTML = '';
+    PAPERS.forEach(p => {
+      const row = document.createElement('label');
+      row.className = 'rt-item' + (readState[p.id] ? ' done' : '');
+      const anchor = p.anchor || p.id;
+      row.innerHTML =
+        `<input type="checkbox" ${readState[p.id] ? 'checked' : ''}>` +
+        `<span class="dot" style="background:${AXES[p.axis].color}"></span>` +
+        `<span class="n">${p.n}</span>` +
+        `<a href="#${anchor}">${p.t}</a>`;
+      const cb = row.querySelector('input');
+      cb.addEventListener('change', () => {
+        readState[p.id] = cb.checked;
+        try { localStorage.setItem(RT_KEY, JSON.stringify(readState)); } catch (e) {}
+        row.classList.toggle('done', cb.checked);
+        refreshProgress();
+        syncMapRead();
+      });
+      // let the anchor link work without toggling the checkbox
+      row.querySelector('a').addEventListener('click', e => e.stopPropagation());
+      grid.appendChild(row);
+    });
+  }
+  const rtReset = document.getElementById('rtReset');
+  if (rtReset) rtReset.addEventListener('click', () => {
+    readState = {};
+    try { localStorage.removeItem(RT_KEY); } catch (e) {}
+    buildTracker(); refreshProgress(); syncMapRead();
+  });
+
+  buildMap();
+  buildTracker();
+  refreshProgress();
+  syncMapRead();
+  applyAxisFilter();
+
+  // ---------- online-softmax stepper ----------
+  (function () {
+    const tilesEl = document.getElementById('slTiles');
+    if (!tilesEl) return;
+    const scores = [3.0, 1.0, 2.5, 4.0, 0.5, 2.0];
+    const vals   = [1, 2, 3, 4, 5, 6]; // scalar "value" per key = its index, so output is a weighted mean
+    const groups = [[0, 1], [2, 3], [4, 5]];
+    const elM = document.getElementById('slM'), elMs = document.getElementById('slMsub');
+    const elL = document.getElementById('slL'), elLs = document.getElementById('slLsub');
+    const elO = document.getElementById('slO'), elOs = document.getElementById('slOsub');
+    const log = document.getElementById('slLog');
+    const verdict = document.getElementById('slVerdict');
+    const stepBtn = document.getElementById('slStep');
+    const resetBtn = document.getElementById('slReset');
+
+    let step, m, l, num;
+
+    function renderTiles() {
+      tilesEl.innerHTML = '';
+      groups.forEach((g, gi) => {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;';
+        const cap = document.createElement('div');
+        cap.style.cssText = 'font-size:10px;color:var(--fg-muted);font-family:var(--font-mono);';
+        cap.textContent = '块' + (gi + 1);
+        const tiles = document.createElement('div');
+        tiles.style.cssText = 'display:flex;gap:4px;';
+        g.forEach(idx => {
+          const t = document.createElement('div');
+          let cls = 'sl-tile';
+          if (gi < step) cls += ' done';
+          else if (gi === step) cls += ' active';
+          t.className = cls;
+          t.innerHTML = `<div class="s">${scores[idx].toFixed(1)}</div><div class="v">v=${vals[idx]}</div>`;
+          tiles.appendChild(t);
+        });
+        wrap.appendChild(cap); wrap.appendChild(tiles);
+        tilesEl.appendChild(wrap);
+      });
+    }
+
+    function reset() {
+      step = 0; m = -Infinity; l = 0; num = 0;
+      elM.textContent = '−∞'; elMs.textContent = '';
+      elL.textContent = '0'; elLs.textContent = '';
+      elO.textContent = '—'; elOs.textContent = '';
+      log.textContent = '点「下一块」开始：每块只把 2 个分数读进 SRAM，永不实例化整行。';
+      verdict.textContent = ''; verdict.className = 'sl-verdict';
+      stepBtn.disabled = false;
+      renderTiles();
+    }
+
+    function doStep() {
+      if (step >= groups.length) return;
+      const g = groups[step];
+      const blockMax = Math.max.apply(null, g.map(i => scores[i]));
+      const mNew = Math.max(m, blockMax);
+      const scale = m === -Infinity ? 0 : Math.exp(m - mNew);
+      let addL = 0, addN = 0;
+      g.forEach(i => { const p = Math.exp(scores[i] - mNew); addL += p; addN += p * vals[i]; });
+      l = l * scale + addL;
+      num = num * scale + addN;
+      m = mNew;
+      const o = num / l;
+
+      elM.textContent = m.toFixed(2);
+      elMs.textContent = 'max(旧, 本块) ';
+      elL.textContent = l.toFixed(3);
+      elLs.textContent = '旧×' + scale.toFixed(3) + ' + 本块';
+      elO.textContent = o.toFixed(3);
+      elOs.textContent = '加权均值';
+
+      log.textContent =
+        `第 ${step + 1} 块：本块 max=${blockMax.toFixed(1)} → 新 running max m=${m.toFixed(2)}。\n` +
+        `缩放旧结果的因子 e^(m_old−m_new)=${scale.toFixed(3)}` +
+        (scale === 0 ? '（第一块没有旧结果）' : '') + '，再加上本块贡献。\n' +
+        `→ ℓ=${l.toFixed(3)}，o=${o.toFixed(3)}`;
+
+      step++;
+      renderTiles();
+
+      if (step >= groups.length) {
+        stepBtn.disabled = true;
+        // naive full softmax for comparison
+        const gmax = Math.max.apply(null, scores);
+        let den = 0, nn = 0;
+        scores.forEach((s, i) => { const e = Math.exp(s - gmax); den += e; nn += e * vals[i]; });
+        const naive = nn / den;
+        verdict.className = 'sl-verdict ok';
+        verdict.innerHTML = `✓ 分块结果 o=${o.toFixed(4)} ＝ 一次性 softmax o=${naive.toFixed(4)}。` +
+          `从没把整行 6 个分数同时拿在手里，结果却数值一致——这就是 attention 能 tile、N×N 矩阵能不落 HBM 的原因。`;
+      }
+    }
+
+    stepBtn.addEventListener('click', doStep);
+    resetBtn.addEventListener('click', reset);
+    reset();
+  })();
+
+  // ---------- speculative-decoding speedup calculator ----------
+  (function () {
+    const a = document.getElementById('sdA');
+    if (!a) return;
+    const g = document.getElementById('sdG'), c = document.getElementById('sdC');
+    const av = document.getElementById('sdAv'), gv = document.getElementById('sdGv'), cv = document.getElementById('sdCv');
+    const tok = document.getElementById('sdTok'), spd = document.getElementById('sdSpd'), note = document.getElementById('sdNote');
+
+    function calc() {
+      const A = parseFloat(a.value), G = parseInt(g.value, 10), C = parseFloat(c.value);
+      av.textContent = A.toFixed(2); gv.textContent = G; cv.textContent = C.toFixed(2);
+      const E = (1 - Math.pow(A, G + 1)) / (1 - A);   // expected tokens per target forward
+      const speed = E / (1 + G * C);
+      tok.textContent = E.toFixed(2);
+      spd.textContent = speed.toFixed(2) + '×';
+
+      // best gamma for this (A, C), brute force 1..16
+      let bestG = 1, bestS = -1;
+      for (let gg = 1; gg <= 16; gg++) {
+        const ee = (1 - Math.pow(A, gg + 1)) / (1 - A);
+        const ss = ee / (1 + gg * C);
+        if (ss > bestS) { bestS = ss; bestG = gg; }
+      }
+      let msg = `平均每次大模型 forward 接受 <strong>${(E - 1).toFixed(1)}</strong> 个草稿 token（上界 γ+1=${G + 1}）。`;
+      if (speed < 1) {
+        msg += ` <span style="color:var(--red);font-weight:600;">此时比不投机还慢</span>——接受率太低或 draft 太贵，白算的部分盖过了收益。`;
+      } else {
+        msg += ` 当前接受率/成本下，<strong>γ=${bestG}</strong> 最划算（≈${bestS.toFixed(2)}×）；γ 再大，被拒 token 的浪费开始反噬。`;
+      }
+      note.innerHTML = msg;
+    }
+    [a, g, c].forEach(el => el.addEventListener('input', calc));
+    calc();
+  })();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 5 章 · B+ 树：十亿行里一步命中 — Data Systems</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="stylesheet" href="chapter.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▦</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+
+<div class="book">
+  <aside class="sidebar" data-chapter="5">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M10 12h20v4H10v-4Zm0 7h20v4H10v-4Zm0 7h20v4H10v-4Z" fill="#fff"/>
+      </svg>
+      <span>Data Systems<small>CS186 Companion</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part II · 第 5 章</div>
+    <div class="ch-number">05</div>
+    <h1 class="ch-title">B+ 树：<br>在十亿行里，一步命中</h1>
+    <p class="ch-standfirst">如果 SQL 是“我要什么”，B+ 树就是数据库回答“我怎么少翻页”的第一把刀。它不是一棵普通树，而是一台为磁盘页、范围扫描和更新稳定性定制的查找机器。</p>
+
+    <div class="ch-meta">
+      <span><b>难度</b> 中等偏硬</span><span class="dot"></span>
+      <span><b>用时</b> 60-90 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 沙盒 · 范围扫描 · fan-out 计算器</span><span class="dot"></span>
+      <span><b>目标</b> 从 invariant 到 I/O cost</span>
+    </div>
+
+    <h2 id="s1" data-nav="5.1 为什么需要索引"><span class="sec-no">5.1</span>问题不是“会不会找”，<br class="mbr">而是“翻几页”</h2>
+    <p class="dropcap">数据库系统里，很多看似高级的概念，最后都会落到一个很朴素的问题：为了回答这个查询，我要读多少个 <span class="term" data-gloss="page">page</span>？如果没有索引，查 <code>WHERE id = 42</code> 只能扫表。表有十亿行，就像在一栋楼里逐间敲门问“你是不是 42”。</p>
+    <p>B+ 树索引做的事情，是给这栋楼装一套目录：先看楼层，再看门牌区间，最后只敲很少几扇门。它的关键不在“树”这个形状，而在 <strong>每个节点正好是一页，节点里塞很多 key，树因此非常矮</strong>。</p>
+
+    <div class="box intuition">
+      <div class="box-label">一口气建立直觉</div>
+      <p>B+ 树把一次查找变成：<b>读 root page → 读几个 internal page → 读目标 leaf page</b>。如果 fan-out 是 250，三四层就能覆盖上亿到十亿量级的记录。它赢的不是算法课里的 <code>O(log n)</code>，而是系统课里的 <b>3 次 I/O，对比 100 万次 I/O</b>。</p>
+    </div>
+
+    <h2 id="s2" data-nav="5.2 B+ 树不变量"><span class="sec-no">5.2</span>先记住这 5 条 invariant</h2>
+    <p>你不需要把所有 case 背下来。真正要抓住的是 invariant：只要它们成立，查找、插入、删除都只是为了维护这些约束。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame invariant-panel">
+        <div class="inv-card"><b>1</b><span>所有真实记录都在叶子</span><p>Internal node 只做导航，不存 RID payload。</p></div>
+        <div class="inv-card"><b>2</b><span>叶子从左到右排序并串起来</span><p>范围查询不用回到 root，可以顺着 sibling pointer 扫。</p></div>
+        <div class="inv-card"><b>3</b><span>所有叶子同深度</span><p>任何 key 的查找路径长度一样，延迟稳定。</p></div>
+        <div class="inv-card"><b>4</b><span>节点至少半满</span><p>除了 root，节点不能太空，否则空间和 fan-out 都会崩。</p></div>
+        <div class="inv-card"><b>5</b><span>separator 是右子树的最小 key</span><p>遇到相等 key，向右走，才能命中正确叶子。</p></div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 5.1</span><b>B+ 树的读法。</b>把 case 全部还原成 invariant，会比死记 split/merge 规则稳定得多。</figcaption>
+    </figure>
+
+    <h2 id="s3" data-nav="5.3 交互沙盒"><span class="sec-no">5.3</span>沙盒：插入、分裂、搜索、<br class="mbr">范围扫描、删除</h2>
+    <p>下面这个模型采用 CS186 常用的 <span class="term" data-gloss="order">order d</span> 记法：非 root 节点最少 <code>d</code> 个 key，最多 <code>2d</code> 个 key。试着连续插入 <code>10, 20, 5, 6, 12, 30, 7, 17</code>，观察第一次 leaf split 如何把 separator 复制到 parent。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget btree-widget">
+        <div class="widget-head">
+          <span class="wtitle">B+ 树操作台</span>
+          <span class="wtag">live sandbox</span>
+          <span class="whint">order d 可调 · 所有叶子相连</span>
+        </div>
+        <div class="widget-body">
+          <div id="btree-sandbox"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 5.2</span><b>B+ 树沙盒。</b>这个实现真的维护 split、borrow、merge 与 sibling chain。每一步都把被访问的页高亮出来，方便你把“算法步骤”映射成“页 I/O”。</figcaption>
+    </figure>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 为什么 separator 是复制，不是搬走？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>叶子里的 key 是真实索引项的一部分，不能因为提升到 parent 就从 leaf 里删掉。Leaf split 后，右叶子的第一个 key 会被<b>复制</b>到 parent，作为导航边界。Internal split 不一样：中间 separator 本来就是导航 key，可以被<b>推上去</b>。</p>
+        <p>这就是 B+ tree 和很多教科书里的 B-tree 最容易混的地方：B+ tree 的数据全在 leaf，internal node 是路牌。</p>
+      </div>
+    </details>
+
+    <h2 id="s4" data-nav="5.4 查找路径就是 I/O"><span class="sec-no">5.4</span>查找路径，就是页 I/O</h2>
+    <p>算法课会说 B+ 树查找是 <code>O(log_f N)</code>。数据库系统里，我们更关心这句话的物理版本：<strong>一次 point lookup 要读树高这么多页</strong>。如果 root 常驻 buffer pool，成本还可以再少一页。</p>
+    <p>范围查询则多了一个尾巴：先沿树高找到第一个 leaf，再顺着 leaf sibling chain 扫到范围结束。B+ 树非常适合 <code>BETWEEN</code>、排序输出和索引嵌套循环连接，原因就在这条 leaf chain。</p>
+
+    <div class="box formal">
+      <div class="box-label">cost lens</div>
+      <p><b>Point lookup:</b> <code>height</code> 次 page read，常见情况下 root 被缓存，实际更接近 <code>height - 1</code>。</p>
+      <p><b>Range scan:</b> <code>height + leaf_pages_touched</code>，如果需要回表取记录，还要加 data page I/O。</p>
+      <p><b>Insert/delete:</b> 先 lookup，再修改 leaf。只有节点满/太空时，才触发 split/borrow/merge 向上传播。</p>
+    </div>
+
+    <h2 id="s5" data-nav="5.5 Fan-out 让树变矮"><span class="sec-no">5.5</span>Fan-out：为什么十亿行也只有几层</h2>
+    <p>B+ 树真正的系统魔法是 fan-out。一个 4KB page 里，如果每个 separator key 加 child pointer 只占几十字节，一个 internal page 就能指向几百个孩子。高度不是按二叉树的 2 取 log，而是按几百取 log。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">Fan-out / Height Calculator</span>
+          <span class="wtag">cost model</span>
+          <span class="whint">拖动参数，观察树高</span>
+        </div>
+        <div class="widget-body">
+          <div id="fanout-calc"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 5.3</span><b>树高估算器。</b>同样是 B+ 树，page size、key width、RID/pointer width 会直接改变 fan-out，从而改变 I/O 次数。</figcaption>
+    </figure>
+
+    <h2 id="s6" data-nav="5.6 B+Tree vs LSM"><span class="sec-no">5.6</span>现代视角：B+ 树不是唯一答案</h2>
+    <p>CS186 先讲 B+ 树，是因为它是传统 OLTP 数据库的核心索引结构。但现代存储系统里，你会经常遇到另一个选择：<span class="term" data-gloss="lsm">LSM tree</span>。B+ 树擅长读和范围扫描，更新时原地修改页；LSM 把写入先追加到内存和日志，再批量刷成有序文件，用 compaction 慢慢整理。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">Read/Write Trade-off</span>
+          <span class="wtag">modern angle</span>
+          <span class="whint">调整 workload</span>
+        </div>
+        <div class="widget-body">
+          <div id="lsm-tradeoff"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 5.4</span><b>B+Tree vs LSM。</b>没有绝对赢家。读多、范围扫描、低延迟 point lookup 偏 B+ 树；写多、日志式吞吐、云存储友好偏 LSM。</figcaption>
+    </figure>
+
+    <h2 id="s7" data-nav="5.7 如何带着 B+ 树继续学"><span class="sec-no">5.7</span>下一圈螺旋：把索引接回查询执行</h2>
+    <p>学到这里，B+ 树不再是一道数据结构题。它会重新出现在后面的几章里：</p>
+    <ul>
+      <li><b>Join:</b> Index Nested Loop Join 的代价，取决于内表索引 lookup 有多便宜。</li>
+      <li><b>Optimizer:</b> 选择 seq scan 还是 index scan，本质是估算 selectivity 和 I/O。</li>
+      <li><b>Transactions:</b> 并发更新 B+ 树，需要 latch coupling 和 predicate/next-key locks。</li>
+      <li><b>Recovery:</b> split 修改多个 page，必须能被 WAL redo/undo 正确恢复。</li>
+      <li><b>Modern systems:</b> RocksDB、Bigtable、DynamoDB 背后很多设计都在重分配 B+Tree 和 LSM 的 trade-off。</li>
+    </ul>
+
+    <div class="recap">
+      <h3>本章压缩包</h3>
+      <ul>
+        <li>B+ 树是为了减少 page I/O，不是为了炫耀树结构。</li>
+        <li>Internal node 是导航，leaf 才有真实索引项；leaf chain 让 range scan 便宜。</li>
+        <li>Order d 的 split/borrow/merge 都是在维护“半满、平衡、排序”的 invariant。</li>
+        <li>Fan-out 很大，所以树很矮；树高直接变成 lookup 的 I/O cost。</li>
+        <li>B+ 树和 LSM 是读写 trade-off 的两端，不是新旧优劣关系。</li>
+      </ul>
+    </div>
+
+    <div class="ch-foot">
+      <a class="prev" href="../index.html"><span class="dir">目录</span><span class="t">回到全书结构</span></a>
+      <a class="next" href="../index.html"><span class="dir">下一章</span><span class="t">排序与哈希（待续）</span></a>
+    </div>
+   </article>
+  </main>
+</div>
+
+<script>
+window.CB_GLOSS = {
+  page: { t: "Page", d: "数据库 I/O 的基本单位，常见大小是 4KB、8KB 或 16KB。Buffer pool 缓存的也是 page。" },
+  order: { t: "Order d", d: "CS186 常用记法：非 root 节点至少 d 个 key，至多 2d 个 key。溢出就 split，太空就 borrow/merge。" },
+  lsm: { t: "LSM tree", d: "Log-Structured Merge Tree。写入先追加，后台 compaction，把随机写变成顺序写，代价是读路径和空间放大更复杂。" }
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="chapter.js"></script>
+</body>
+</html>

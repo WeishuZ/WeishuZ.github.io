@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 14 章 · GPU 与 AI 推理上云 — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="14">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part V · 通往 AI 基建 · 第 14 章</div>
+    <div class="ch-number">14</div>
+    <h1 class="ch-title">云上的 GPU 与大规模 AI 推理</h1>
+    <p class="ch-standfirst">大模型推理是本书的终极应用题：昂贵 GPU、有限显存、突发请求、长尾延迟、多租户调度，所有云与 OS 的概念在这里汇合。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> 前沿综合</span><span class="dot"></span>
+      <span><b>用时</b> 约 75 分钟</span><span class="dot"></span>
+      <span><b>交互</b> LLM serving 流程 · batching/KV cache 取舍</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">大模型推理是本书的终极应用题：昂贵 GPU、有限显存、突发请求、长尾延迟、多租户调度，所有云与 OS 的概念在这里汇合。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>Prefill</b><span>处理 prompt，生成第一批 KV cache 的阶段，计算密集。</span></div>
+<div class="concept-card"><b>Decode</b><span>逐 token 生成输出的阶段，显存带宽和调度更关键。</span></div>
+<div class="concept-card"><b>KV cache</b><span>Transformer 为已处理 token 保存的 key/value 状态，是推理显存大头。</span></div>
+<div class="concept-card"><b>Continuous batching</b><span>动态把不同请求的 decode 步骤交织成批，提高 GPU 利用率。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">GPU 与 AI 推理上云 · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 14.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="14.1 推理不是一次矩阵乘法"><span class="sec-no">14.1</span>推理不是一次矩阵乘法</h2>
+    <p>用户看到的是一个回答，系统看到的是排队、tokenization、prefill、decode、采样、流式返回、缓存回收。每一步都可能成为延迟或吞吐瓶颈。</p>
+
+    <h2 id="s2" data-nav="14.2 GPU 贵，所以空着就是事故"><span class="sec-no">14.2</span>GPU 贵，所以空着就是事故</h2>
+    <p>CPU 服务常担心线程太多，GPU 服务更怕 batch 太小。GPU 需要足够并行工作填满矩阵单元，但请求又有不同长度和到达时间。调度器必须把不整齐的用户流量整理成 GPU 喜欢的形状。</p>
+
+    <h2 id="s3" data-nav="14.3 KV cache 把显存变成调度资源"><span class="sec-no">14.3</span>KV cache 把显存变成调度资源</h2>
+    <p>每个已生成 token 都留下 KV 状态。长上下文、多并发、长输出会迅速吃掉显存。PagedAttention、prefix caching、eviction、swap 都是在管理这块新型内存。</p>
+
+    <h2 id="s4" data-nav="14.4 连续批处理改变批的定义"><span class="sec-no">14.4</span>连续批处理改变批的定义</h2>
+    <p>传统静态 batching 等一组请求一起开始一起结束，容易被慢请求拖住。Continuous batching 让新请求不断加入，让已完成请求离开，GPU 每一步都尽量满。</p>
+
+    <h2 id="s5" data-nav="14.5 AI 基建是云计算的新压力测试"><span class="sec-no">14.5</span>AI 基建是云计算的新压力测试</h2>
+    <p>它需要 OS 的内存与调度直觉、云的多租户与伸缩、分布式的容错、Kubernetes 的编排、Serverless 的经济敏感。你学到的每章，都在这里用上。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">GPU 与 AI 推理上云 · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 14.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>CPU 调度</b></td><td>请求队列、优先级、preemption</td><td>第 2 章的调度问题换成 GPU 版本。</td></tr>
+<tr><td><b>虚拟内存</b></td><td>PagedAttention、KV block manager</td><td>第 3 章的 paging 直觉直接迁移到显存。</td></tr>
+<tr><td><b>Kubernetes/伸缩</b></td><td>GPU node pool、autoscaling、故障恢复</td><td>模型服务必须被编排、观测、扩缩容和容错。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>大模型推理是一条多阶段服务流水线，不是单次 forward。</li>
+<li>GPU 利用率、TTFT、TPOT 和显存占用互相拉扯。</li>
+<li>KV cache 是推理系统里的核心内存资源。</li>
+<li>连续批处理和分页式 KV 管理把 OS/云直觉带入 AI 基建。</li></ul>
+      <p class="muted" style="margin-bottom:0">全书到这里闭环：从一个请求出发，下挖到 OS，再盖回云与分布式，最终抵达大模型推理系统。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch13-serverless/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">13 · Serverless</span>
+      </a>
+      <a class="next" href="../index.html">
+        <span class="dir">回到目录 ›</span>
+        <span class="t">全书地图</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "prefill": {
+    "t": "Prefill",
+    "d": "处理 prompt 并构建初始 KV cache 的阶段。",
+    "l": "#"
+  },
+  "decode": {
+    "t": "Decode",
+    "d": "逐 token 生成输出的阶段。",
+    "l": "#"
+  },
+  "kv": {
+    "t": "KV cache",
+    "d": "Transformer 推理时保存历史 token key/value 的显存状态。",
+    "l": "#"
+  },
+  "batching": {
+    "t": "Continuous batching",
+    "d": "动态维护 batch，让请求可加入和离开每一步 decode。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "LLM serving 的热路径把请求队列、GPU batch、KV cache 和流式响应绑在一起。瓶颈常在阶段切换处。",
+    "nodes": [
+      {
+        "icon": "📥",
+        "label": "请求入队",
+        "sub": "prompt"
+      },
+      {
+        "icon": "🧮",
+        "label": "Prefill",
+        "sub": "建 KV"
+      },
+      {
+        "icon": "🧠",
+        "label": "KV cache",
+        "sub": "占显存"
+      },
+      {
+        "icon": "🔁",
+        "label": "Decode batch",
+        "sub": "逐 token"
+      },
+      {
+        "icon": "📡",
+        "label": "流式返回",
+        "sub": "tokens"
+      }
+    ],
+    "steps": [
+      {
+        "title": "请求入队",
+        "body": "用户请求到达，调度器记录 prompt 长度、max tokens、优先级。",
+        "note": "像第 2 章调度，但资源换成 GPU 和显存。",
+        "node": 0
+      },
+      {
+        "title": "Prefill",
+        "body": "模型一次性处理 prompt，生成第一步 logits 和 KV cache。",
+        "note": "长 prompt 会让 TTFT 变慢。",
+        "node": 1
+      },
+      {
+        "title": "显存占用",
+        "body": "KV cache 被保留，后续每个 decode token 都会读它。",
+        "note": "这里对应第 3 章的内存管理直觉。",
+        "node": 2
+      },
+      {
+        "title": "连续 decode",
+        "body": "多个请求的下一 token 被组织成 batch，一步步生成。",
+        "note": "调度器要在吞吐和单请求延迟之间平衡。",
+        "node": 3
+      },
+      {
+        "title": "流式返回与回收",
+        "body": "token 逐步发给用户，请求结束后释放或复用 cache。",
+        "note": "第 5、8、12 章的 I/O、网络和韧性全都在场。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "小 batch 低延迟",
+        "note": "请求很快开始，但 GPU 利用率低，成本高。",
+        "metrics": [
+          {
+            "label": "TTFT",
+            "value": 25,
+            "warn": false
+          },
+          {
+            "label": "GPU 利用率",
+            "value": 42,
+            "warn": false
+          },
+          {
+            "label": "单位成本",
+            "value": 82,
+            "warn": true
+          }
+        ],
+        "takeaway": "适合低流量或极端交互场景。"
+      },
+      {
+        "name": "大 batch 高吞吐",
+        "note": "GPU 更满，但等待组批会增加首 token 延迟。",
+        "metrics": [
+          {
+            "label": "TTFT",
+            "value": 74,
+            "warn": true
+          },
+          {
+            "label": "GPU 利用率",
+            "value": 90,
+            "warn": false
+          },
+          {
+            "label": "单位成本",
+            "value": 35,
+            "warn": false
+          }
+        ],
+        "takeaway": "离线或宽松延迟服务更适合。"
+      },
+      {
+        "name": "连续批处理",
+        "note": "动态加入/退出请求，在吞吐和延迟之间找更好的 Pareto 点。",
+        "metrics": [
+          {
+            "label": "TTFT",
+            "value": 45,
+            "warn": false
+          },
+          {
+            "label": "GPU 利用率",
+            "value": 84,
+            "warn": false
+          },
+          {
+            "label": "调度复杂度",
+            "value": 78,
+            "warn": true
+          }
+        ],
+        "takeaway": "vLLM/TGI/TensorRT-LLM 这类系统都在这个方向上工程化。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "TRACE",
+      "t": "画出 prefill/decode",
+      "d": "说明 TTFT 和 TPOT 分别受什么影响。"
+    },
+    {
+      "k": "CALC",
+      "t": "估算 KV cache 显存",
+      "d": "用层数、heads、head dim、token 数、dtype 推导。"
+    },
+    {
+      "k": "DESIGN",
+      "t": "设计一个简单 batching scheduler",
+      "d": "说清 admission、batching、eviction 和 fairness。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

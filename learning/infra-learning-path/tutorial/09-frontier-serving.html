@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>M6 · 前沿 serving 系统 — Infra Learning Path</title>
+<meta name="description" content="从 mini-vLLM 走向生产级 LLM serving：prefill/decode 分离、KV cache 体系、prefix-aware routing、speculative decoding、FP8/KV 量化和 MoE/MLA serving。" />
+<link rel="stylesheet" href="../assets/style.css" />
+<style>
+  .frontier-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 22px 0 28px;
+  }
+  .frontier-chip {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 10px 12px;
+  }
+  .frontier-chip .k {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .frontier-chip .v {
+    font-size: 13px;
+    color: var(--fg-soft);
+    line-height: 1.45;
+  }
+  .diagram .m6-map {
+    width: 700px;
+    max-width: none;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    margin: 18px 0;
+  }
+  .table-wrap table { margin: 0; min-width: 690px; }
+  .pattern-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin: 18px 0;
+  }
+  .pattern {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg);
+    padding: 15px 16px;
+    box-shadow: var(--shadow-sm);
+  }
+  .pattern h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+  }
+  .pattern p {
+    font-size: 14px;
+    color: var(--fg-soft);
+  }
+  .pattern .read {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin-top: 10px;
+  }
+  .m6-lab {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    background: var(--bg);
+    padding: 18px 20px;
+    margin: 24px 0;
+    box-shadow: var(--shadow-sm);
+  }
+  .m6-lab .lab-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .m6-lab .lab-head strong {
+    font-size: 15px;
+  }
+  .m6-lab .lab-head span {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+  }
+  .lab-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .ctrl-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-soft);
+    padding: 10px 12px;
+  }
+  .ctrl-card label {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: baseline;
+    font-size: 13px;
+    color: var(--fg-soft);
+    margin-bottom: 7px;
+  }
+  .ctrl-card label b {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .ctrl-card input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .ctrl-card select {
+    width: 100%;
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 7px 8px;
+  }
+  .lab-output {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 16px 0 12px;
+  }
+  .out-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    background: var(--bg);
+  }
+  .out-card .k {
+    font-size: 11px;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .out-card .v {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    color: var(--accent);
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .meter {
+    height: 7px;
+    border-radius: 8px;
+    background: var(--bg-code);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-top: 7px;
+  }
+  .meter i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width .2s;
+  }
+  .verdict {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--accent-bg);
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  .verdict .title {
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 5px;
+  }
+  .todo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: 18px 0;
+  }
+  .todo {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    background: var(--bg-soft);
+  }
+  .todo h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+  }
+  .todo ul {
+    font-size: 14px;
+    color: var(--fg-soft);
+    margin-bottom: 0;
+  }
+  @media (max-width: 900px) {
+    .diagram .m6-map {
+      width: 100%;
+      max-width: 100%;
+    }
+  }
+  @media (max-width: 760px) {
+    .frontier-strip, .pattern-grid, .lab-grid, .todo-grid { grid-template-columns: 1fr; }
+    .lab-output { grid-template-columns: repeat(2, 1fr); }
+    .page-title { overflow-wrap: anywhere; }
+  }
+  @media (max-width: 480px) {
+    .lab-output { grid-template-columns: 1fr; }
+    .page-title { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="../index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+  <div class="nav-group"><div class="nav-label">起步</div><nav><ul>
+    <li><a href="../index.html"><span class="idx">/</span>主页 · 概览</a></li>
+    <li><a href="00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+    <li><a href="01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">6 个月主线</div><nav><ul>
+    <li><a href="02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+    <li><a href="03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+    <li><a href="04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+    <li><a href="05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+    <li><a href="06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+    <li><a href="09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">参考</div><nav><ul>
+    <li><a href="07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+    <li><a href="08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+  </ul></nav></div>
+  <div class="foot">源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a></div>
+</aside>
+
+<main class="content">
+
+<div class="crumbs">
+  <a href="../index.html">home</a><span class="sep">/</span>tutorial<span class="sep">/</span>M6 frontier serving
+</div>
+
+<h1 class="page-title">Month 6 · 前沿 serving 系统</h1>
+<p class="page-sub">从 mini-vLLM 走向生产系统：prefill/decode 分离、KV cache 体系、prefix-aware routing、speculative decoding、FP8/KV 量化、MoE/MLA serving。</p>
+
+<p class="lede">
+  M5 结束时，你已经能写一个单机 toy engine。下一步不是把 toy engine 再堆 20 个 feature，
+  而是学会<strong>生产系统在什么约束下选择 feature</strong>：什么请求该走 prefix cache，什么请求该拆 prefill/decode，
+  什么请求投机解码反而变慢，什么时候 KV transfer 会成为新的瓶颈。
+</p>
+
+<div class="callout q">
+  <div class="label">驱动问题</div>
+  你有 8 张 H100、一个 70B 模型、请求分布长短混杂：有 1k token 聊天，也有 80k token RAG。
+  产品给了两个 SLO：TTFT p90 &lt; 1.5s，ITL p99 &lt; 80ms。你不能只说"上 vLLM"。
+  <strong>你要怎么拆 GPU 池、怎么路由、怎么缓存 KV、怎么判断优化真的赢了？</strong>
+</div>
+
+<div class="frontier-strip">
+  <div class="frontier-chip"><div class="k">目标函数</div><div class="v">从 raw throughput 转成 goodput：满足 TTFT/ITL SLO 的请求率。</div></div>
+  <div class="frontier-chip"><div class="k">核心资源</div><div class="v">KV cache 不只是显存对象，也变成跨实例的存储和通信介质。</div></div>
+  <div class="frontier-chip"><div class="k">系统形态</div><div class="v">prefill 池、decode 池、KV/cache 层、router、metrics 成为一套控制系统。</div></div>
+  <div class="frontier-chip"><div class="k">学习产出</div><div class="v">做一个 v0.6 frontier fork：模拟、测量、解释取舍。</div></div>
+</div>
+
+<h2><span class="num">01</span>先补知识断层：单机 engine 到生产 serving</h2>
+
+<p>
+  这份教材前 5 个月已经把<strong>单机 vLLM 的核心闭环</strong>走通了：入口、KV 分页、scheduler、kernel、mini-vLLM。
+  明显的缺口只有一个：你还没把这些模块放进<strong>多实例、多 GPU 池、多 SLO、多租户</strong>的生产环境里看。
+</p>
+
+<div class="diagram">
+  <svg class="m6-map" viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="m6arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 0L10 5L0 10z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <text x="165" y="28" text-anchor="middle" font-weight="700" font-size="15">M5：单机 mini-vLLM</text>
+      <rect x="40" y="54" width="250" height="230" rx="8" fill="#f7f5ee" stroke="#d6d3d1"/>
+      <rect x="80" y="82" width="170" height="38" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="165" y="106" text-anchor="middle" font-weight="600">HTTP / Engine</text>
+      <rect x="80" y="142" width="170" height="38" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+      <text x="165" y="166" text-anchor="middle" font-weight="600">Scheduler</text>
+      <rect x="80" y="202" width="170" height="38" rx="6" fill="#f0fdf4" stroke="#166534"/>
+      <text x="165" y="226" text-anchor="middle" font-weight="600">KV Block Pool</text>
+      <path d="M165 120V142" stroke="#78716c" marker-end="url(#m6arrow)"/>
+      <path d="M165 180V202" stroke="#78716c" marker-end="url(#m6arrow)"/>
+      <text x="165" y="267" text-anchor="middle" fill="#78716c">一个进程里做所有事</text>
+
+      <text x="555" y="28" text-anchor="middle" font-weight="700" font-size="15">M6：生产 frontier serving</text>
+      <rect x="380" y="54" width="330" height="260" rx="8" fill="#fff" stroke="#d6d3d1"/>
+      <rect x="505" y="78" width="100" height="34" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="555" y="99" text-anchor="middle" font-weight="600">Router</text>
+      <rect x="410" y="142" width="118" height="46" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+      <text x="469" y="162" text-anchor="middle" font-weight="600">Prefill pool</text>
+      <text x="469" y="178" text-anchor="middle" fill="#78716c" font-size="10">compute-bound</text>
+      <rect x="582" y="142" width="118" height="46" rx="6" fill="#f0fdf4" stroke="#166534"/>
+      <text x="641" y="162" text-anchor="middle" font-weight="600">Decode pool</text>
+      <text x="641" y="178" text-anchor="middle" fill="#78716c" font-size="10">memory-bound</text>
+      <rect x="455" y="232" width="200" height="46" rx="6" fill="#fefce8" stroke="#facc15"/>
+      <text x="555" y="252" text-anchor="middle" font-weight="600">KV cache / connector</text>
+      <text x="555" y="268" text-anchor="middle" fill="#78716c" font-size="10">GPU · CPU · SSD · remote</text>
+      <path d="M555 112C525 126 490 132 469 142" stroke="#78716c" fill="none" marker-end="url(#m6arrow)"/>
+      <path d="M555 112C590 126 622 132 641 142" stroke="#78716c" fill="none" marker-end="url(#m6arrow)"/>
+      <path d="M469 188C480 215 500 226 526 232" stroke="#78716c" fill="none" marker-end="url(#m6arrow)"/>
+      <path d="M584 232C610 224 635 208 641 188" stroke="#78716c" fill="none" marker-end="url(#m6arrow)"/>
+      <path d="M290 170H370" stroke="#c2410c" stroke-width="2" marker-end="url(#m6arrow)"/>
+      <text x="330" y="154" text-anchor="middle" fill="#c2410c" font-weight="600">系统化</text>
+    </g>
+  </svg>
+  <div class="caption">M5 解决"一个 engine 怎么工作"；M6 解决"多个 engine 如何在 SLO、缓存、网络和成本下协同"。</div>
+</div>
+
+<p>
+  所以后续学习不缺基础，缺的是<strong>判断力框架</strong>。真实生产里，优化不是越多越好，而是要问：
+  当前 workload 的瓶颈是 prefill 算力、decode 带宽、KV 容量、KV 传输、还是排队延迟？
+</p>
+
+<h2><span class="num">02</span>新目标函数：Goodput，而不是 Tokens/s</h2>
+
+<p>
+  老 benchmark 喜欢报 tokens/s。生产 serving 更关心：在 TTFT 和 ITL 都满足 SLO 的前提下，每张 GPU 能承载多少请求。
+  这就是 DistServe 论文强调的 <strong>goodput</strong> 视角：同样吞吐，如果 p99 ITL 爆掉，它对产品没有价值。
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>指标</th><th>看什么</th><th>常见误判</th><th>应该怎么用</th></tr></thead>
+    <tbody>
+      <tr><td><strong>TTFT</strong></td><td>用户多久看到第一个 token</td><td>只看平均值，忽略长 prompt 的尾部</td><td>按 prompt length bucket 看 p90/p99</td></tr>
+      <tr><td><strong>ITL / TPOT</strong></td><td>流式输出是否顺滑</td><td>把 prefill 和 decode 混在一个延迟里</td><td>decode 阶段单独设 SLO，重点看尾延迟</td></tr>
+      <tr><td><strong>Queue time</strong></td><td>容量是否已经耗尽</td><td>GPU utilization 高就以为健康</td><td>排队上升通常比 GPU 利用率更早报警</td></tr>
+      <tr><td><strong>KV cache usage</strong></td><td>显存是否被上下文吃掉</td><td>只看 weight 大小，不算 KV</td><td>按模型结构和上下文长度估算 tokens in flight</td></tr>
+      <tr><td><strong>Goodput</strong></td><td>满足 SLO 的请求率</td><td>吞吐高但 SLO 违约</td><td>所有优化都用 goodput 对账</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读源码 / 文档锚点</div>
+  <span class="path"><a href="https://docs.vllm.ai/en/latest/usage/metrics.html" target="_blank">vLLM Production Metrics</a></span>
+  <span class="path"><a href="https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin" target="_blank">DistServe OSDI 2024</a></span>
+  <div class="ask">先把 TTFT、time_per_output_token、queue_time、prefill_time、decode_time、KV cache usage 这些指标在 Prometheus/Grafana 里找出来，再谈优化。</div>
+</div>
+
+<h2><span class="num">03</span>Prefill / Decode 分离：为什么它突然成了主线</h2>
+
+<p>
+  prefill 和 decode 的资源画像完全不同。prefill 一次吃掉整个 prompt，矩阵乘大、算力密集；decode 每步只生成 1 个 token，
+  主要被 weight/KV 读取和 kernel launch 限制，常常是 memory-bound。把两者合在一个 batch 里，长 prompt 会打断正在流式输出的请求。
+</p>
+
+<div class="diagram">
+  <svg class="m6-map" viewBox="0 0 760 310" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="pipearr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 0L10 5L0 10z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <rect x="32" y="66" width="116" height="46" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="90" y="92" text-anchor="middle" font-weight="600">Request</text>
+      <rect x="190" y="42" width="132" height="72" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+      <text x="256" y="68" text-anchor="middle" font-weight="700">Prefill worker</text>
+      <text x="256" y="87" text-anchor="middle" fill="#78716c">prompt tokens</text>
+      <text x="256" y="103" text-anchor="middle" fill="#78716c">生成 KV</text>
+      <rect x="428" y="42" width="132" height="72" rx="6" fill="#fefce8" stroke="#facc15"/>
+      <text x="494" y="68" text-anchor="middle" font-weight="700">KV transfer</text>
+      <text x="494" y="87" text-anchor="middle" fill="#78716c">NIXL / RDMA</text>
+      <text x="494" y="103" text-anchor="middle" fill="#78716c">GPU to GPU</text>
+      <rect x="612" y="42" width="116" height="72" rx="6" fill="#f0fdf4" stroke="#166534"/>
+      <text x="670" y="68" text-anchor="middle" font-weight="700">Decode</text>
+      <text x="670" y="87" text-anchor="middle" fill="#78716c">stream token</text>
+      <text x="670" y="103" text-anchor="middle" fill="#78716c">守住 ITL</text>
+      <path d="M148 89H190" stroke="#78716c" marker-end="url(#pipearr)"/>
+      <path d="M322 78H428" stroke="#78716c" marker-end="url(#pipearr)"/>
+      <path d="M560 78H612" stroke="#78716c" marker-end="url(#pipearr)"/>
+
+      <rect x="190" y="180" width="132" height="58" rx="6" fill="#eff6ff" stroke="#1e40af"/>
+      <text x="256" y="202" text-anchor="middle" font-weight="700">Prefill pool</text>
+      <text x="256" y="220" text-anchor="middle" fill="#78716c">TP 小一点</text>
+      <rect x="384" y="180" width="132" height="58" rx="6" fill="#fff" stroke="#d6d3d1"/>
+      <text x="450" y="202" text-anchor="middle" font-weight="700">Router</text>
+      <text x="450" y="220" text-anchor="middle" fill="#78716c">按 overlap + load</text>
+      <rect x="578" y="180" width="132" height="58" rx="6" fill="#f0fdf4" stroke="#166534"/>
+      <text x="644" y="202" text-anchor="middle" font-weight="700">Decode pool</text>
+      <text x="644" y="220" text-anchor="middle" fill="#78716c">TP 大一点</text>
+      <path d="M384 209H322" stroke="#78716c" marker-end="url(#pipearr)"/>
+      <path d="M516 209H578" stroke="#78716c" marker-end="url(#pipearr)"/>
+      <text x="380" y="278" text-anchor="middle" fill="#78716c">拆分以后，每个池可以独立扩缩容、独立并行策略、独立 SLO。</text>
+    </g>
+  </svg>
+  <div class="caption">DistServe / Splitwise / Mooncake / Dynamo / vLLM disaggregated prefill 都围绕这个基本形状展开。</div>
+</div>
+
+<p>
+  但分离不是免费午餐。你省掉 prefill/decode 干扰的同时，引入了<strong>KV transfer</strong>：
+  如果 prompt 很短、模型很小、互联很慢，传 KV 的时间会吃掉收益。生产系统要做的是有条件地分离，而不是宗教式地分离。
+</p>
+
+<h2><span class="num">04</span>KV cache 变成系统边界</h2>
+
+<p>
+  在 M2 里，KV cache 是 GPU 内的一组 block。到 M6，它变成三件事：
+  <strong>显存容量问题</strong>、<strong>跨实例缓存问题</strong>、<strong>跨 GPU 通信问题</strong>。
+  这就是 Mooncake 和 LMCache 这条线的关键。
+</p>
+
+<div class="pattern-grid">
+  <div class="pattern">
+    <h3>Prefix cache：同前缀复用</h3>
+    <p>vLLM 用 block hash 识别已经算过的 KV block。长文档、多轮 RAG、固定 system prompt 最容易赢。</p>
+    <div class="read">读：vLLM Automatic Prefix Caching</div>
+  </div>
+  <div class="pattern">
+    <h3>Prefix-aware routing：把请求送回同一实例</h3>
+    <p>如果 cache 只在本地 GPU，router 就要维护 locality。否则命中了逻辑前缀，却打到没有 KV 的 replica。</p>
+    <div class="read">读：vLLM Production Stack prefix-aware routing</div>
+  </div>
+  <div class="pattern">
+    <h3>KV transfer：prefill 算完以后把 KV 交给 decode</h3>
+    <p>需要 connector、传输元数据和高速互联。vLLM 当前把 disaggregated prefill 实现放在 KV transfer 相关模块下。</p>
+    <div class="read">读：vLLM disaggregated prefill / Dynamo NIXL</div>
+  </div>
+  <div class="pattern">
+    <h3>KV cache layer：CPU / SSD / remote cache</h3>
+    <p>LMCache 把可复用 KV 从 engine 里抽出来，cache hit 时注入 KV，miss 时正常 prefill，并异步写回。</p>
+    <div class="read">读：LMCache integration</div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <div class="label">判断规则</div>
+  KV 优化的收益取决于三个数：<strong>复用率</strong>、<strong>KV 大小</strong>、<strong>取回/传输成本</strong>。
+  复用率低时，远程 cache 是复杂度；长上下文高复用时，它才是杠杆。
+</div>
+
+<h2><span class="num">05</span>投机解码：decode 阶段的并行化</h2>
+
+<p>
+  decode 难的地方是自回归：不生成第 t 个 token，就不知道第 t+1 个 token。Speculative decoding 的技巧是：
+  让便宜 proposer 先猜多个 token，再用 target model 一次性验证。接受率高、draft 成本低时，ITL 会明显下降。
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>方法</th><th>适用场景</th><th>工程注意</th><th>读什么</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Draft model</strong></td><td>有一个足够便宜的小模型，且分布接近 target</td><td>draft 太贵或接受率低会倒亏</td><td>vLLM speculative decoding docs</td></tr>
+      <tr><td><strong>EAGLE / Medusa</strong></td><td>希望避免维护完整小模型，改用轻量 head / feature proposer</td><td>需要模型适配或额外 head</td><td>EAGLE、Medusa、vLLM EAGLE</td></tr>
+      <tr><td><strong>MTP</strong></td><td>模型本身训练了 multi-token prediction 能力</td><td>要确认 serving engine 支持对应模型路径</td><td>DeepSeek-V3 technical report、vLLM MTP</td></tr>
+      <tr><td><strong>N-gram / suffix</strong></td><td>代码、模板、重复文本，低峰期想便宜提速</td><td>收益较温和，但部署复杂度低</td><td>vLLM n-gram speculation</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<p>
+  面试里不要只背"2-3x 加速"。更好的答案是：它把一次 target forward 产出的有效 token 数从 1 提高到 E[k]，
+  但代价是 draft 计算、batch 扩张、KV 管理和拒绝 token 浪费。高 QPS 时，额外 workload 可能让系统更拥堵。
+</p>
+
+<h2><span class="num">06</span>量化和新模型结构：不是只省显存</h2>
+
+<p>
+  FP8 W8A8、FP8 KV cache、INT4 weights、AWQ/GPTQ 这些常被讲成"模型变小"。
+  在 serving 系统里，它们的真实作用是改变<strong>容量、带宽、批大小和上下文长度</strong>的边界。
+</p>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>FP8 / KV cache quantization</h3>
+    <p>KV cache 往往随上下文和并发线性增长。FP8 KV 能显著降低 KV footprint，让同样显存容纳更多 in-flight tokens 或更长 context。代价是硬件/attention backend 支持、scale 校准、准确率验证。</p>
+  </div>
+  <div class="card">
+    <h3>MoE / MLA / MTP</h3>
+    <p>DeepSeek-V3 这类模型把 serving 问题改写了：MoE 带来 expert parallel 和 all-to-all，MLA 压缩 KV，MTP 给投机解码提供模型内能力。系统工程开始反过来被模型结构塑形。</p>
+  </div>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读源码 / 文档锚点</div>
+  <span class="path"><a href="https://docs.vllm.ai/en/latest/features/quantization/quantized_kvcache/" target="_blank">vLLM Quantized KV Cache</a></span>
+  <span class="path"><a href="https://docs.vllm.ai/en/latest/features/quantization/fp8/" target="_blank">vLLM FP8 W8A8</a></span>
+  <span class="path"><a href="https://github.com/deepseek-ai/DeepEP" target="_blank">DeepEP</a></span>
+  <div class="ask">把"省显存"翻译成系统语言：更大 batch、更长 context、更少 KV transfer bytes、更高 cache residency，还是更便宜的硬件？</div>
+</div>
+
+<h2><span class="num">07</span>交互实验：给 workload 选优化栈</h2>
+
+<p>
+  下面这个小模型不是严谨 benchmark，而是训练你的判断力。拖动参数，看瓶颈怎么从 prefill 转到 decode，
+  或从 GPU 计算转到 KV transfer / KV capacity。
+</p>
+
+<div class="m6-lab" id="serveLab">
+  <div class="lab-head">
+    <strong>Serving bottleneck sketch</strong>
+    <span>粗略估算 · 训练直觉用</span>
+  </div>
+
+  <div class="lab-grid">
+    <div class="ctrl-card">
+      <label for="m6Model">模型形态 <b id="m6ModelV">Llama 8B</b></label>
+      <select id="m6Model">
+        <option value="8b">Llama-like 8B · 24GB GPU</option>
+        <option value="70b">Llama-like 70B · 80GB GPU</option>
+        <option value="mla">MoE/MLA-like · 80GB GPU</option>
+      </select>
+    </div>
+    <div class="ctrl-card">
+      <label for="m6Qps">到达率 QPS <b id="m6QpsV">8</b></label>
+      <input id="m6Qps" type="range" min="0.5" max="80" value="8" step="0.5" />
+    </div>
+    <div class="ctrl-card">
+      <label for="m6Prompt">Prompt tokens <b id="m6PromptV">4096</b></label>
+      <input id="m6Prompt" type="range" min="256" max="65536" value="4096" step="256" />
+    </div>
+    <div class="ctrl-card">
+      <label for="m6Output">Output tokens <b id="m6OutputV">512</b></label>
+      <input id="m6Output" type="range" min="32" max="4096" value="512" step="32" />
+    </div>
+    <div class="ctrl-card">
+      <label for="m6Reuse">前缀复用率 <b id="m6ReuseV">20%</b></label>
+      <input id="m6Reuse" type="range" min="0" max="95" value="20" step="5" />
+    </div>
+    <div class="ctrl-card">
+      <label for="m6Accept">投机接受率 <b id="m6AcceptV">0.70</b></label>
+      <input id="m6Accept" type="range" min="0.2" max="0.95" value="0.70" step="0.01" />
+    </div>
+    <div class="ctrl-card">
+      <label for="m6Draft">Draft 成本比例 <b id="m6DraftV">0.18</b></label>
+      <input id="m6Draft" type="range" min="0.02" max="0.8" value="0.18" step="0.01" />
+    </div>
+    <div class="ctrl-card">
+      <label for="m6Bw">KV 传输带宽 GB/s <b id="m6BwV">100</b></label>
+      <input id="m6Bw" type="range" min="10" max="400" value="100" step="5" />
+    </div>
+  </div>
+
+  <div class="lab-output">
+    <div class="out-card"><div class="k">Prefill pressure</div><div class="v" id="m6Pre">0.00</div><div class="meter"><i id="m6PreM"></i></div></div>
+    <div class="out-card"><div class="k">Decode pressure</div><div class="v" id="m6Dec">0.00</div><div class="meter"><i id="m6DecM"></i></div></div>
+    <div class="out-card"><div class="k">KV transfer tax</div><div class="v" id="m6Kv">0ms</div><div class="meter"><i id="m6KvM"></i></div></div>
+    <div class="out-card"><div class="k">KV memory need</div><div class="v" id="m6Mem">0GB</div><div class="meter"><i id="m6MemM"></i></div></div>
+  </div>
+
+  <div class="verdict">
+    <div class="title" id="m6VerdictTitle">瓶颈判断</div>
+    <div id="m6VerdictBody">拖动参数后会自动更新。</div>
+  </div>
+</div>
+
+<h2><span class="num">08</span>决策表：看到现象后该动哪里</h2>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>现象</th><th>第一怀疑</th><th>优先动作</th><th>不要急着做</th></tr></thead>
+    <tbody>
+      <tr><td>TTFT 长，ITL 正常</td><td>prefill 重、排队或 prefix cache 没命中</td><td>按 prompt length 分 bucket；开 APC；prefix-aware routing；长 prompt 试 disagg prefill</td><td>盲目加 decode GPU</td></tr>
+      <tr><td>TTFT 正常，ITL p99 爆</td><td>decode 被 prefill 插队或 decode pool 太满</td><td>chunked prefill 或 P/D 分离；spec decode；看 time_per_output_token</td><td>只看总 tokens/s</td></tr>
+      <tr><td>GPU cache usage 快满</td><td>上下文长、并发高、KV footprint 大</td><td>FP8 KV；降低 max model len；更强 admission control；CPU/SSD cache tier</td><td>只量化 weights</td></tr>
+      <tr><td>分离后反而慢</td><td>KV transfer tax 或 router 选错</td><td>测 KV bytes/request；按 topology 放置；短 prompt 走本地 prefill</td><td>把所有请求强制 disagg</td></tr>
+      <tr><td>RAG 多次问同一文档仍很慢</td><td>cache locality 没利用</td><td>固定文档 prefix；cache_salt 隔离租户；prefix-aware routing；LMCache</td><td>只扩 GPU</td></tr>
+      <tr><td>MoE 模型吞吐差</td><td>expert parallel 通信和负载均衡</td><td>看 all-to-all、EP/DP 配置、expert 热点；读 DeepEP / vLLM MoE kernel</td><td>套 dense model 的经验</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2><span class="num">09</span>你的 mini-vLLM v0.6：四个可交付方向</h2>
+
+<p>
+  M6 不要求你重写生产 vLLM。要求是选一个方向，把 toy 系统升级成<strong>能解释取舍的实验平台</strong>。
+  简历上最值钱的不是"我也实现了 feature"，而是"我能说清在什么 workload 下它赢，什么 workload 下它输"。
+</p>
+
+<div class="todo-grid">
+  <div class="todo">
+    <h3>A. P/D 分离 simulator</h3>
+    <ul>
+      <li>把 mini scheduler 拆成 prefill queue 和 decode queue。</li>
+      <li>加 KV transfer cost 参数。</li>
+      <li>输出 TTFT/ITL/goodput 曲线。</li>
+    </ul>
+  </div>
+  <div class="todo">
+    <h3>B. Spec decode prototype</h3>
+    <ul>
+      <li>用 n-gram 或小 draft proposer 先做 lossless 验证。</li>
+      <li>记录 acceptance rate、expanded batch size、ITL。</li>
+      <li>写一段"什么时候倒亏"分析。</li>
+    </ul>
+  </div>
+  <div class="todo">
+    <h3>C. Prefix-cache-aware router</h3>
+    <ul>
+      <li>给 2-4 个 replica 做 prompt-prefix hash。</li>
+      <li>比较 round-robin、least-load、prefix-aware。</li>
+      <li>加 cache_salt 的租户隔离说明。</li>
+    </ul>
+  </div>
+  <div class="todo">
+    <h3>D. FP8/KV capacity benchmark</h3>
+    <ul>
+      <li>估算每 token KV bytes。</li>
+      <li>比较 fp16/bf16 KV 与 fp8 KV 的最大并发和上下文长度。</li>
+      <li>补一张 accuracy sanity check 表。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout check">
+  <div class="label">推荐选择</div>
+  如果你目标是 infra / serving 岗位，优先做 <strong>A + C</strong>：它们最能展示系统判断力。
+  如果你更偏 kernel / inference optimization，做 <strong>B + D</strong>：它们能自然接到 M4 的性能线。
+</div>
+
+<h2><span class="num">10</span>最近前沿怎么读：一张研究地图</h2>
+
+<p>
+  这不是新手要一口气读完的清单，而是你遇到具体问题时的索引。读法仍然保持本教材的三问：
+  它解决什么瓶颈？它引入什么新代价？它在 vLLM/production stack 里对应哪一层？
+</p>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>方向</th><th>代表材料</th><th>你要抓的主线</th></tr></thead>
+    <tbody>
+      <tr><td>P/D 分离与 goodput</td><td><a href="https://www.usenix.org/conference/osdi24/presentation/zhong-yinmin" target="_blank">DistServe</a>、Splitwise、<a href="https://docs.nvidia.com/dynamo/design-docs/disaggregated-serving" target="_blank">NVIDIA Dynamo disagg</a></td><td>prefill/decode 异构资源、双 SLO、KV transfer topology</td></tr>
+      <tr><td>KV-centric serving</td><td><a href="https://arxiv.org/abs/2407.00079" target="_blank">Mooncake</a>、<a href="https://docs.lmcache.ai/developer_guide/integration.html" target="_blank">LMCache</a>、vLLM connectors</td><td>KV 从 engine 内部状态变成 cache/storage/communication layer</td></tr>
+      <tr><td>Prefix 与结构化调用</td><td><a href="https://docs.sglang.io/" target="_blank">SGLang</a>、RadixAttention、vLLM prefix caching</td><td>多轮、RAG、agent workflow 的共享前缀和路由 locality</td></tr>
+      <tr><td>Decode 加速</td><td><a href="https://docs.vllm.ai/en/latest/features/speculative_decoding/" target="_blank">vLLM speculative decoding</a>、Medusa、EAGLE、MTP</td><td>接受率、draft 成本、batch 扩张、lossless guarantee</td></tr>
+      <tr><td>低精度 serving</td><td><a href="https://docs.vllm.ai/en/latest/features/quantization/fp8/" target="_blank">vLLM FP8</a>、<a href="https://docs.vllm.ai/en/latest/features/quantization/quantized_kvcache/" target="_blank">Quantized KV Cache</a>、AWQ/GPTQ</td><td>显存容量、HBM 带宽、accuracy regression、backend 支持</td></tr>
+      <tr><td>MoE / MLA / MTP</td><td><a href="https://arxiv.org/abs/2412.19437" target="_blank">DeepSeek-V3 report</a>、<a href="https://github.com/deepseek-ai/DeepEP" target="_blank">DeepEP</a></td><td>模型结构改变 KV、通信和并行策略</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h2><span class="num">11</span>本页自检</h2>
+
+<div class="selfcheck">
+  <h4>Month 6 结束时这些应该全部 ✓</h4>
+  <ul>
+    <li><input type="checkbox" id="f1"/><label for="f1">能用 TTFT / ITL / queue time / KV usage / goodput 描述一个 serving 系统是否健康。</label></li>
+    <li><input type="checkbox" id="f2"/><label for="f2">能解释 prefill compute-bound、decode memory-bound，以及为什么合跑会造成干扰。</label></li>
+    <li><input type="checkbox" id="f3"/><label for="f3">能说清 P/D 分离为什么有 KV transfer tax，什么时候不值得拆。</label></li>
+    <li><input type="checkbox" id="f4"/><label for="f4">能把 prefix caching、prefix-aware routing、LMCache 放在同一个 KV reuse 框架里。</label></li>
+    <li><input type="checkbox" id="f5"/><label for="f5">能推导 speculative decoding 的收益依赖 acceptance rate 和 draft cost，而不是固定 2×。</label></li>
+    <li><input type="checkbox" id="f6"/><label for="f6">选了一个 mini-vLLM v0.6 方向，并写出实验设计、指标和预期 failure case。</label></li>
+  </ul>
+</div>
+
+<hr>
+
+<p class="muted small">
+  本章参考了 vLLM disaggregated prefill / prefix caching / speculative decoding / quantization 文档，
+  DistServe (OSDI 2024)、Mooncake、SGLang、LMCache、NVIDIA Dynamo、DeepSeek-V3 和 DeepEP。
+  论文导读页会继续作为 15 篇核心阅读的索引。
+</p>
+
+<div class="pagenav">
+  <a class="prev" href="06-mini-vllm.html"><div class="dir">prev</div><div class="ttl">M5 · mini-vLLM</div></a>
+  <a class="next" href="07-papers.html"><div class="dir">next</div><div class="ttl">15 篇论文导读</div></a>
+</div>
+
+</main>
+</div>
+
+<script src="../assets/app.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const data = {
+    '8b': { name: 'Llama 8B', kvKB: 128, prefillCap: 130000, decodeCap: 5200, memGB: 24 },
+    '70b': { name: 'Llama 70B', kvKB: 320, prefillCap: 42000, decodeCap: 1350, memGB: 80 },
+    'mla': { name: 'MoE/MLA-like', kvKB: 72, prefillCap: 52000, decodeCap: 1650, memGB: 80 }
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const inputs = ['m6Model', 'm6Qps', 'm6Prompt', 'm6Output', 'm6Reuse', 'm6Accept', 'm6Draft', 'm6Bw'].map($);
+
+  function n(id) {
+    return parseFloat($(id).value);
+  }
+
+  function fmtInt(x) {
+    return Math.round(x).toLocaleString('en-US');
+  }
+
+  function expAcceptedTokens(a, gamma) {
+    if (Math.abs(1 - a) < 0.001) return gamma + 1;
+    return (1 - Math.pow(a, gamma + 1)) / (1 - a);
+  }
+
+  function meter(id, pressure) {
+    $(id).style.width = Math.max(0, Math.min(100, pressure * 100)).toFixed(0) + '%';
+  }
+
+  function update() {
+    const model = data[$('m6Model').value];
+    const qps = n('m6Qps');
+    const prompt = n('m6Prompt');
+    const output = n('m6Output');
+    const reuse = n('m6Reuse') / 100;
+    const accept = n('m6Accept');
+    const draftCost = n('m6Draft');
+    const bw = n('m6Bw');
+
+    $('m6ModelV').textContent = model.name;
+    $('m6QpsV').textContent = qps.toFixed(qps < 10 ? 1 : 0);
+    $('m6PromptV').textContent = fmtInt(prompt);
+    $('m6OutputV').textContent = fmtInt(output);
+    $('m6ReuseV').textContent = Math.round(reuse * 100) + '%';
+    $('m6AcceptV').textContent = accept.toFixed(2);
+    $('m6DraftV').textContent = draftCost.toFixed(2);
+    $('m6BwV').textContent = Math.round(bw);
+
+    const gamma = 5;
+    const accepted = expAcceptedTokens(accept, gamma);
+    const specSpeed = accepted / (1 + gamma * draftCost);
+    const safeSpecSpeed = Math.max(0.7, specSpeed);
+    const uncachedPrompt = prompt * (1 - reuse);
+    const prefillDemand = qps * uncachedPrompt;
+    const decodeDemand = qps * output / safeSpecSpeed;
+    const prePressure = prefillDemand / model.prefillCap;
+    const decPressure = decodeDemand / model.decodeCap;
+
+    const kvGBPerReq = uncachedPrompt * model.kvKB / 1024 / 1024;
+    const transferMs = kvGBPerReq / bw * 1000;
+    const kvPressure = transferMs / 150;
+
+    const singleReqSec = uncachedPrompt / model.prefillCap + output / model.decodeCap / safeSpecSpeed;
+    const concurrent = Math.max(1, qps * singleReqSec);
+    const memGB = concurrent * (prompt + output * 0.5) * model.kvKB / 1024 / 1024;
+    const memPressure = memGB / model.memGB;
+
+    $('m6Pre').textContent = prePressure.toFixed(2) + 'x';
+    $('m6Dec').textContent = decPressure.toFixed(2) + 'x';
+    $('m6Kv').textContent = transferMs.toFixed(0) + 'ms';
+    $('m6Mem').textContent = memGB.toFixed(memGB < 10 ? 1 : 0) + 'GB';
+    meter('m6PreM', prePressure);
+    meter('m6DecM', decPressure);
+    meter('m6KvM', kvPressure);
+    meter('m6MemM', memPressure);
+
+    const scores = [
+      ['prefill', prePressure],
+      ['decode', decPressure],
+      ['kv-transfer', kvPressure],
+      ['kv-memory', memPressure]
+    ].sort((a, b) => b[1] - a[1]);
+    const top = scores[0][0];
+
+    const hints = [];
+    if (reuse > 0.35) hints.push('前缀复用已经很高，优先做 prefix-aware routing / APC / LMCache，把请求打到有 cache 的实例。');
+    if (specSpeed > 1.15) hints.push('投机解码估算有收益：有效 decode speedup 约 ' + specSpeed.toFixed(2) + 'x，但要继续监控接受率和 batch 扩张。');
+    if (specSpeed < 1) hints.push('当前投机参数会倒亏：draft 成本或拒绝 token 浪费盖过了收益。');
+
+    let title = '';
+    let body = '';
+    if (top === 'prefill') {
+      title = '主要瓶颈：Prefill 算力 / TTFT';
+      body = '先按 prompt length 分桶，检查 queue time 和 prefill_time。优先尝试 APC、prefix-aware routing、chunked prefill；长上下文且互联足够好时，再上 P/D 分离。';
+    } else if (top === 'decode') {
+      title = '主要瓶颈：Decode 带宽 / ITL';
+      body = '重点看 time_per_output_token 和 ITL p99。优先尝试 speculative decoding、decode pool 扩容、FP8 W8A8、CUDA graph 或更合适的 TP。';
+    } else if (top === 'kv-transfer') {
+      title = '主要瓶颈：KV transfer tax';
+      body = 'P/D 分离可能不划算。短 prompt 走本地 prefill；长 prompt 才远程 prefill。需要按拓扑放置 worker，或用 FP8 KV / KV 压缩降低传输量。';
+    } else {
+      title = '主要瓶颈：KV memory capacity';
+      body = '上下文和并发正在吃满显存。优先算每 token KV bytes，尝试 FP8 KV、限制 max_model_len、admission control、CPU/SSD cache tier，或选择 MLA/GQA/MQA 更友好的模型。';
+    }
+    if (hints.length) body += ' ' + hints.join(' ');
+    $('m6VerdictTitle').textContent = title;
+    $('m6VerdictBody').textContent = body;
+  }
+
+  inputs.forEach((el) => el.addEventListener('input', update));
+  update();
+})();
+</script>
+</body>
+</html>

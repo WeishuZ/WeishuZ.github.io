@@ -1,0 +1,1506 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>M4 · Kernel &amp; 性能 — Infra Learning Path</title>
+<link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="../index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+  <div class="nav-group"><div class="nav-label">起步</div><nav><ul>
+    <li><a href="../index.html"><span class="idx">/</span>主页 · 概览</a></li>
+    <li><a href="00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+    <li><a href="01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">6 个月主线</div><nav><ul>
+    <li><a href="02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+    <li><a href="03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+    <li><a href="04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+    <li><a href="05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+    <li><a href="06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+    <li><a href="09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">参考</div><nav><ul>
+    <li><a href="07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+    <li><a href="08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+  </ul></nav></div>
+  <div class="foot">源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a></div>
+</aside>
+
+<main class="content">
+
+<div class="crumbs">
+  <a href="../index.html">home</a><span class="sep">/</span>tutorial<span class="sep">/</span>M4 Kernel
+</div>
+
+<h1 class="page-title">Month 4 · Kernel &amp; 性能</h1>
+<p class="page-sub">下到 CUDA 层。理解为什么 FlashAttention 这种"重写 attention"的东西能快 3 倍。</p>
+
+<p class="lede">
+  Month 1-3 一直在 Python 层。这个月下到 <code>csrc/</code> 和 Triton。
+  目标<strong>不是</strong>能徒手写 CUDA 算子，而是能读懂、能调试、能给已有 kernel 加 benchmark。
+  这一层最难补，但回报是面试时立刻显出底子——多数候选人在这里说不出三句话，你能讲清 memory-bound、roofline、online softmax、CUDA graph、block table indirection，就已经在 top 10%。
+</p>
+
+<div class="callout q">
+  <div class="label">驱动问题</div>
+  Attention 的数学公式 <code>softmax(QK^T / sqrt(d))V</code> 谁都会写。
+  PyTorch 一行 <code>F.scaled_dot_product_attention</code> 就能跑。
+  那 FlashAttention 凭什么快 3 倍？它<strong>没改公式</strong>，到底改了什么？
+  附加题：为什么 vLLM 在 prefill 用 FlashAttention、在 decode 又写了自己的 PagedAttention kernel？
+</div>
+
+<details class="predict">
+  <summary>先猜，再展开答案</summary>
+  <div class="body">
+    <p><strong>关键洞察：现代 GPU 的瓶颈不是算力，是显存带宽。</strong></p>
+    <p>朴素 attention 要把 N×N 的 attention matrix 实例化在 HBM（GPU 主显存）。
+    对 N=4096，这个矩阵 16M 个 float，一来一回搬 64MB 数据。
+    SM (compute unit) 大部分时间在<strong>等显存</strong>，不在算。</p>
+    <p>FlashAttention 的做法：</p>
+    <ol>
+      <li>把 Q、K、V 切成 tile，每次只把一对 tile 加载到 SRAM（GPU 内 L1 级缓存，几十 KB，巨快）。</li>
+      <li>在 SRAM 里算完这对 tile 的部分 attention，<strong>累加</strong>到输出。</li>
+      <li>用"online softmax"技巧让 tile-by-tile 计算等价于一次性算。</li>
+      <li>从头到尾 attention matrix 不实例化，只有最终 O 矩阵搬回 HBM。</li>
+    </ol>
+    <p>本质 = <strong>IO-aware</strong>，工艺级地少搬数据。算力没省，但显存搬运省了一个数量级。</p>
+    <p>而 PagedAttention 多解了一个问题：KV 不再是连续显存，是一堆物理块。kernel 得能从 block table <em>聚集</em>（gather）KV，FlashAttention 默认不支持。所以 vLLM 给 decode 写了专门的 paged kernel；prefill 阶段一个请求的 KV 还是连续的，能直接用 FlashAttention。</p>
+  </div>
+</details>
+
+<h2><span class="num">01</span>核心论断：现代推理是 memory-bound</h2>
+
+<p>这一节是这章的"立论"。后面所有优化都是这个论断的<em>必然推论</em>。先把它建结实，后面读 kernel 不会迷路。</p>
+
+<h3>Arithmetic intensity 的定义</h3>
+
+<p>给定一个算子（比如 matmul），有两个可以测的量：</p>
+
+<ul>
+  <li><strong>FLOPs</strong>：算这个算子要做多少次浮点运算。</li>
+  <li><strong>Bytes loaded</strong>：从 HBM 读多少字节进 SM。</li>
+</ul>
+
+<p>把它们的比值叫做 <strong>arithmetic intensity (AI)</strong>：</p>
+
+<pre><code>AI = FLOPs / Bytes loaded   单位：FLOPs/byte</code></pre>
+
+<p>这个比值告诉你：每搬一字节数据，能"摊"多少次浮点运算。AI 越高，HBM 带宽就越能跟上算力——算力被用满；AI 越低，HBM 就跟不上——算力闲着干等。</p>
+
+<h3>A100 的"分水岭"</h3>
+
+<p>NVIDIA A100 (40GB SXM4) 的纸面参数：</p>
+
+<table>
+  <thead><tr><th>指标</th><th>A100 SXM4</th><th>H100 SXM5</th></tr></thead>
+  <tbody>
+    <tr><td>峰值 FP16 Tensor Core 算力</td><td>312 TFLOPs</td><td>~989 TFLOPs (稠密)</td></tr>
+    <tr><td>HBM 容量</td><td>40 / 80 GB</td><td>80 GB (HBM3)</td></tr>
+    <tr><td>HBM 带宽</td><td>~1.55 TB/s (40GB) · ~2.0 TB/s (80GB)</td><td>~3.35 TB/s</td></tr>
+    <tr><td>L2 cache</td><td>40 MB</td><td>50 MB</td></tr>
+    <tr><td>每 SM SRAM (shared memory + L1)</td><td>192 KB</td><td>228 KB</td></tr>
+    <tr><td>SM 数量</td><td>108</td><td>132</td></tr>
+    <tr><td>NVLink 带宽</td><td>600 GB/s</td><td>900 GB/s</td></tr>
+  </tbody>
+</table>
+
+<p class="muted small">数据来自 NVIDIA A100/H100 数据手册。不同版本（PCIe / SXM）和不同 fp 精度（fp16 / bf16 / fp8）数字会有差异；本表用 SXM 版 + FP16 稠密 Tensor Core 作为代表数。</p>
+
+<p>把 A100 (80GB) 的两个关键数字摆在一起：</p>
+
+<pre><code>峰值算力 = 312e12 FLOPs/s
+HBM 带宽 = 2.0e12 bytes/s
+
+分水岭 AI* = 算力 / 带宽 = 312 / 2 = 156 FLOPs/byte
+
+如果 AI > 156：compute-bound，被算力卡住
+如果 AI < 156：memory-bound，被带宽卡住</code></pre>
+
+<p>这就是<strong>roofline 分析</strong>的起点。同一段代码，部署在 A100 还是 H100，分水岭都不同。但结论形状一样：每张卡都有一个"压力点 AI*"，跨过去叫 compute-bound，没跨过去叫 memory-bound。</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 700 380" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <!-- axes -->
+      <line x1="80" y1="320" x2="640" y2="320" stroke="#1c1917" stroke-width="1.5"/>
+      <line x1="80" y1="320" x2="80" y2="40" stroke="#1c1917" stroke-width="1.5"/>
+      <text x="360" y="360" text-anchor="middle" font-weight="600">Arithmetic Intensity (FLOPs / byte) · log 轴</text>
+      <text x="30" y="180" text-anchor="middle" font-weight="600" transform="rotate(-90 30 180)">Throughput (FLOPs/s) · log 轴</text>
+
+      <!-- memory-bound slope -->
+      <line x1="80" y1="320" x2="380" y2="80" stroke="#3b82f6" stroke-width="2.5"/>
+      <text x="180" y="170" fill="#1e40af" font-weight="600">memory-bound 斜坡 · 斜率 = HBM 带宽</text>
+
+      <!-- compute-bound ceiling -->
+      <line x1="380" y1="80" x2="640" y2="80" stroke="#dc2626" stroke-width="2.5"/>
+      <text x="500" y="70" fill="#991b1b" font-weight="600">compute-bound 屋顶 · 312 TFLOPs</text>
+
+      <!-- intersection -->
+      <circle cx="380" cy="80" r="5" fill="#c2410c"/>
+      <line x1="380" y1="80" x2="380" y2="320" stroke="#c2410c" stroke-width="1" stroke-dasharray="3 3"/>
+      <text x="380" y="335" text-anchor="middle" fill="#c2410c" font-weight="600">AI* ≈ 156</text>
+
+      <!-- operator dots -->
+      <circle cx="130" cy="280" r="5" fill="#16a34a"/>
+      <text x="140" y="276" fill="#166534" font-size="11">decode attention (AI≈1)</text>
+
+      <circle cx="200" cy="220" r="5" fill="#16a34a"/>
+      <text x="210" y="216" fill="#166534" font-size="11">elementwise (RMSNorm, RoPE)</text>
+
+      <circle cx="280" cy="160" r="5" fill="#ca8a04"/>
+      <text x="290" y="156" fill="#854d0e" font-size="11">prefill attention (AI≈seq/8)</text>
+
+      <circle cx="450" cy="80" r="5" fill="#dc2626"/>
+      <text x="460" y="76" fill="#991b1b" font-size="11">大 batch GEMM (AI ≫ 156)</text>
+
+      <text x="360" y="20" text-anchor="middle" font-size="13" font-weight="700">Roofline · A100 80GB</text>
+    </g>
+  </svg>
+  <div class="caption">Roofline 模型：x 轴是 AI（log 轴），y 轴是实际拿到的 FLOPs（log 轴）。屋顶 = 峰值算力；斜坡斜率 = HBM 带宽。算子落在屋顶下、斜坡左边的，就是 memory-bound——LLM 推理大多数算子在这片区域。</div>
+</div>
+
+<h3>Attention 的 AI 在 decode 阶段是 ~1</h3>
+
+<p>这是这门课要你<em>背下来</em>的一个数字。decode 阶段每生成一个 token：</p>
+
+<ul>
+  <li>Q：1 个新 token 的 query，shape <code>[1, d]</code>。</li>
+  <li>K, V：迄今为止整个序列的 cache，shape <code>[N, d]</code>。</li>
+  <li>计算 <code>q @ K.T</code>：<code>N · d</code> 次乘加 ≈ <code>2Nd</code> FLOPs。</li>
+  <li>softmax · @ V：再来一次 <code>2Nd</code> FLOPs，总共 <code>~4Nd</code>。</li>
+  <li>但要从 HBM 读 K + V，bytes = <code>2 · N · d · 2</code>（fp16，每 element 2 bytes）= <code>4Nd</code>。</li>
+</ul>
+
+<pre><code>AI_decode = FLOPs / Bytes = 4Nd / 4Nd = 1 FLOP/byte</code></pre>
+
+<p>对比分水岭 156——decode attention 在 roofline 的<strong>极左下角</strong>，深度 memory-bound。说人话：你给 SM 多少算力都没用，HBM 跟不上，SM 大部分时间在等数据。</p>
+
+<h3>Prefill 的 AI 在 ~seq_len/8</h3>
+
+<p>prefill 时 Q 也是 <code>[N, d]</code>（整段 prompt），所以矩阵乘是 <code>N×N×d</code>，FLOPs ≈ <code>2 N² d</code>。bytes 读的还是 K+V 一份，~<code>4 N d</code>（如果能一次性留在 SRAM）。</p>
+
+<pre><code>AI_prefill ≈ 2 N² d / (4 N d) = N / 2  (理想)
+实际算 + softmax 的开销，常被估为 N / 8 量级</code></pre>
+
+<p>对 N = 4096，AI_prefill ≈ 500——已经压上 compute roof。<strong>prefill 是 compute-bound 的</strong>。</p>
+
+<div class="callout tip">
+  <div class="label">💡 一句话装机</div>
+  <strong>Prefill = compute-bound，decode = memory-bound。</strong>
+  这一句话能解释 vLLM 几乎所有 batching / scheduling 决策——为什么 decode 要尽量大 batch（摊薄带宽），为什么 prefill 要避免过大 batch（算力已经打满，再叠加延迟会爆）。
+</div>
+
+<h3>这意味着 kernel 设计的两条铁律</h3>
+
+<ol>
+  <li><strong>能不读 HBM 就不读。</strong>能留在 SRAM 的就在 SRAM 完成。</li>
+  <li><strong>能合并读就合并读。</strong>能一个 kernel 算完的事情，不要拆成两个 kernel（每次 HBM 来回都是浪费）。这就是"kernel fusion"。</li>
+</ol>
+
+<p>FlashAttention 是这两条的极致执行。后面会逐步展开。</p>
+
+<h2><span class="num">02</span>GPU 内存层级 · 详图</h2>
+
+<p>这是最基础的硬件背景。看完这张图，FlashAttention 才能 click。<strong>每往下一层，容量大 10×、带宽小 10×、延迟高 10-100×。</strong></p>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <!-- pyramid -->
+      <polygon points="380,30 320,90 440,90" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="380" y="60" text-anchor="middle" font-weight="700" font-size="13">寄存器 (register file)</text>
+      <text x="380" y="78" text-anchor="middle" fill="#78716c" font-size="10">每 SM 256KB · 0 cycle · 隐式</text>
+
+      <polygon points="320,90 260,150 500,150 440,90" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+      <text x="380" y="120" text-anchor="middle" font-weight="700" font-size="13">SRAM (shared memory + L1)</text>
+      <text x="380" y="138" text-anchor="middle" fill="#78716c" font-size="10">A100: 192KB/SM · ~19 TB/s · ~20 cycle</text>
+
+      <polygon points="260,150 200,210 560,210 500,150" fill="#fefce8" stroke="#ca8a04" stroke-width="1.5"/>
+      <text x="380" y="180" text-anchor="middle" font-weight="700" font-size="13">L2 cache</text>
+      <text x="380" y="198" text-anchor="middle" fill="#78716c" font-size="10">A100: 40MB · ~5 TB/s · ~200 cycle</text>
+
+      <polygon points="200,210 130,290 630,290 560,210" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="380" y="245" text-anchor="middle" font-weight="700" font-size="13">HBM (设备显存)</text>
+      <text x="380" y="262" text-anchor="middle" fill="#78716c" font-size="11">A100: 40-80GB · 1.55-2.0 TB/s · ~500 cycle</text>
+      <text x="380" y="278" text-anchor="middle" fill="#78716c" font-size="10">所有 PyTorch tensor 默认在这</text>
+
+      <polygon points="130,290 60,370 700,370 630,290" fill="#f5f5f4" stroke="#a8a29e" stroke-width="1.5"/>
+      <text x="380" y="320" text-anchor="middle" font-weight="700" font-size="13">Host RAM (CPU DDR)</text>
+      <text x="380" y="338" text-anchor="middle" fill="#78716c" font-size="11">~100-200 GB/s 本地 · PCIe 32GB/s 跨界</text>
+      <text x="380" y="354" text-anchor="middle" fill="#78716c" font-size="10">vLLM CPU offload swap 的去处</text>
+
+      <polygon points="60,370 30,420 730,420 700,370" fill="#f5f5f4" stroke="#a8a29e" stroke-width="1.5" opacity="0.6"/>
+      <text x="380" y="395" text-anchor="middle" font-weight="700" font-size="12">NVMe SSD</text>
+      <text x="380" y="411" text-anchor="middle" fill="#78716c" font-size="10">~7 GB/s · 模型权重落盘 · 极端 swap</text>
+
+      <!-- labels right -->
+      <text x="680" y="55" fill="#dc2626" font-size="11" font-weight="700">↑ 越快</text>
+      <text x="680" y="395" fill="#3b82f6" font-size="11" font-weight="700">↓ 越大</text>
+
+      <!-- left annotations: where common things live -->
+      <g fill="#57534e" font-size="11">
+        <text x="80" y="55">局部变量</text>
+        <text x="80" y="120">tile · workspace</text>
+        <text x="80" y="180">复用过的 HBM 块</text>
+        <text x="80" y="245">所有 tensor</text>
+        <text x="80" y="320">swap-out 的 KV</text>
+        <text x="80" y="395">模型权重 .safetensors</text>
+      </g>
+    </g>
+  </svg>
+  <div class="caption">每往下一层，容量大 10×、带宽小 10×。把数据"留在上面" = 性能。HBM 是 LLM 推理的主舞台，但跑得快靠的是<strong>让数据短暂停在 SRAM</strong>。</div>
+</div>
+
+<h3>关键数字：SRAM 比 HBM 快 10× 左右</h3>
+
+<p>把同一份 attention tile 留在 SRAM 重用 <code>k</code> 次，理论上能比"每次都从 HBM 读"快 ≈ <code>min(k, 10)</code> 倍——这就是 FlashAttention 速度上限的来源。</p>
+
+<h3>A100 vs H100：差距不只是 FLOPs</h3>
+
+<table>
+  <thead><tr><th>层级</th><th>A100 80GB</th><th>H100 80GB</th><th>差距来源</th></tr></thead>
+  <tbody>
+    <tr><td>FP16 Tensor Core</td><td>312 TFLOPs</td><td>~989 TFLOPs</td><td>Hopper 新 Tensor Core 单元</td></tr>
+    <tr><td>FP8 Tensor Core</td><td>不支持</td><td>~1979 TFLOPs</td><td>Hopper 首次原生 fp8</td></tr>
+    <tr><td>HBM 带宽</td><td>2.0 TB/s</td><td>3.35 TB/s</td><td>HBM3 vs HBM2e</td></tr>
+    <tr><td>分水岭 AI*</td><td>~156</td><td>~295 (fp16)</td><td>算力涨得比带宽快</td></tr>
+    <tr><td>SRAM/SM</td><td>192 KB</td><td>228 KB</td><td>tile 可以更大</td></tr>
+    <tr><td>TMA (异步拷贝)</td><td>无</td><td>有</td><td>tile 加载与计算重叠</td></tr>
+    <tr><td>WGMMA</td><td>无</td><td>有</td><td>warp-group 级矩阵乘指令</td></tr>
+  </tbody>
+</table>
+
+<p>注意 H100 的 AI* 涨到了 ~295。这意味着<strong>很多在 A100 上属于 compute-bound 的算子，在 H100 上变回 memory-bound 了</strong>——优化的重心继续往"省带宽"倾斜。FlashAttention v3 专门吃 Hopper 的 TMA + WGMMA，就是为了把屋顶进一步推高。</p>
+
+<div class="callout warn">
+  <div class="label">⚠ 数字 hedge</div>
+  以上吞吐 / 带宽都是<strong>纸面峰值</strong>。实际 kernel 跑到峰值 70-80% 已经是顶尖工程。
+  cuBLAS GEMM 大批量可达 80%+，attention kernel 在 50-70% 区间常见。看 paper 时关注"% of peak"比关注绝对 FLOPs/s 更靠谱。
+</div>
+
+<h2><span class="num">03</span>GPU 执行模型 · 必知</h2>
+
+<p>读 CUDA 之前必须把这套术语建好。<strong>thread / warp / block / SM / grid</strong> 是层层嵌套的概念，搞混了所有代码都看不懂。</p>
+
+<h3>层级一览</h3>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <!-- thread -->
+      <rect x="20" y="40" width="80" height="60" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="60" y="65" text-anchor="middle" font-weight="700">thread</text>
+      <text x="60" y="82" text-anchor="middle" font-size="10" fill="#78716c">1 个逻辑执行流</text>
+      <text x="60" y="96" text-anchor="middle" font-size="10" fill="#78716c">~256 寄存器</text>
+
+      <!-- warp = 32 threads -->
+      <rect x="120" y="20" width="180" height="100" fill="#fef9c3" stroke="#ca8a04"/>
+      <text x="210" y="40" text-anchor="middle" font-weight="700">warp = 32 threads</text>
+      <g fill="#854d0e" font-size="10">
+        <text x="210" y="60" text-anchor="middle">lockstep (SIMT)</text>
+        <text x="210" y="76" text-anchor="middle">所有 thread 同步执行同一指令</text>
+        <text x="210" y="92" text-anchor="middle">divergence = 性能杀手</text>
+        <text x="210" y="108" text-anchor="middle">__shfl_sync 在 warp 内通信</text>
+      </g>
+
+      <!-- block = many warps -->
+      <rect x="320" y="20" width="200" height="120" fill="#fef2f2" stroke="#dc2626"/>
+      <text x="420" y="40" text-anchor="middle" font-weight="700">thread block</text>
+      <g fill="#991b1b" font-size="10">
+        <text x="420" y="58" text-anchor="middle">~128-1024 threads (4-32 warps)</text>
+        <text x="420" y="74" text-anchor="middle">同 block 内共享 __shared__ SRAM</text>
+        <text x="420" y="90" text-anchor="middle">同 block 内可 __syncthreads()</text>
+        <text x="420" y="106" text-anchor="middle">绑定到一个 SM 上执行</text>
+        <text x="420" y="122" text-anchor="middle">block 间不能直接同步</text>
+      </g>
+
+      <!-- SM physical -->
+      <rect x="540" y="20" width="200" height="120" fill="#eff6ff" stroke="#1e40af"/>
+      <text x="640" y="40" text-anchor="middle" font-weight="700">SM (streaming multiprocessor)</text>
+      <g fill="#1e3a8a" font-size="10">
+        <text x="640" y="58" text-anchor="middle">A100 有 108 个 SM</text>
+        <text x="640" y="74" text-anchor="middle">每 SM 同时跑 ≥1 个 block</text>
+        <text x="640" y="90" text-anchor="middle">含 Tensor Core · INT/FP units</text>
+        <text x="640" y="106" text-anchor="middle">L1 + shared memory + warp scheduler</text>
+        <text x="640" y="122" text-anchor="middle">硬件本体</text>
+      </g>
+
+      <!-- grid -->
+      <rect x="100" y="180" width="620" height="80" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="410" y="206" text-anchor="middle" font-weight="700" font-size="14">grid = 多个 block</text>
+      <g fill="#166534" font-size="11">
+        <text x="410" y="226" text-anchor="middle">一次 kernel launch 就是一个 grid</text>
+        <text x="410" y="242" text-anchor="middle">grid 里所有 block 被调度到所有 SM 上并行</text>
+        <text x="410" y="258" text-anchor="middle">block 之间互不通信（除 atomics / 全局同步）</text>
+      </g>
+
+      <!-- mapping arrow -->
+      <text x="380" y="295" text-anchor="middle" font-weight="700" font-size="13" fill="#c2410c">━━━━ 软件视角 ↑ ━━━━━ 物理视角 ↓ ━━━━</text>
+
+      <text x="380" y="330" text-anchor="middle" font-size="12">CUDA 写代码时：你只写"一个 thread 干什么"；kernel launch 时给它 grid_dim 和 block_dim，</text>
+      <text x="380" y="348" text-anchor="middle" font-size="12">由 GPU 自己把 block 分发到 SM、SM 把 warp 调度到 ALU。</text>
+      <text x="380" y="366" text-anchor="middle" font-size="11" fill="#78716c">类比：thread ↔ 协程；warp ↔ 同一向量寄存器；block ↔ 进程；SM ↔ 物理 CPU 核；grid ↔ 一次系统调用</text>
+    </g>
+  </svg>
+  <div class="caption">CUDA 的五级层级。最常出 bug 的是混淆 thread / block 边界——比如 <code>__syncthreads()</code> 只在 block 内同步，跨 block 同步只能靠 <code>cooperative_groups</code> 或重新 launch kernel。</div>
+</div>
+
+<h3>SIMT：lockstep 是默认假设</h3>
+
+<p>"SIMT" = Single Instruction, Multiple Thread。一组 32 个 thread (一个 warp) <strong>共用</strong>一个指令指针。所有 thread 在同一时刻执行<em>同一条指令</em>，只是各自处理不同数据。</p>
+
+<p>这跟 CPU 的 SIMD 很像，但 CUDA 把它包装得像每个 thread 是独立的——所以你能写：</p>
+
+<pre><code>// 每个 thread 处理一个数组元素
+int idx = blockIdx.x * blockDim.x + threadIdx.x;
+if (idx < n) {
+    out[idx] = a[idx] + b[idx];
+}</code></pre>
+
+<p>看起来是"per-thread 独立"，但实际硬件是 warp 级 lockstep。如果 warp 里 32 个 thread 走了不同分支（warp divergence），硬件会<strong>先执行 if 分支（mask 掉走 else 的 thread），再执行 else 分支</strong>——总时间 = 两条路径之和。这是 CUDA 性能调优的常见陷阱。</p>
+
+<div class="callout tip">
+  <div class="label">💡 warp = 32 不是巧合</div>
+  这是 NVIDIA 硬件设计的常数，从 G80 (2006) 到 Hopper (2022) 一直是 32。AMD CDNA 是 wavefront = 64。
+  写 kernel 时 <code>BLOCK_SIZE</code> 总是取 32 的倍数——否则最后一个 warp 有"空 thread"，浪费算力。
+</div>
+
+<h3>Occupancy：SM 上同时驻留多少 thread</h3>
+
+<p>每个 SM 有<strong>固定的资源</strong>：寄存器、SRAM、最大 thread 数。一个 block 用得越多，同一 SM 能装的 block 越少。占有率定义：</p>
+
+<pre><code>occupancy = 实际驻留的 warp 数 / SM 支持的最大 warp 数</code></pre>
+
+<p>A100 每 SM 最多 64 warp (2048 thread)。如果你的 block 要 256 thread，每 thread 要 64 寄存器：</p>
+
+<ul>
+  <li>寄存器约束：256 × 64 = 16384 寄存器/block，A100 每 SM 65536 寄存器 → 最多 4 个 block。</li>
+  <li>SRAM 约束：取决于 <code>__shared__</code> 用量。</li>
+  <li>thread 总数约束：4 block × 256 = 1024 thread → occupancy = 1024 / 2048 = 50%。</li>
+</ul>
+
+<p>低 occupancy 不一定坏（FlashAttention 就有意降低 occupancy 来增大 per-thread SRAM），但通常需要刻意设计。</p>
+
+<h2><span class="num">04</span>Attention 复习：朴素 PyTorch 实现</h2>
+
+<p>把"为什么 attention 是 memory-bound"用具体数字算一遍。</p>
+
+<h3>5 行朴素代码</h3>
+
+<pre><code># shapes: Q, K, V each [B, H, N, d]  (batch, heads, seq, head_dim)
+scores = Q @ K.transpose(-2, -1) / math.sqrt(d)   # [B, H, N, N]   ← 巨大
+probs  = torch.softmax(scores, dim=-1)            # [B, H, N, N]
+out    = probs @ V                                 # [B, H, N, d]</code></pre>
+
+<p>看似清爽，但<strong>这里有一个 N×N 的临时矩阵</strong>。对 N = 4096，每个 fp16 元素 2 字节：</p>
+
+<pre><code>scores 大小 = B · H · N · N · 2 字节
+若 B=1, H=32, N=4096:
+  = 1 · 32 · 4096 · 4096 · 2
+  = ~1.1 GB    ← 一次性占的 HBM
+还要再写一份 probs (softmax 结果) → 再 1.1 GB</code></pre>
+
+<h3>每步的 FLOPs 与 HBM 流量</h3>
+
+<table>
+  <thead><tr><th>步骤</th><th>FLOPs</th><th>HBM read</th><th>HBM write</th></tr></thead>
+  <tbody>
+    <tr><td>scores = Q @ K.T</td><td>2 B H N² d</td><td>读 Q, K: 4 B H N d</td><td>写 scores: 2 B H N²</td></tr>
+    <tr><td>softmax</td><td>~5 B H N²</td><td>读 scores: 2 B H N²</td><td>写 probs: 2 B H N²</td></tr>
+    <tr><td>out = probs @ V</td><td>2 B H N² d</td><td>读 probs + V: 2 B H N² + 2 B H N d</td><td>写 out: 2 B H N d</td></tr>
+  </tbody>
+</table>
+
+<p>对 B=1, H=32, N=4096, d=128, fp16 (2 byte/element)，<strong>HBM 总流量</strong>：</p>
+
+<pre><code>读+写 ≈  4 B H N d        (Q+K)            ~67 MB
+      + 6 B H N²         (scores/probs)   ~3.2 GB
+      + 2 B H N d        (V)              ~33 MB
+      + 2 B H N d        (out)            ~33 MB
+                         ─────────────────
+                            ~3.4 GB</code></pre>
+
+<p>对比同样 shape 下 FlashAttention 的 HBM 流量 = 读 Q,K,V + 写 O ≈ <strong>~170 MB</strong>。差距 ~20×——这就是 FlashAttention 的"快 3 倍"在算什么。</p>
+
+<p>注意 FLOPs 是<strong>一样的</strong>。FlashAttention 没有省一次乘加，它只省 HBM 搬运。这就是 IO-aware 的含义。</p>
+
+<div class="callout danger">
+  <div class="label">⚠ N=4096 已经会 OOM</div>
+  上面 3.2 GB 还只是一个序列、32 个 head。多个并发请求、长 context (32K+) 时朴素实现直接撑爆显存——这也是 FlashAttention 在长 context 模型上是<strong>刚需</strong>的原因。
+</div>
+
+<h2><span class="num">05</span>FlashAttention · The Idea</h2>
+
+<p>FlashAttention (Dao et al., NeurIPS'22) 的核心 trick 概括成一句话：<strong>把 attention matrix 分块，每块在 SRAM 算完直接累加进输出，不把完整矩阵写回 HBM。</strong></p>
+
+<h3>第一步：分块的设想</h3>
+
+<p>把 Q 按 row 切成 <code>Br</code>-大小的块（比如 Br=128），把 K, V 按 row 切成 <code>Bc</code>-大小的块（比如 Bc=64）。共有 <code>N/Br</code> 个 Q 块和 <code>N/Bc</code> 个 KV 块。</p>
+
+<p>对每个 (Q_i, K_j, V_j) 三元组：</p>
+
+<ol>
+  <li>把 Q_i, K_j, V_j 加载进 SRAM。</li>
+  <li>计算 <code>S_ij = Q_i @ K_j.T</code>（小矩阵，<code>Br × Bc</code>）。</li>
+  <li>对 S_ij 做局部 softmax，得到 P_ij。</li>
+  <li>累加 <code>O_i += P_ij @ V_j</code>。</li>
+</ol>
+
+<p>朴素思路问题：<strong>softmax 不是局部可分的</strong>。<code>softmax(x_i) = exp(x_i) / Σ_j exp(x_j)</code> 里那个 <code>Σ</code> 要全局——你不知道 j 这一块的 exp 之前要不要乘个修正因子。</p>
+
+<h3>第二步：online softmax —— 让 softmax 变成可累加的</h3>
+
+<p>关键洞察：softmax 可以"边走边修"。维护两个 running 变量：</p>
+
+<ul>
+  <li><code>m</code> = 截至目前看到的最大值（global max）</li>
+  <li><code>l</code> = 截至目前的 <code>Σ exp(x_j - m)</code>（归一化分母）</li>
+  <li><code>O</code> = 截至目前的输出累加</li>
+</ul>
+
+<p>每来一个新 block，先算新 block 的 local max <code>m_new</code>、local sum <code>l_new</code>，然后修正旧累加值：</p>
+
+<pre><code>m_combined = max(m_old, m_new)
+l_combined = exp(m_old - m_combined) · l_old + exp(m_new - m_combined) · l_new
+O_combined = exp(m_old - m_combined) · O_old + exp(m_new - m_combined) · (P_new @ V_new)</code></pre>
+
+<p>关键是<strong>那个 <code>exp(m_old - m_combined)</code> 因子</strong>——它把"按旧 max 归一化的旧 O"<em>重新校正</em>到新 max 下的尺度。最终 O 在所有 block 都过一遍后，等于全局 softmax 的结果，分毫不差。</p>
+
+<div class="callout tip">
+  <div class="label">💡 不用从头推 online softmax</div>
+  FlashAttention 论文附录 A 有完整推导。<strong>你只需要知道"能等价做到"</strong>。原理是"减最大值再 exp"对结果不影响，所以可以分块算、最后修正。
+</div>
+
+<h3>FlashAttention 的 tile schedule</h3>
+
+<div class="diagram">
+  <svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <!-- Q tiles (outer loop in v1; let's just show 4 tiles) -->
+      <text x="100" y="30" text-anchor="middle" font-weight="700">Q (按 row 切)</text>
+      <g transform="translate(40,40)">
+        <rect width="120" height="40" fill="#fff7ed" stroke="#c2410c"/><text x="60" y="25" text-anchor="middle">Q₀ · rows 0..127</text>
+        <rect y="40" width="120" height="40" fill="#fff7ed" stroke="#c2410c"/><text x="60" y="65" text-anchor="middle">Q₁ · rows 128..255</text>
+        <rect y="80" width="120" height="40" fill="#fff7ed" stroke="#c2410c"/><text x="60" y="105" text-anchor="middle">Q₂ · rows 256..383</text>
+        <rect y="120" width="120" height="40" fill="#fff7ed" stroke="#c2410c"/><text x="60" y="145" text-anchor="middle">Q₃ · rows 384..</text>
+      </g>
+
+      <!-- K/V tiles -->
+      <text x="380" y="30" text-anchor="middle" font-weight="700">K, V (按 row 切)</text>
+      <g transform="translate(280,40)">
+        <rect width="60" height="40" fill="#eff6ff" stroke="#1e40af"/><text x="30" y="25" text-anchor="middle">K₀</text>
+        <rect x="60" width="60" height="40" fill="#eff6ff" stroke="#1e40af"/><text x="90" y="25" text-anchor="middle">K₁</text>
+        <rect x="120" width="60" height="40" fill="#eff6ff" stroke="#1e40af"/><text x="150" y="25" text-anchor="middle">K₂</text>
+        <rect x="180" width="60" height="40" fill="#eff6ff" stroke="#1e40af"/><text x="210" y="25" text-anchor="middle">K₃</text>
+      </g>
+
+      <!-- For Q₀, iterate over K₀..K₃ -->
+      <text x="380" y="120" text-anchor="middle" font-weight="700" font-size="13" fill="#c2410c">FlashAttention v1: 外层遍历 Q tile，内层遍历 KV tile</text>
+
+      <g transform="translate(40,140)">
+        <text x="0" y="20" fill="#c2410c" font-weight="700">For Q₀:</text>
+        <g transform="translate(70,0)">
+          <rect width="100" height="30" fill="#fef9c3" stroke="#ca8a04"/><text x="50" y="20" text-anchor="middle" font-size="11">load K₀,V₀ → SRAM</text>
+        </g>
+        <g transform="translate(180,0)">
+          <rect width="120" height="30" fill="#fef9c3" stroke="#ca8a04"/><text x="60" y="20" text-anchor="middle" font-size="11">S₀₀=Q₀K₀ᵀ · softmax · @V₀</text>
+        </g>
+        <g transform="translate(310,0)">
+          <rect width="100" height="30" fill="#fef9c3" stroke="#ca8a04"/><text x="50" y="20" text-anchor="middle" font-size="11">累加到 O₀, m₀, l₀</text>
+        </g>
+        <text x="430" y="20" fill="#c2410c">↻ K₁</text>
+        <text x="475" y="20" fill="#c2410c">↻ K₂</text>
+        <text x="520" y="20" fill="#c2410c">↻ K₃</text>
+        <text x="560" y="20" fill="#16a34a">→ O₀ 写回</text>
+      </g>
+
+      <g transform="translate(40,180)">
+        <text x="0" y="20" fill="#c2410c" font-weight="700">For Q₁:</text>
+        <g transform="translate(70,0)">
+          <rect width="100" height="30" fill="#fef9c3" stroke="#ca8a04"/><text x="50" y="20" text-anchor="middle" font-size="11">load K₀,V₀ 再次</text>
+        </g>
+        <g transform="translate(180,0)">
+          <rect width="120" height="30" fill="#fef9c3" stroke="#ca8a04"/><text x="60" y="20" text-anchor="middle" font-size="11">S₁₀ · 累到 O₁</text>
+        </g>
+        <text x="310" y="20" fill="#c2410c">↻↻↻ ...</text>
+        <text x="560" y="20" fill="#16a34a">→ O₁ 写回</text>
+      </g>
+
+      <text x="40" y="240" font-size="11" fill="#78716c">注意：K, V tile 被多个 Q tile 反复 load（重复 HBM 读）——这是 v1 的痛点，v2 修复。</text>
+
+      <!-- HBM traffic box -->
+      <g transform="translate(40,260)">
+        <rect width="640" height="140" fill="#f5f5f4" stroke="#a8a29e" rx="6"/>
+        <text x="320" y="25" text-anchor="middle" font-weight="700" font-size="13">HBM 流量对比</text>
+
+        <text x="20" y="50" font-family="monospace" font-size="12">朴素：</text>
+        <text x="100" y="50" font-family="monospace" font-size="12" fill="#dc2626">O(N²) · 写一次 scores + 一次 probs</text>
+
+        <text x="20" y="75" font-family="monospace" font-size="12">FlashAttn v1：</text>
+        <text x="140" y="75" font-family="monospace" font-size="12" fill="#16a34a">O(N · d²/M)  ← M = SRAM 大小</text>
+
+        <text x="20" y="100" font-size="11" fill="#57534e">含义：N²的项消失了，留下的项跟 d 和 SRAM 的 ratio 有关。</text>
+        <text x="20" y="116" font-size="11" fill="#57534e">在 N=4096, d=128, M=192KB 下，约比朴素少 20× 的 HBM 流量。</text>
+        <text x="20" y="132" font-size="11" fill="#57534e">FLOPs 不变。</text>
+      </g>
+    </g>
+  </svg>
+  <div class="caption">FlashAttention v1 的 tile 调度：外层 Q、内层 K/V。每个 Q tile 累加完所有 K tile 的贡献后写一次 HBM。attention matrix 从来不实例化。</div>
+</div>
+
+<h3>HBM 流量量级</h3>
+
+<p>FlashAttention 论文给的渐进结果：</p>
+
+<table>
+  <thead><tr><th>方法</th><th>HBM 读写</th><th>N=4096, d=128 数量级</th></tr></thead>
+  <tbody>
+    <tr><td>朴素</td><td>Θ(N · d + N²)</td><td>~3.4 GB</td></tr>
+    <tr><td>FlashAttention</td><td>Θ(N² · d² / M) = Θ(N · d) 当 d²/M 小</td><td>~170 MB</td></tr>
+  </tbody>
+</table>
+
+<p>实际加速比：常见 3-7×（GPT-2/3 量级 attention 层）。</p>
+
+<h2><span class="num">06</span>FlashAttention v1 → v2 → v3</h2>
+
+<p>三个版本不是"更新换代"那么简单。每一代解决<strong>不同硬件层面的瓶颈</strong>。</p>
+
+<table>
+  <thead><tr><th></th><th>v1 (NeurIPS'22)</th><th>v2 (2023)</th><th>v3 (2024, Hopper-only)</th></tr></thead>
+  <tbody>
+    <tr><td>外层循环</td><td>Q tile (按行)</td><td>K/V tile (按列)</td><td>同 v2</td></tr>
+    <tr><td>内层循环</td><td>K/V tile</td><td>Q tile</td><td>同 v2 + 异步 pipeline</td></tr>
+    <tr><td>warp 划分</td><td>每 warp 独立计算 + reduce</td><td>warp 协同，更少同步</td><td>WGMMA: 一个 warp-group 一次大矩阵乘</td></tr>
+    <tr><td>异步搬运</td><td>无</td><td>无</td><td>TMA 异步加载 tile</td></tr>
+    <tr><td>FP8 支持</td><td>无</td><td>无</td><td>有 (Hopper 原生)</td></tr>
+    <tr><td>典型加速 (over v1)</td><td>1×</td><td>~2×</td><td>再 ~1.5-2× (在 H100 上)</td></tr>
+  </tbody>
+</table>
+
+<h3>为什么 v2 要换循环顺序</h3>
+
+<p>v1 的痛点：<strong>K/V tile 在不同 Q tile 之间被反复加载</strong>。如果 Q 有 32 个 tile，每个 K tile 要被 load 32 次。v2 反过来：外层 K/V，内层 Q。这样每个 K tile 只 load 一次，Q tile 在 SRAM 里多次复用（Q 是只读，不像 O 还要累加）。</p>
+
+<p>v2 还重排了 warp 内的 work partition。v1 让每个 warp 算一行 attention，多个 warp 间要做 reduce；v2 让 warp 协作算同一行的不同列，reduce 在 warp 内用 shuffle 完成，避免 block 内同步。</p>
+
+<h3>v3 吃 Hopper 新硬件</h3>
+
+<ul>
+  <li><strong>TMA (Tensor Memory Accelerator)</strong>：硬件级的"DMA"，加载 tile 时不占用 SM 算力，跟计算重叠。等于流水线。</li>
+  <li><strong>WGMMA (Warp-Group MMA)</strong>：一个 warp-group (4 warp) 一次做一大块矩阵乘，吃满 fp16/fp8 Tensor Core。</li>
+  <li><strong>FP8 路径</strong>：Hopper 原生 fp8 Tensor Core 算力是 fp16 的 2 倍。v3 提供 fp8 attention 路径（精度损失可控）。</li>
+</ul>
+
+<h3>vLLM 怎么选</h3>
+
+<p>vLLM 通过 <code>flash-attn</code> 依赖间接使用 FA v2/v3。在 H100 上跑会自动用 v3 路径；A100 上是 v2。vLLM 自己不维护 FA 的实现——这是个上游依赖。但 vLLM 控制了：</p>
+
+<ul>
+  <li>什么时候<strong>调用</strong> FA（prefill、prefix 重计算、chunked prefill 等）。</li>
+  <li>什么时候<strong>不用</strong> FA 用自己的 paged kernel（decode 阶段，因 KV 非连续）。</li>
+</ul>
+
+<div class="callout warn">
+  <div class="label">⚠ 短 context 时 FlashAttention 不一定赢</div>
+  N 很小（&lt;512）时，朴素 attention 本来就在 SRAM 里塞得下，FA 的好处消失。FA 的 kernel launch + tile 调度开销反而可能输给一发简单 GEMM。短 context、推理小 batch 时，<code>VLLM_ATTENTION_BACKEND=XFORMERS</code> 偶尔会胜出——所以 vLLM 还保留多个 backend 让你选。
+</div>
+
+<h2><span class="num">07</span>PagedAttention Kernel · 跟 FlashAttention 的区别</h2>
+
+<p>M2 已经讲过 PagedAttention 的<strong>memory layout</strong>。这一节聚焦它的 <strong>kernel</strong>——和 FlashAttention 的根本区别。</p>
+
+<h3>FlashAttention 默认假设：KV 是连续的</h3>
+
+<p>FA 的 tile schedule 是按 row offset 走的——<code>K[j_start : j_end]</code>。这要求 K, V 在显存里是<strong>整段连续</strong>。对单个 prefill 请求成立（一个 sequence 的 KV 一气分配出来），但对 vLLM 的 decode 完全不成立——一个 sequence 的 KV 被切成 16-token block 散落在 BlockPool 里。</p>
+
+<h3>PagedAttention kernel 怎么处理</h3>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <!-- Single query token at top -->
+      <text x="100" y="30" text-anchor="middle" font-weight="700">Query (1 个新 token)</text>
+      <rect x="60" y="40" width="80" height="40" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="100" y="65" text-anchor="middle">q · [1, d]</text>
+
+      <!-- Block table -->
+      <text x="300" y="30" text-anchor="middle" font-weight="700">Block table (in HBM)</text>
+      <g transform="translate(220,40)" font-family="monospace" font-size="11">
+        <rect width="160" height="20" fill="#eff6ff" stroke="#60a5fa"/><text x="80" y="14" text-anchor="middle">logical 0 → phys 7</text>
+        <rect y="20" width="160" height="20" fill="#eff6ff" stroke="#60a5fa"/><text x="80" y="34" text-anchor="middle">logical 1 → phys 2</text>
+        <rect y="40" width="160" height="20" fill="#eff6ff" stroke="#60a5fa"/><text x="80" y="54" text-anchor="middle">logical 2 → phys 11</text>
+        <rect y="60" width="160" height="20" fill="#eff6ff" stroke="#60a5fa"/><text x="80" y="74" text-anchor="middle">logical 3 → phys 0</text>
+        <rect y="80" width="160" height="20" fill="#eff6ff" stroke="#60a5fa"/><text x="80" y="94" text-anchor="middle">logical 4 → phys 5</text>
+      </g>
+
+      <!-- Physical KV pool -->
+      <text x="600" y="30" text-anchor="middle" font-weight="700">物理 KV 池 (HBM)</text>
+      <g transform="translate(490,40)" font-family="monospace" font-size="11">
+        <rect width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="13" text-anchor="middle">phys 0  (logical 3)</text>
+        <rect y="18" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="31" text-anchor="middle">phys 1  ...</text>
+        <rect y="36" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="49" text-anchor="middle">phys 2  (logical 1)</text>
+        <rect y="54" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="67" text-anchor="middle">phys 3  ...</text>
+        <rect y="72" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="85" text-anchor="middle">phys 4  ...</text>
+        <rect y="90" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="103" text-anchor="middle">phys 5  (logical 4)</text>
+        <rect y="108" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="121" text-anchor="middle">phys 6  ...</text>
+        <rect y="126" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="139" text-anchor="middle">phys 7  (logical 0)</text>
+        <rect y="144" width="180" height="18" fill="#fef2f2" stroke="#a8a29e"/><text x="90" y="157" text-anchor="middle">phys 11 (logical 2)</text>
+      </g>
+
+      <!-- Arrows from block table to phys -->
+      <g stroke="#78716c" stroke-width="0.8" fill="none" stroke-dasharray="3 2">
+        <path d="M 380 50 L 490 158" stroke="#c2410c"/>
+        <path d="M 380 70 L 490 49" stroke="#c2410c"/>
+        <path d="M 380 90 L 490 175" stroke="#c2410c"/>
+        <path d="M 380 110 L 490 13" stroke="#c2410c"/>
+        <path d="M 380 130 L 490 103" stroke="#c2410c"/>
+      </g>
+
+      <!-- Kernel logic at bottom -->
+      <g transform="translate(40,210)">
+        <rect width="680" height="150" fill="#f5f5f4" stroke="#a8a29e" rx="6"/>
+        <text x="340" y="25" text-anchor="middle" font-weight="700" font-size="13">PagedAttention kernel 的 gather pattern</text>
+        <text x="20" y="50" font-family="monospace" font-size="12">for logical_block_idx in range(num_blocks):</text>
+        <text x="40" y="68" font-family="monospace" font-size="12">  phys = block_table[logical_block_idx]          # 查 indirection 表</text>
+        <text x="40" y="86" font-family="monospace" font-size="12">  k_block = K_pool[phys, :, :]                   # 间接 load 16 个 token 的 K</text>
+        <text x="40" y="104" font-family="monospace" font-size="12">  v_block = V_pool[phys, :, :]                   # 间接 load 16 个 token 的 V</text>
+        <text x="40" y="122" font-family="monospace" font-size="12">  partial = softmax(q @ k_block.T) @ v_block     # 一个小 attention</text>
+        <text x="40" y="140" font-family="monospace" font-size="12">  out = online_softmax_accumulate(out, partial)  # online softmax 合并</text>
+      </g>
+    </g>
+  </svg>
+  <div class="caption">PagedAttention kernel 多了一层 <code>block_table</code> 间接查找。每个物理 block 内部还是连续的 16 个 token，所以 SRAM 里的小 attention 计算跟 FA 没区别——区别只在<strong>外层怎么找到这些 block</strong>。</div>
+</div>
+
+<h3>核心差异 = "gather" pattern</h3>
+
+<ul>
+  <li><strong>FlashAttention</strong>：<code>k_tile = K[start:end]</code>——连续 load，硬件吃满 coalesced access。</li>
+  <li><strong>PagedAttention</strong>：<code>phys = block_table[i]; k_tile = K_pool[phys]</code>——间接 load。每次要先读 block_table 一项（小，cache 友好），再去 K_pool 里跳着读。</li>
+</ul>
+
+<p>这"跳着读"看起来很贵。实际上：</p>
+
+<ul>
+  <li>block_table 通常很小（每个 sequence 几十项），整表能放进 L2 / L1。</li>
+  <li>一个 block 内部 16 个 token 的 K 连续，<strong>大批量数据还是顺序读</strong>。</li>
+  <li>只是"块与块之间"非顺序——损失在 L2 prefetch 的有效性，不在 HBM 带宽本身。</li>
+</ul>
+
+<p>实测 PagedAttention kernel 比连续 KV 的 FA 慢 ~5-15%（vLLM 论文报告）。这个开销是为了换取<strong>显存利用率从 ~40% 到 ~96%</strong>——稳赚。</p>
+
+<h3>为什么 PagedAttention 主要在 decode 用</h3>
+
+<p>区别在<strong>每个 kernel call 有多少 query</strong>：</p>
+
+<table>
+  <thead><tr><th></th><th>prefill</th><th>decode</th></tr></thead>
+  <tbody>
+    <tr><td>每次 forward 的 query 数</td><td>N (整段 prompt, ~千)</td><td>1 (只生成一个新 token)</td></tr>
+    <tr><td>KV 是否连续</td><td>是 (一个请求的 KV 一次性写)</td><td>否 (KV 跨 sequence 累积)</td></tr>
+    <tr><td>合适 kernel</td><td>FlashAttention</td><td>PagedAttention</td></tr>
+    <tr><td>瓶颈</td><td>compute-bound</td><td>memory-bound</td></tr>
+  </tbody>
+</table>
+
+<p>当 sequence 跨 batch 混着 prefill 和 decode（chunked prefill 场景），vLLM 会选择性 dispatch——这是 attention backend 抽象层的工作。</p>
+
+<h2><span class="num">08</span>vLLM Kernel 生态全景</h2>
+
+<p>vLLM 不写自己的所有 kernel。生态分工：</p>
+
+<table>
+  <thead><tr><th>组件</th><th>来源</th><th>位置 / 状态</th></tr></thead>
+  <tbody>
+    <tr><td>朴素 attention (prefill, 长 ctx)</td><td>FlashAttention v2/v3 (Dao-AILab)</td><td>外部依赖 <code>flash-attn</code></td></tr>
+    <tr><td>更花的 attention (FP8, sparse)</td><td>FlashInfer (CMU)</td><td>外部依赖 <code>flashinfer</code></td></tr>
+    <tr><td>Paged attention (decode)</td><td>vLLM 自写</td><td><code>csrc/attention/paged_attention_v{1,2}.cu</code></td></tr>
+    <tr><td>Triton attention (跨架构)</td><td>vLLM 自写</td><td><code>vllm/attention/ops/</code> 或 <code>vllm/v1/attention/ops/</code></td></tr>
+    <tr><td>RMSNorm</td><td>vLLM 自写</td><td><code>csrc/layernorm_kernels.cu</code></td></tr>
+    <tr><td>RoPE (rotary position)</td><td>vLLM 自写</td><td><code>csrc/pos_encoding_kernels.cu</code></td></tr>
+    <tr><td>SwiGLU / GeGLU 激活</td><td>vLLM 自写</td><td><code>csrc/activation_kernels.cu</code></td></tr>
+    <tr><td>GEMM (大矩阵乘)</td><td>cuBLAS / cuBLASLt</td><td>NVIDIA 闭源</td></tr>
+    <tr><td>量化 GEMM (W4A16, FP8)</td><td>Marlin / Machete (社区) + vLLM 集成</td><td><code>csrc/quantization/</code></td></tr>
+    <tr><td>MoE expert kernel</td><td>vLLM + 社区</td><td><code>vllm/model_executor/layers/fused_moe/</code></td></tr>
+    <tr><td>AllReduce / AllGather</td><td>NCCL</td><td>NVIDIA 开源</td></tr>
+  </tbody>
+</table>
+
+<p><strong>"vLLM 自写"最多的是 paged attention 系列</strong>——因为只有它需要 block table indirection，没有库直接提供。其次是一些小算子（RMSNorm、RoPE、激活），vLLM 把它们 fuse 起来减少 kernel launch。</p>
+
+<h3>Backend 选择逻辑</h3>
+
+<p>vLLM 在 runtime 决定用哪个 attention backend。可以用环境变量强制：</p>
+
+<pre><code># 强制 FlashAttention (v2 或 v3，看硬件)
+VLLM_ATTENTION_BACKEND=FLASH_ATTN python -m vllm.entrypoints.openai.api_server ...
+
+# 强制 vLLM 自己的 paged kernel
+VLLM_ATTENTION_BACKEND=PAGED_ATTN ...
+
+# 用 FlashInfer
+VLLM_ATTENTION_BACKEND=FLASHINFER ...
+
+# AMD 卡上：用 Triton 路径
+VLLM_ATTENTION_BACKEND=TRITON_ATTN_VLLM_V1 ...</code></pre>
+
+<p>不设环境变量时，vLLM 按"硬件 + 操作"自动选——见 <code>vllm/attention/selector.py</code>（v1 引擎下是 <code>vllm/v1/attention/backends/</code>）。规则大致：</p>
+
+<ul>
+  <li>H100 + 长 ctx + prefill：FlashAttention v3。</li>
+  <li>A100 + prefill：FlashAttention v2。</li>
+  <li>任意硬件 + decode：自家 paged kernel（要 indirection）。</li>
+  <li>AMD MI300：Triton 路径（因为 CUDA kernel 不能跨编译）。</li>
+</ul>
+
+<h2><span class="num">09</span>代码深读 · paged_attention_v1.cu</h2>
+
+<p>这是本月最硬核的一段。<strong>看不懂不要怕</strong>，目标只是认出结构。</p>
+
+<h3>整体导航</h3>
+
+<div class="code-anchor">
+  <div class="label">读 ① · 1 小时 · 目录扫描</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/tree/main/csrc/attention" target="_blank">csrc/attention/</a></div>
+  目录里几个关键文件：
+  <ul>
+    <li><code>paged_attention_v1.cu</code> · 老版本 paged attention kernel，一个 thread block 处理一个 (sequence, head) 对。</li>
+    <li><code>paged_attention_v2.cu</code> · 引入 partition——单个 sequence 太长时切多段并行处理，最后再 reduce。</li>
+    <li><code>attention_kernels.cuh</code> · 共享的 utility（warp reduce、float vec load 等）。</li>
+    <li><code>attention_dtypes.h</code> · 数据类型 traits (fp16, bf16, fp8 的 SIMD 包装)。</li>
+    <li><code>attention_generic.cuh</code> · 通用宏。</li>
+  </ul>
+  <div class="ask">v2 比 v1 多解了什么问题？(答案在 source 顶部的 comment block)</div>
+</div>
+
+<h3>kernel 签名（简化版）</h3>
+
+<p>实际签名很长。下面是按可读性整理的代表形式：</p>
+
+<pre><code>template &lt;typename scalar_t, int HEAD_SIZE, int BLOCK_SIZE, int NUM_THREADS&gt;
+__global__ void paged_attention_v1_kernel(
+    scalar_t* __restrict__ out,           // [num_seqs, num_heads, head_size]   输出
+    const scalar_t* __restrict__ q,       // [num_seqs, num_heads, head_size]   每序列 1 个 query
+    const scalar_t* __restrict__ k_cache, // [num_blocks, num_kv_heads, head_size/x, block_size, x]
+    const scalar_t* __restrict__ v_cache, // [num_blocks, num_kv_heads, head_size, block_size]
+    const int num_kv_heads,
+    const float scale,                    // 1 / sqrt(head_size)
+    const int* __restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
+    const int* __restrict__ context_lens, // [num_seqs] · 每序列实际长度
+    const int max_num_blocks_per_seq,
+    const float* __restrict__ alibi_slopes, // 可选 ALiBi 偏置
+    const int q_stride,
+    const int kv_block_stride,
+    const int kv_head_stride
+);</code></pre>
+
+<h3>thread block 组织</h3>
+
+<p>关键决策：</p>
+
+<ul>
+  <li><strong>grid 维度</strong>：<code>(num_seqs, num_heads)</code>——每 (sequence, head) 对一个 thread block。一个 block 内部处理这一对的整个 attention 计算。</li>
+  <li><strong>block 大小</strong>：通常 128 thread（4 warp）。</li>
+  <li><strong>thread 内分工</strong>：所有 thread 协作覆盖 <code>head_size</code> 维度。head_size=128 时每 thread 处理 1 个 dim。</li>
+  <li><strong>iteration 单位</strong>：每次迭代处理一个 KV block (16 token)。block 内 warp 协作算这 16 个 query-key 点积。</li>
+</ul>
+
+<h3>主循环骨架（伪代码）</h3>
+
+<pre><code>// 1. 每个 thread block 负责 (seq_idx, head_idx)
+const int seq_idx = blockIdx.x;
+const int head_idx = blockIdx.y;
+const int thread_idx = threadIdx.x;
+
+// 2. 把这个 head 的 query 加载到 SRAM (寄存器)
+__shared__ scalar_t q_shared[HEAD_SIZE];
+if (thread_idx < HEAD_SIZE) {
+    q_shared[thread_idx] = q[seq_idx * num_heads * HEAD_SIZE + head_idx * HEAD_SIZE + thread_idx];
+}
+__syncthreads();
+
+// 3. 初始化 online softmax 累加器
+float m_acc = -INFINITY;   // running max
+float l_acc = 0.0f;        // running sum
+float o_acc[HEAD_SIZE/NUM_THREADS] = {0.0f};  // running output (per-thread slice)
+
+// 4. 主循环：遍历这个 sequence 的所有 KV block
+const int* block_table = block_tables + seq_idx * max_num_blocks_per_seq;
+const int num_blocks = (context_lens[seq_idx] + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+for (int block_idx = 0; block_idx < num_blocks; ++block_idx) {
+    // 4a. 查 block table 拿物理块号
+    const int physical_block = block_table[block_idx];
+
+    // 4b. 计算这一块的 q @ K_block.T (BLOCK_SIZE 个分数)
+    float scores[BLOCK_SIZE];
+    for (int token_offset = 0; token_offset < BLOCK_SIZE; ++token_offset) {
+        // 每个 thread 负责 head_size 的一个 chunk
+        float partial = 0.0f;
+        for (int d = thread_idx; d < HEAD_SIZE; d += NUM_THREADS) {
+            partial += q_shared[d] *
+                       k_cache[physical_block * stride + token_offset * BLOCK_SIZE + d];
+        }
+        // warp reduce 把所有 thread 的 partial 加起来
+        partial = warp_reduce_sum(partial);
+        scores[token_offset] = partial * scale;
+    }
+
+    // 4c. online softmax 更新
+    float block_max = -INFINITY;
+    for (int t = 0; t < BLOCK_SIZE; ++t) block_max = max(block_max, scores[t]);
+
+    float m_new = max(m_acc, block_max);
+    float rescale = exp(m_acc - m_new);
+    float l_new = rescale * l_acc;
+    for (int t = 0; t < BLOCK_SIZE; ++t) {
+        scores[t] = exp(scores[t] - m_new);  // 归一化到新 max
+        l_new += scores[t];
+    }
+
+    // 4d. 用 scores 加权累加 V_block 到 o_acc，同时 rescale 旧 o_acc
+    for (int d = thread_idx; d < HEAD_SIZE; d += NUM_THREADS) {
+        float new_val = 0.0f;
+        for (int t = 0; t < BLOCK_SIZE; ++t) {
+            new_val += scores[t] * v_cache[physical_block * stride + d * BLOCK_SIZE + t];
+        }
+        o_acc[d / NUM_THREADS] = rescale * o_acc[d / NUM_THREADS] + new_val;
+    }
+
+    m_acc = m_new;
+    l_acc = l_new;
+}
+
+// 5. 最后归一化 + 写回 HBM
+__syncthreads();
+for (int d = thread_idx; d < HEAD_SIZE; d += NUM_THREADS) {
+    out[seq_idx * num_heads * HEAD_SIZE + head_idx * HEAD_SIZE + d] = o_acc[d / NUM_THREADS] / l_acc;
+}</code></pre>
+
+<p class="muted small">以上是<strong>代表性骨架</strong>，跟仓库里实际代码细节不完全对齐（fp16 vs fp32 累加、向量化 load、ALiBi 支持等省略了）。但循环结构和 online softmax 是真的。</p>
+
+<h3>关键点说明</h3>
+
+<ul>
+  <li><strong>__shared__ 修饰</strong>：定义在 SRAM 上的 buffer。query 加载一次后 block 内所有 thread 复用。</li>
+  <li><strong>warp_reduce_sum</strong>：用 <code>__shfl_sync</code> 在 warp 内做 reduction，不需要 SRAM round-trip。</li>
+  <li><strong>per-thread o_acc</strong>：每个 thread 持有 head_size 的一个 slice（在自己的寄存器里）。最后没有跨 thread reduce——因为 output 也是按 dim 分给 thread 写的。</li>
+  <li><strong>online softmax 的 rescale</strong>：<code>rescale = exp(m_old - m_new)</code> 把旧累加值校正到新 max 的尺度。</li>
+</ul>
+
+<div class="code-anchor">
+  <div class="label">读 ② · 2 小时 · 实战逐行</div>
+  <div class="path"><code>csrc/attention/paged_attention_v1.cu</code> · <code>paged_attention_v1_kernel</code></div>
+  跟着上面伪代码找对应的真实行号。重点找这些：
+  <ul>
+    <li><code>__shared__</code> 修饰的变量 = SRAM 上的 buffer。看用了多少 KB。</li>
+    <li>外层 for 循环遍历 KV block，里面 for 遍历 token in block。</li>
+    <li><code>block_table</code> 索引把逻辑 block → 物理 block 偏移。</li>
+    <li>online softmax 的 max 和 sum 累加变量（通常叫 <code>qk_max</code>、<code>exp_sum</code>）。</li>
+    <li><code>__shfl_sync</code> 调用——warp reduce 在哪几个点发生。</li>
+  </ul>
+  <div class="ask">同一个 thread block 里的 thread 在<strong>协作做什么</strong>？(答：每个 thread 处理一个 head dim 切片，最后归约出 attention 输出)</div>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读 ③ · 1 小时 · 绑定到 Python</div>
+  <div class="path"><code>csrc/torch_bindings.cpp</code> 或 <code>csrc/pybind.cpp</code></div>
+  CUDA function 怎么注册成 PyTorch 可调用。看 <code>TORCH_LIBRARY_FRAGMENT</code> 或 <code>PYBIND11_MODULE</code>，找到 <code>paged_attention_v1</code> 的注册行。
+  <div class="ask">从 Python 调一次这个函数，传入 PyTorch tensor 怎么变成 GPU 上的 raw pointer？(答：<code>tensor.data_ptr()</code>; 同时 PyTorch 替你管 stream)</div>
+</div>
+
+<h2><span class="num">10</span>CUDA Graph · 减少 launch overhead</h2>
+
+<p>这一节是 vLLM 性能的"隐藏 boost"——很多人不知道它的存在，但 decode 阶段 5-15% 的提速就靠它。</p>
+
+<h3>问题：每个 kernel launch 要多少时间</h3>
+
+<p>从 CPU 发起一次 CUDA kernel launch，typical cost：</p>
+
+<ul>
+  <li>CPU 侧：5-10 µs（参数 marshalling、driver 调用、写 command buffer）。</li>
+  <li>GPU 侧：0.5-1 µs（warm-up + 调度 block 到 SM）。</li>
+</ul>
+
+<p>对一个吃几百微秒的 kernel，这点 overhead 微不足道。但<strong>decode 阶段</strong>不一样：</p>
+
+<pre><code>一次 decode iteration ≈ 50 个 kernel (RMSNorm + Q/K/V proj + attention + O proj + FFN × N层)
+launch overhead ≈ 50 × 7 µs ≈ 350 µs (CPU 端)
+
+对一个 ~10 ms 的 decode step，350 µs / 10 ms = 3.5% 开销
+对 7B 模型在 H100 上跑 decode (~3 ms/step)，开销 ≈ 11%</code></pre>
+
+<p>模型越小、kernel 越多、单 kernel 越快——launch overhead 比例越高。</p>
+
+<h3>解决：CUDA Graph capture + replay</h3>
+
+<div class="diagram">
+  <svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <!-- without graph -->
+      <text x="180" y="30" text-anchor="middle" font-weight="700" font-size="13">不用 CUDA graph</text>
+      <g transform="translate(40,40)">
+        <rect width="280" height="22" fill="#fef2f2" stroke="#dc2626"/>
+        <text x="140" y="16" text-anchor="middle" font-size="11">CPU: launch K1 (5µs)</text>
+
+        <rect y="22" width="280" height="22" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="140" y="38" text-anchor="middle" font-size="11">GPU: run K1</text>
+
+        <rect y="44" width="280" height="22" fill="#fef2f2" stroke="#dc2626"/>
+        <text x="140" y="60" text-anchor="middle" font-size="11">CPU: launch K2</text>
+
+        <rect y="66" width="280" height="22" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="140" y="82" text-anchor="middle" font-size="11">GPU: run K2</text>
+
+        <text x="140" y="110" text-anchor="middle" font-size="11" fill="#78716c">...重复 50 次...</text>
+
+        <rect y="120" width="280" height="22" fill="#fef2f2" stroke="#dc2626"/>
+        <text x="140" y="136" text-anchor="middle" font-size="11">CPU: launch K50</text>
+
+        <rect y="142" width="280" height="22" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="140" y="158" text-anchor="middle" font-size="11">GPU: run K50</text>
+
+        <text x="140" y="200" text-anchor="middle" font-weight="700" fill="#dc2626" font-size="13">总耗时 ≈ launch overhead + 计算</text>
+      </g>
+
+      <!-- with graph -->
+      <text x="540" y="30" text-anchor="middle" font-weight="700" font-size="13">用 CUDA graph</text>
+      <g transform="translate(400,40)">
+        <rect width="280" height="22" fill="#fef2f2" stroke="#dc2626"/>
+        <text x="140" y="16" text-anchor="middle" font-size="11">CPU: launch graph (5µs · 一次性)</text>
+
+        <rect y="22" width="280" height="22" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="140" y="38" text-anchor="middle" font-size="11">GPU: run K1</text>
+
+        <rect y="44" width="280" height="22" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="140" y="60" text-anchor="middle" font-size="11">GPU: run K2 (内部跳到下一个，无 CPU)</text>
+
+        <text x="140" y="90" text-anchor="middle" font-size="11" fill="#78716c">...50 个 kernel GPU 端连续跑...</text>
+
+        <rect y="100" width="280" height="22" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="140" y="116" text-anchor="middle" font-size="11">GPU: run K50</text>
+
+        <text x="140" y="200" text-anchor="middle" font-weight="700" fill="#16a34a" font-size="13">总耗时 ≈ 仅计算 (launch 摊到一次)</text>
+      </g>
+
+      <!-- bottom: capture vs replay -->
+      <g transform="translate(40,250)">
+        <rect width="640" height="90" fill="#f5f5f4" stroke="#a8a29e" rx="6"/>
+        <text x="320" y="25" text-anchor="middle" font-weight="700" font-size="13">两阶段：capture 一次，replay 多次</text>
+        <text x="20" y="50" font-family="monospace" font-size="11">torch.cuda.graph(g):</text>
+        <text x="20" y="66" font-family="monospace" font-size="11">    output = model(input)   # 这次"录像"，记下所有 kernel 调用序列</text>
+        <text x="20" y="82" font-family="monospace" font-size="11">g.replay()                  # 之后每次只发一次 "replay" 命令</text>
+      </g>
+    </g>
+  </svg>
+  <div class="caption">CUDA graph 把一连串 kernel call 序列化成一个对象，replay 时只发一次"launch graph"命令——所有 kernel 的调度在 GPU 内部连续完成，CPU 端只有一次往返。</div>
+</div>
+
+<h3>vLLM 怎么用 CUDA graph</h3>
+
+<p>关键问题：CUDA graph 要求<strong>每次 replay 的 shape 一致</strong>（kernel launch 参数是 capture 时定死的）。但 vLLM 的 batch size 动态变化——这就要"shape bucketing"。</p>
+
+<p>vLLM 在 engine 初始化时，对一组<strong>预定义的 batch size</strong>（比如 1, 2, 4, 8, 16, 32, ..., max_num_seqs）<em>各 capture 一份 graph</em>。decode 时根据当前 batch size 取最近的桶 padding 进去，replay。</p>
+
+<div class="code-anchor">
+  <div class="label">读 · CUDA graph capture in vLLM</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu_model_runner.py" target="_blank">vllm/v1/worker/gpu_model_runner.py</a></div>
+  搜 <code>capture_model</code> / <code>cuda_graph</code> / <code>graph_capture</code>。看：
+  <ul>
+    <li>什么时候触发 capture (启动时？warmup 阶段？)</li>
+    <li>哪些 batch size 被 capture (<code>cudagraph_batch_sizes</code> 列表)</li>
+    <li>怎么 pad 到下一个桶</li>
+    <li><code>--enforce-eager</code> 标志怎么禁用 graph</li>
+  </ul>
+  <div class="ask">capture 的 graph 跟 paged attention kernel 怎么协作？block_table 的内容会变（每 step 新 token 占新块），但 graph 是固定的——怎么解决？(答：block_table tensor 的<strong>地址</strong>固定，内容 in-place 改)</div>
+</div>
+
+<h3>陷阱</h3>
+
+<ul>
+  <li><strong>非确定性输入 shape</strong>：要么 padding 要么 fall back 到 eager 模式。</li>
+  <li><strong>capture 耗显存</strong>：每个 batch size 桶 capture 一份要 ~50-200 MB workspace。桶多了显存吃紧。vLLM 默认 capture 一二十个桶。</li>
+  <li><strong>第一次 capture 慢</strong>：vLLM 启动时间 +20-60 秒。这是为什么有 <code>--enforce-eager</code> 的 debug 选项。</li>
+</ul>
+
+<h2><span class="num">11</span>Triton · 比 CUDA 友好的中间层</h2>
+
+<p>CUDA 上手太陡：手动管 shared memory、手动 warp reduce、手动 vectorize load。Triton 是 OpenAI 出的 <strong>Python-like DSL</strong>，编译成 CUDA / ROCm，把这些自动化了。</p>
+
+<h3>对比：vector add 在 CUDA vs Triton</h3>
+
+<p><strong>CUDA 版（节选）</strong>：</p>
+
+<pre><code>__global__ void vector_add_kernel(const float* a, const float* b, float* c, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        c[idx] = a[idx] + b[idx];
+    }
+}
+
+// host 侧 launch
+int block_size = 256;
+int grid_size = (n + block_size - 1) / block_size;
+vector_add_kernel&lt;&lt;&lt;grid_size, block_size&gt;&gt;&gt;(a, b, c, n);</code></pre>
+
+<p><strong>Triton 版</strong>（同功能）：</p>
+
+<pre><code>import triton
+import triton.language as tl
+
+@triton.jit
+def vector_add_kernel(
+    a_ptr, b_ptr, c_ptr,
+    n_elements,
+    BLOCK_SIZE: tl.constexpr,   # 编译时常量
+):
+    pid = tl.program_id(axis=0)                # 当前 "block" 的 id
+    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)  # 这个 block 处理哪些 offset
+    mask = offsets &lt; n_elements                # 边界保护
+
+    a = tl.load(a_ptr + offsets, mask=mask)    # 一次 load BLOCK_SIZE 个 element
+    b = tl.load(b_ptr + offsets, mask=mask)
+    tl.store(c_ptr + offsets, a + b, mask=mask)
+
+# 调用
+def vector_add(a, b):
+    c = torch.empty_like(a)
+    n = a.numel()
+    BLOCK_SIZE = 1024
+    grid = (triton.cdiv(n, BLOCK_SIZE),)
+    vector_add_kernel[grid](a, b, c, n, BLOCK_SIZE=BLOCK_SIZE)
+    return c</code></pre>
+
+<h3>关键差异</h3>
+
+<table>
+  <thead><tr><th></th><th>CUDA</th><th>Triton</th></tr></thead>
+  <tbody>
+    <tr><td>抽象粒度</td><td>per-thread</td><td>per-block (block 内 thread 编译器代办)</td></tr>
+    <tr><td>load 单位</td><td>每 thread 一个 element</td><td>一个 vector (BLOCK_SIZE 个)</td></tr>
+    <tr><td>shared memory</td><td>手动 <code>__shared__</code></td><td>编译器自动决定</td></tr>
+    <tr><td>warp reduce</td><td>手动 <code>__shfl_sync</code></td><td><code>tl.sum(x, axis=0)</code> 一行</td></tr>
+    <tr><td>autotune</td><td>手写 + 跑 benchmark</td><td><code>@triton.autotune</code> 自动</td></tr>
+    <tr><td>跨架构</td><td>NVIDIA only</td><td>NVIDIA + AMD CDNA (实验性)</td></tr>
+    <tr><td>调试</td><td>printf, cuda-gdb</td><td><code>TRITON_INTERPRET=1</code> 在 CPU 上 step</td></tr>
+  </tbody>
+</table>
+
+<h3>softmax 在 Triton 里的样子</h3>
+
+<pre><code>@triton.jit
+def softmax_kernel(
+    output_ptr, input_ptr, input_row_stride, output_row_stride, n_cols,
+    BLOCK_SIZE: tl.constexpr,
+):
+    row_idx = tl.program_id(0)                   # 当前 block 处理第几行
+    row_start_ptr = input_ptr + row_idx * input_row_stride
+
+    col_offsets = tl.arange(0, BLOCK_SIZE)
+    input_ptrs = row_start_ptr + col_offsets
+    mask = col_offsets &lt; n_cols
+
+    # 一次 load 一整行 (前提：n_cols ≤ BLOCK_SIZE)
+    row = tl.load(input_ptrs, mask=mask, other=-float('inf'))
+
+    # 在 SRAM 里完成 softmax (编译器自动用 shared memory)
+    row_max = tl.max(row, axis=0)                # 一行求 max
+    numerator = tl.exp(row - row_max)            # 减 max 防 overflow
+    denominator = tl.sum(numerator, axis=0)
+    softmax_output = numerator / denominator
+
+    # 写回
+    output_row_start_ptr = output_ptr + row_idx * output_row_stride
+    output_ptrs = output_row_start_ptr + col_offsets
+    tl.store(output_ptrs, softmax_output, mask=mask)</code></pre>
+
+<p>对比纯 CUDA 写一个 fused softmax kernel：要手动 <code>__shared__</code>、手动 warp reduce <code>__shfl_xor_sync</code>、手动 block-level reduce、手动管 bank conflict——通常 100+ 行。Triton 这 15 行做的事情等价。</p>
+
+<h3>Autotune：让编译器选 block size</h3>
+
+<pre><code>@triton.autotune(
+    configs=[
+        triton.Config({'BLOCK_SIZE': 64}),
+        triton.Config({'BLOCK_SIZE': 128}),
+        triton.Config({'BLOCK_SIZE': 256}),
+        triton.Config({'BLOCK_SIZE': 512}),
+        triton.Config({'BLOCK_SIZE': 1024}),
+    ],
+    key=['n_elements'],   # 输入大小变化时重跑 autotune
+)
+@triton.jit
+def vector_add_kernel(...):
+    ...</code></pre>
+
+<p>第一次调用某个 (n_elements 区间) 时 Triton 跑一遍所有 config 测速，选最快的存下。后续同 key 直接复用。<strong>这是 CUDA 没有的内建机制</strong>。</p>
+
+<h3>必做：Triton 官方 tutorial 1-3</h3>
+
+<div class="code-anchor">
+  <div class="label">做 · Triton tutorials</div>
+  <div class="path"><a href="https://triton-lang.org/main/getting-started/tutorials/index.html" target="_blank">triton-lang.org · tutorials</a></div>
+  <ul>
+    <li><strong>01 vector add</strong> · 学 program_id / load / store / mask。</li>
+    <li><strong>02 fused softmax</strong> · 学 block 内 reduce、kernel fusion。</li>
+    <li><strong>03 matmul</strong> · 学 2D block tiling、accumulator、autotune。</li>
+  </ul>
+  做完 3 个，你已经能写 80% 的 element-wise 和 reduce 类 kernel。
+  <div class="ask">tutorial 3 里 matmul 的 <code>BLOCK_M, BLOCK_N, BLOCK_K</code> 三个参数分别决定什么？哪个最影响 SRAM 占用？</div>
+</div>
+
+<h3>vLLM 怎么用 Triton</h3>
+
+<p>vLLM 在以下场景偏好 Triton：</p>
+
+<ul>
+  <li><strong>AMD ROCm 支持</strong>：CUDA 不能跨编译到 AMD，Triton 可以。</li>
+  <li><strong>实验性 attention</strong>：新 architecture（比如 sliding window、cross attention）先用 Triton prototype，稳定了再 CUDA-化（如果有性能差距）。</li>
+  <li><strong>动态 shape</strong>：autotune 让一份代码自动适配不同尺寸。</li>
+  <li><strong>非主流 dtype</strong>：fp8、int4 等组合，Triton 改起来快。</li>
+</ul>
+
+<div class="code-anchor">
+  <div class="label">读 · vLLM Triton attention</div>
+  <div class="path">搜 <code>vllm/attention/ops/</code> 或 <code>vllm/v1/attention/ops/</code> 下的 <code>.py</code> 文件</div>
+  Python 里写的 Triton kernel。<strong>比 CUDA 版可读 5 倍</strong>。
+  <div class="ask">对比同功能 CUDA 版（<code>csrc/attention/paged_attention_v1.cu</code>），Triton 版"省"掉了什么？(答：手动 shared memory 管理、warp reduce、grid 配置——Triton 编译器代办)</div>
+</div>
+
+<h2><span class="num">12</span>动手 · 跑 benchmark 画图</h2>
+
+<p>本月的硬核作业。<strong>这一份数据将出现在你的简历/blog 上。</strong></p>
+
+<h3>实验设计 · benchmark_throughput.py</h3>
+
+<p>vLLM 自带两个 benchmark 脚本，用法不同：</p>
+
+<table>
+  <thead><tr><th>脚本</th><th>测什么</th><th>典型用法</th></tr></thead>
+  <tbody>
+    <tr><td><code>benchmarks/benchmark_throughput.py</code></td><td>离线吞吐 (offline, 不限延迟)</td><td>给定一堆请求，跑完总耗时</td></tr>
+    <tr><td><code>benchmarks/benchmark_serving.py</code></td><td>在线 serving (有 QPS 速率)</td><td>模拟生产 traffic，看 latency 分位</td></tr>
+    <tr><td><code>benchmarks/benchmark_latency.py</code></td><td>单请求延迟</td><td>固定输入测端到端</td></tr>
+  </tbody>
+</table>
+
+<h3>benchmark_throughput 的关键 flag</h3>
+
+<pre><code>python benchmarks/benchmark_throughput.py \
+    --model meta-llama/Meta-Llama-3-8B \
+    --backend vllm \
+    --input-len 1024 \           # 每请求的 prompt 长度
+    --output-len 128 \           # 每请求的输出长度
+    --num-prompts 1000 \         # 总请求数
+    --dtype float16 \
+    --max-model-len 4096 \
+    --gpu-memory-utilization 0.9 \
+    --max-num-seqs 256 \         # 最大并发 sequence
+    --enforce-eager \            # 关 CUDA graph (对照用)
+    --enable-prefix-caching      # 开 prefix cache (对照用)</code></pre>
+
+<h3>benchmark_serving 的关键 flag</h3>
+
+<pre><code># 启动 server
+python -m vllm.entrypoints.openai.api_server \
+    --model meta-llama/Meta-Llama-3-8B --port 8000 &
+
+# 跑 benchmark client
+python benchmarks/benchmark_serving.py \
+    --backend vllm \
+    --base-url http://localhost:8000 \
+    --dataset-name sharegpt \           # 或 random / sonnet
+    --dataset-path ShareGPT_V3.json \
+    --num-prompts 1000 \
+    --request-rate 5 \                  # QPS
+    --save-result \
+    --result-dir ./results/</code></pre>
+
+<h3>变量矩阵 · 至少跑 4 张图</h3>
+
+<table>
+  <thead><tr><th>图 #</th><th>X 轴</th><th>Y 轴</th><th>固定</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>max-num-seqs (1, 8, 32, 64, 128, 256)</td><td>throughput tokens/s</td><td>input=1024, output=128, num-prompts=1000</td></tr>
+    <tr><td>2</td><td>input-len (128, 512, 1024, 2048, 4096)</td><td>TTFT p50 / p99</td><td>output=128, request-rate=5</td></tr>
+    <tr><td>3</td><td>request-rate (1, 2, 5, 10, 20, 50)</td><td>throughput + p99 latency (双轴)</td><td>input=1024, output=128</td></tr>
+    <tr><td>4</td><td>backend (FLASH_ATTN, FLASHINFER, PAGED_ATTN)</td><td>throughput (bar plot)</td><td>统一其他配置</td></tr>
+  </tbody>
+</table>
+
+<h3>matplotlib 样本代码</h3>
+
+<pre><code>import json, matplotlib.pyplot as plt
+import numpy as np
+
+# 假设跑完后 results 字典：results[max_num_seqs] = {'tput': ..., 'ttft_p50': ..., ...}
+xs = sorted(results.keys())
+tputs = [results[x]['tput'] for x in xs]
+
+fig, ax = plt.subplots(figsize=(7, 4.5))
+ax.plot(xs, tputs, 'o-', linewidth=2, markersize=8, color='#c2410c')
+ax.set_xlabel('max-num-seqs (concurrency cap)')
+ax.set_ylabel('Throughput (tokens/s)')
+ax.set_title('Llama-3-8B · A100 80GB · throughput vs concurrency')
+ax.grid(alpha=0.3)
+ax.set_xscale('log', base=2)
+# 标注 saturation point
+ax.axvline(x=64, linestyle='--', color='gray', alpha=0.5)
+ax.text(64, max(tputs)*0.7, 'KV 显存撑爆点\npreempt 开始', ha='center')
+plt.tight_layout()
+plt.savefig('throughput_vs_concurrency.png', dpi=120)</code></pre>
+
+<h3>每张图应该长什么样（预期形状）</h3>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 320" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="11">
+
+      <!-- chart 1: throughput vs concurrency -->
+      <g transform="translate(20,20)">
+        <text x="80" y="0" text-anchor="middle" font-weight="700" font-size="12">① tput vs concurrency</text>
+        <line x1="20" y1="170" x2="160" y2="170" stroke="#1c1917"/>
+        <line x1="20" y1="170" x2="20" y2="40" stroke="#1c1917"/>
+        <polyline points="30,160 50,130 70,90 90,65 110,55 130,50 150,48" fill="none" stroke="#c2410c" stroke-width="2"/>
+        <text x="80" y="195" text-anchor="middle" fill="#78716c">log2(max-num-seqs)</text>
+        <text x="80" y="215" text-anchor="middle" fill="#16a34a" font-size="10">sub-linear, 到点平台</text>
+      </g>
+
+      <!-- chart 2: TTFT vs prompt len -->
+      <g transform="translate(200,20)">
+        <text x="80" y="0" text-anchor="middle" font-weight="700" font-size="12">② TTFT vs prompt len</text>
+        <line x1="20" y1="170" x2="160" y2="170" stroke="#1c1917"/>
+        <line x1="20" y1="170" x2="20" y2="40" stroke="#1c1917"/>
+        <polyline points="30,165 60,150 90,125 120,90 150,50" fill="none" stroke="#c2410c" stroke-width="2"/>
+        <text x="80" y="195" text-anchor="middle" fill="#78716c">prompt length</text>
+        <text x="80" y="215" text-anchor="middle" fill="#16a34a" font-size="10">近线性 (prefill compute-bound)</text>
+      </g>
+
+      <!-- chart 3: latency-throughput pareto -->
+      <g transform="translate(380,20)">
+        <text x="80" y="0" text-anchor="middle" font-weight="700" font-size="12">③ p99 lat vs tput</text>
+        <line x1="20" y1="170" x2="160" y2="170" stroke="#1c1917"/>
+        <line x1="20" y1="170" x2="20" y2="40" stroke="#1c1917"/>
+        <polyline points="30,160 50,150 70,135 90,115 110,90 125,70 135,50 142,42" fill="none" stroke="#c2410c" stroke-width="2"/>
+        <circle cx="100" cy="100" r="4" fill="#16a34a"/>
+        <text x="105" y="115" font-size="9" fill="#16a34a">knee</text>
+        <text x="80" y="195" text-anchor="middle" fill="#78716c">throughput</text>
+        <text x="80" y="215" text-anchor="middle" fill="#16a34a" font-size="10">curve 拐点 = SLO 切点</text>
+      </g>
+
+      <!-- chart 4: backend bar -->
+      <g transform="translate(560,20)">
+        <text x="80" y="0" text-anchor="middle" font-weight="700" font-size="12">④ backend 对比</text>
+        <line x1="20" y1="170" x2="160" y2="170" stroke="#1c1917"/>
+        <line x1="20" y1="170" x2="20" y2="40" stroke="#1c1917"/>
+        <rect x="30" y="65" width="30" height="105" fill="#c2410c"/>
+        <rect x="70" y="55" width="30" height="115" fill="#16a34a"/>
+        <rect x="110" y="75" width="30" height="95" fill="#1e40af"/>
+        <text x="45" y="185" text-anchor="middle" font-size="9">FA</text>
+        <text x="85" y="185" text-anchor="middle" font-size="9">FlashInfer</text>
+        <text x="125" y="185" text-anchor="middle" font-size="9">PA</text>
+        <text x="80" y="215" text-anchor="middle" fill="#16a34a" font-size="10">差异 ~5-30%</text>
+      </g>
+
+      <text x="380" y="280" text-anchor="middle" font-size="11" fill="#78716c">所有图 X / Y 数值随具体硬件 / 模型 / 数据集变化。形状的"预期"是这样。</text>
+      <text x="380" y="300" text-anchor="middle" font-size="11" fill="#c2410c" font-weight="600">如果你的图跟预期形状差很多 → 实验有 bug，回去检查 setup。</text>
+    </g>
+  </svg>
+  <div class="caption">四张图的形状预期。你跑出来的图<strong>形状应该跟这些类似</strong>，绝对数字取决于硬件。如果形状不对就是实验跑错了——回去 debug。</div>
+</div>
+
+<h3>对照实验 · 必做加分</h3>
+
+<ul>
+  <li><strong>CUDA graph 影响</strong>：<code>--enforce-eager</code> 关掉 graph，对照默认。decode 重的负载下应该有 5-15% 差距。</li>
+  <li><strong>Attention backend 差异</strong>：<code>VLLM_ATTENTION_BACKEND=FLASH_ATTN</code> vs <code>FLASHINFER</code> vs <code>TRITON_ATTN_VLLM_V1</code>。一般 5-30%。</li>
+  <li><strong>Prefix caching 影响</strong>：sharegpt 数据集有共享 system prompt，开 / 关 prefix caching 差距 1.5-3×。</li>
+  <li><strong>Quantization 影响</strong>：fp16 vs AWQ-int4 vs fp8。throughput 通常 1.2-2× （但要看长 ctx 还是短）。</li>
+</ul>
+
+<h3>怎么解读异常</h3>
+
+<table>
+  <thead><tr><th>现象</th><th>常见原因</th><th>排查方向</th></tr></thead>
+  <tbody>
+    <tr><td>throughput 在 max-num-seqs 大时<em>下降</em></td><td>preempt 频繁、KV swap 抖动</td><td>看日志 <code>preempted</code> 次数</td></tr>
+    <tr><td>TTFT 在 batch 大时暴涨</td><td>prefill 排队，且 chunked prefill 关</td><td>开 <code>--enable-chunked-prefill</code></td></tr>
+    <tr><td>不同 backend 差距很大</td><td>fp 精度不同、kernel cover 范围不同</td><td>分别跑短 / 长 ctx 看</td></tr>
+    <tr><td>开 graph 反而慢</td><td>batch size 跨桶 padding 浪费</td><td>对照 <code>cudagraph_batch_sizes</code> 列表</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">13</span>常见反模式</h2>
+
+<p>读到一些自信但错的观点时，能站住脚很重要。下面四个最常见。</p>
+
+<details class="predict">
+  <summary>"Triton 比 CUDA 慢，生产要用 CUDA"</summary>
+  <div class="body">
+    <p>常常是错的。对<strong>中等复杂度</strong>的 kernel（element-wise + 一个 reduce + 适度 fusion），Triton 编译出来的 PTX 跟手写 CUDA 通常在 5% 以内。autotune 还能把好的 BLOCK_SIZE 选出来——手写 CUDA 没人会去遍历所有组合。</p>
+    <p>CUDA 真有优势的地方：极致的 fp8/fp16 mixed precision、warp 内特殊指令（mma.sp、cp.async.bulk）、为某代特定 GPU 优化的微调。FlashAttention v3 用 raw CUTLASS/CUDA 是因为 WGMMA、TMA 这些 Hopper-only 指令 Triton 还没原生支持。</p>
+    <p>结论：<strong>medium kernel → Triton；最热点的、跨多硬件代差的 kernel → CUDA</strong>。</p>
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"FlashAttention 总是赢"</summary>
+  <div class="body">
+    <p>错。<strong>短 context (N &lt; ~256)</strong> 时，朴素 attention 本来就能塞进 SRAM 跑完，FA 的 tile schedule 开销不划算。极小 batch、超短 prompt 的边缘场景偶尔 XFormers 更快。</p>
+    <p>另外 FA 在 decode（query 数 = 1）是<strong>低效</strong>的——FA 的并行化基于 Q tile 数量。decode 阶段 Q 就一行，吃不满 SM。所以 vLLM 在 decode 用自家 paged kernel（并行化基于 KV block 数）。</p>
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"eager mode 没区别，反正最终都跑同样的 kernel"</summary>
+  <div class="body">
+    <p>错。eager mode 每个 op 都从 CPU 单独 launch kernel。对 LLM 那种"几百个小 kernel 一路过"的 workload，CPU launch overhead 攒起来 10%+。CUDA graph 能把这 10% 抢回来。</p>
+    <p>另一个 eager 看不到的好处：graph 内部 kernel 排队不抢 GPU 占用率，调度更平滑。pure latency-sensitive 场景（单请求、小模型）受益最明显。</p>
+  </div>
+</details>
+
+<details class="predict">
+  <summary>"FP8 一定降速度"</summary>
+  <div class="body">
+    <p>错。Hopper 之前的硬件（A100 及之前）确实没 fp8 Tensor Core，模拟 fp8 反而慢。但 H100 起 fp8 是<strong>原生 Tensor Core 路径，算力比 fp16 快 2 倍</strong>。</p>
+    <p>fp8 的真问题是<strong>精度</strong>——某些激活的 outlier 会导致 quantization error 放大。要配合 calibration（per-tensor 或 per-channel 的 scale），加上小心选哪些层 quant。生产里 W8A8 经过验证的模型在 throughput 上能赚 ~1.5×，质量下降可控。</p>
+    <p>注意 H100 之外的卡（A100）跑 fp8 是软件模拟，会慢——这种情况要先看你的硬件。</p>
+  </div>
+</details>
+
+<h2><span class="num">14</span>速补材料</h2>
+
+<h3>必读</h3>
+
+<ul>
+  <li><strong>CMU 15-418 Parallel Computing</strong> · <a href="http://15418.courses.cs.cmu.edu/" target="_blank">课程主页</a>
+    <ul>
+      <li>Lecture 2-3：缓存层级 + 内存延迟。讲得比 CS162 OS 课深。</li>
+      <li>Lecture 5-7：GPU 架构（SIMT、warp）。</li>
+      <li>Lecture 14：roofline 模型。如果时间紧张，<strong>就看这一节</strong>。</li>
+    </ul>
+  </li>
+  <li><strong>CUDA C++ Programming Guide</strong> · NVIDIA 官方
+    <ul>
+      <li>Chapter 4 (Hardware Implementation) · 讲 SM 内部结构、warp 调度。</li>
+      <li>Chapter 5 (Performance Guidelines) · 讲 memory coalescing、occupancy。</li>
+      <li>Chapter 6 (Math Functions) · 速度精度表，写 kernel 时要查。</li>
+      <li>一个下午翻完，每页都有用。</li>
+    </ul>
+  </li>
+  <li><strong>PMPP (Programming Massively Parallel Processors)</strong> · Hwu, Kirk, Hajj 著（第 4 版 2022）
+    <ul>
+      <li>Chapter 3-5：CUDA 基础。比官方 guide 教学性强。</li>
+      <li>Chapter 8 (parallel patterns: reduction, scan)：写 reduce 类 kernel 必读。</li>
+      <li>Chapter 12 (sparse matrix)：理解 PagedAttention 的 indirection 用得上。</li>
+    </ul>
+  </li>
+  <li><strong>Triton 官方 docs</strong> · <a href="https://triton-lang.org/" target="_blank">triton-lang.org</a>
+    <ul>
+      <li>Tutorial 1-3 必做（vector add, softmax, matmul）。</li>
+      <li>Tutorial 6-7（FP8 GEMM）选做。</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>选读</h3>
+
+<ul>
+  <li><strong>FlashAttention 论文（v1, NeurIPS'22）</strong> · 读懂思想 + 附录 A 的 online softmax 推导。</li>
+  <li><strong>FlashAttention-2 论文（2023）</strong> · 看 work partition 章节。</li>
+  <li><strong>FlashAttention-3 论文（2024）</strong> · Hopper 特化。</li>
+  <li><strong>PagedAttention 论文（SOSP'23）</strong> · 你 M2 已经读过。M4 重看 kernel 设计部分。</li>
+  <li><strong>NVIDIA H100 Whitepaper</strong> · TMA、WGMMA、新 Tensor Core 的官方说明。</li>
+  <li><strong>"Making Deep Learning Go Brrrr From First Principles"</strong> · Horace He 的 blog post，关于 PyTorch 视角的 memory-bound vs compute-bound，必读。</li>
+</ul>
+
+<h2><span class="num">15</span>本月 PR 候选</h2>
+
+<p>Month 4 的 KPI 是<strong>一个 kernel / 性能相关的 PR</strong>。候选方向，按门槛升序：</p>
+
+<ol>
+  <li><strong>benchmark 补全</strong> · 给某个少 cover 的 workload 加 benchmark 脚本 + baseline 数据。改动小，价值高。</li>
+  <li><strong>给 Triton kernel 加 autotune config</strong> · 已有 kernel 但 autotune 配置不全，加几个 BLOCK_SIZE 候选，跑 benchmark 提交报告。</li>
+  <li><strong>修一个 numerical issue</strong> · fp16 vs fp32 累加导致的精度问题，搜 issue tracker <code>precision</code> 标签。</li>
+  <li><strong>backend selector 修小问题</strong> · 例如某种硬件 / dtype 组合没正确路由到最优 backend。</li>
+  <li><strong>新 GPU 架构适配</strong> · H200、B100、AMD MI300 的 kernel cover 补全。门槛最高，需要相应硬件。</li>
+</ol>
+
+<div class="callout warn">
+  <div class="label">⚠ 写 CUDA PR 前注意</div>
+  Kernel PR 是<strong>最难 merge</strong> 的——reviewer 严、CI 慢、需要多种 GPU 测。
+  推荐先从 Triton kernel / benchmark 切入，建立信任，再碰 CUDA 主战场。
+  另外：CUDA C++ 改动通常需要 SM 8.0+ 和 SM 9.0 都测过，本地没卡的同学优先去 benchmark / Triton 方向。
+</div>
+
+<h2><span class="num">16</span>本页自检</h2>
+
+<div class="selfcheck">
+  <h4>Month 4 结束时这些应该全部 ✓</h4>
+  <ul>
+    <li><input type="checkbox" id="k1"/><label for="k1">"为什么现代 GPU 推理常常 memory-bound 而不是 compute-bound？" 我能用 arithmetic intensity + A100 分水岭 156 数字讲清。</label></li>
+    <li><input type="checkbox" id="k2"/><label for="k2">FlashAttention 的核心 trick 是什么？我能在白板上画 tile schedule、解释 online softmax 的 rescale 因子。</label></li>
+    <li><input type="checkbox" id="k3"/><label for="k3">PagedAttention kernel 跟 FlashAttention 的根本差异是什么？为什么 vLLM 在 decode 用前者、prefill 用后者？</label></li>
+    <li><input type="checkbox" id="k4"/><label for="k4">CUDA 的 thread / warp / block / SM / grid 我能画层级图，并说出 warp = 32 这个数字。</label></li>
+    <li><input type="checkbox" id="k5"/><label for="k5">FlashAttention v1 → v2 → v3 三个版本各解决了什么瓶颈？v3 跟 Hopper 的关系是？</label></li>
+    <li><input type="checkbox" id="k6"/><label for="k6">Triton tutorial 1-3 我都跑通了，能默写 vector_add 的 Triton kernel。</label></li>
+    <li><input type="checkbox" id="k7"/><label for="k7">我读过 <code>paged_attention_v1.cu</code> 的主 kernel 至少一遍，知道它的循环结构 (外层 KV block、内层 token-in-block) 和 online softmax 在哪些行。</label></li>
+    <li><input type="checkbox" id="k8"/><label for="k8">CUDA graph 是什么？为什么 vLLM 用 shape buckets？<code>--enforce-eager</code> 关掉它时 decode 性能怎么变？</label></li>
+    <li><input type="checkbox" id="k9"/><label for="k9">Benchmark 数据已采集，画了至少 4 张图，会解读拐点和异常。</label></li>
+    <li><input type="checkbox" id="k10"/><label for="k10">"Triton 比 CUDA 慢 / FlashAttention 总是赢 / fp8 一定降速度" 这三个反模式我都能反驳。</label></li>
+    <li><input type="checkbox" id="k11"/><label for="k11">本月已有 kernel / benchmark 方向的 PR 在 review 或 merged。</label></li>
+  </ul>
+</div>
+
+<h2><span class="num">17</span>延伸阅读</h2>
+
+<p>这一章你下到了硬件层。再往前走的方向：</p>
+
+<table>
+  <thead><tr><th>主题</th><th>论文 / 资源</th><th>为什么读</th></tr></thead>
+  <tbody>
+    <tr><td>原始 FlashAttention</td><td>Dao et al., <em>FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</em>, NeurIPS 2022</td><td>"IO-awareness" 概念的开创。M4 思想根基。</td></tr>
+    <tr><td>FlashAttention-2</td><td>Dao, <em>FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning</em>, 2023</td><td>看 work partition 章节，理解 v1 → v2 的真正变化。</td></tr>
+    <tr><td>FlashAttention-3</td><td>Shah et al., <em>FlashAttention-3: Fast and Accurate Attention with Asynchrony and Low-precision</em>, 2024</td><td>Hopper TMA + WGMMA 的实战示范。fp8 attention 范式。</td></tr>
+    <tr><td>PagedAttention</td><td>Kwon et al., <em>Efficient Memory Management for LLM Serving with PagedAttention</em>, SOSP'23</td><td>kernel 设计章节再读一遍，M2 的时候你关注 memory layout，这次关注 gather pattern。</td></tr>
+    <tr><td>FlashInfer</td><td>Ye et al., <em>FlashInfer: Efficient and Customizable Attention Engine for LLM Inference Serving</em>, 2025</td><td>第三方 attention 库，跟 vLLM 配合用。看它怎么处理 grouped-query attention、sparse attention。</td></tr>
+    <tr><td>SGLang RadixAttention</td><td>Zheng et al., <em>SGLang: Efficient Execution of Structured Language Model Programs</em>, NeurIPS'24</td><td>prefix tree 共享的高级版。kernel 视角看 KV 共享的极限。</td></tr>
+    <tr><td>Online Softmax</td><td>Milakov, Gimelshein, <em>Online normalizer calculation for softmax</em>, 2018</td><td>FlashAttention 数学根基的原始论文。3 页，读完心安。</td></tr>
+    <tr><td>Triton 论文</td><td>Tillet et al., <em>Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations</em>, MAPL'19</td><td>Triton 的设计动机。读了之后 DSL 抽象一切都顺。</td></tr>
+    <tr><td>Roofline model</td><td>Williams, Waterman, Patterson, <em>Roofline: An Insightful Visual Performance Model for Multicore Architectures</em>, CACM'09</td><td>所有 perf 分析的祖宗 paper。GPU 圈大家都用它的概念但很少回头读原文，6 页。</td></tr>
+    <tr><td>"GPU MODE" 录制课</td><td><a href="https://github.com/gpu-mode/lectures" target="_blank">github.com/gpu-mode/lectures</a></td><td>社区驱动的 GPU 编程课，多个 GPU vendor 的工程师讲。lecture 5-12 是 CUDA / Triton 实战，特别好。</td></tr>
+  </tbody>
+</table>
+
+<p>读论文的顺序建议：<strong>FlashAttention v1 → online softmax 原 paper → PagedAttention（再读 kernel 章节）→ FlashAttention v2 → roofline → 选你感兴趣的方向继续</strong>。一周一篇够了。</p>
+
+<div class="callout check">
+  <div class="label">✓ 你现在在哪儿</div>
+  M4 通了，你拿到了一张"硬件 → kernel → 性能"的完整地图。下个月 (M5) 把前四个月学到的东西<strong>反向</strong>用一次——从 0 写一个能 serve 一个请求的 mini engine。
+  那时回头看 M1-M4，你会发现自己读 vLLM 源码的速度比开始快 3-5 倍。
+</div>
+
+<div class="pagenav">
+  <a class="prev" href="04-scheduler.html"><div class="dir">prev</div><div class="ttl">M3 · 调度器</div></a>
+  <a class="next" href="06-mini-vllm.html"><div class="dir">next</div><div class="ttl">M5 · mini-vLLM</div></a>
+</div>
+
+</main>
+</div>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

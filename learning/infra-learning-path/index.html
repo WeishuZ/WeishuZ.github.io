@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Infra Learning Path · 用 vLLM 学 AI 基础设施</title>
+<meta name="description" content="一份问题驱动、强实践的 AI infra 学习路径。以 vLLM 为锚点，用 OS 当母语，6 个月走通从入口到 kernel 的全栈。开放、免费、持续更新。" />
+<meta property="og:title" content="Infra Learning Path · 用 vLLM 学 AI 基础设施" />
+<meta property="og:description" content="6 个月用 vLLM 当锚点深入 AI infra。10 章 + 15 篇论文 + 1 个原创项目 mini-vLLM。" />
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+
+  <div class="nav-group">
+    <div class="nav-label">起步</div>
+    <nav><ul>
+      <li><a href="index.html"><span class="idx">/</span>主页 · 概览</a></li>
+      <li><a href="tutorial/00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+      <li><a href="tutorial/01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+    </ul></nav>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-label">6 个月主线</div>
+    <nav><ul>
+      <li><a href="tutorial/02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+      <li><a href="tutorial/03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+      <li><a href="tutorial/04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+      <li><a href="tutorial/05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+      <li><a href="tutorial/06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+      <li><a href="tutorial/09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+    </ul></nav>
+  </div>
+
+  <div class="nav-group">
+    <div class="nav-label">参考</div>
+    <nav><ul>
+      <li><a href="tutorial/07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+      <li><a href="tutorial/08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+    </ul></nav>
+  </div>
+
+  <div class="foot">
+    源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a><br>
+    文档 CC BY 4.0 · 锚点项目 <a href="https://github.com/vllm-project/vllm" target="_blank" rel="noopener">vLLM</a>
+  </div>
+</aside>
+
+<main class="content">
+
+<section class="hero">
+  <div class="eyebrow">/ infra learning path / v2 · textbook edition</div>
+  <h1>用 vLLM 当锚点，<br>把 AI infra 学成你的母语。</h1>
+  <p class="sub">
+    这不是一份课程大纲，而是一本<strong>新一代教材</strong>：
+    遇到一个 vLLM 模块再回头补对应的 OS 概念，
+    每一步都带一个驱动问题、一段可读的代码、一组自检题、和一张让你理解结构的图。
+  </p>
+  <div class="cta-row">
+    <a class="btn primary" href="tutorial/00-mental-model.html">从 00 开始 →</a>
+    <a class="btn" href="tutorial/01-setup.html">直接进环境配置</a>
+    <a class="btn" href="tutorial/03-memory.html">直接读皇冠章节 M2</a>
+    <a class="btn" href="tutorial/09-frontier-serving.html">进入 M6 前沿 serving</a>
+    <a class="btn" href="tutorial/08-os-bridge.html">查 OS ↔ vLLM 对照</a>
+  </div>
+</section>
+
+<div class="kpis">
+  <div class="kpi"><div class="n">10</div><div class="l">章节 · ~10K 行</div></div>
+  <div class="kpi"><div class="n">15</div><div class="l">核心论文</div></div>
+  <div class="kpi"><div class="n">3+</div><div class="l">vLLM PR 目标</div></div>
+  <div class="kpi"><div class="n">1</div><div class="l">原创 mini-vLLM</div></div>
+</div>
+
+<h2><span class="num">01</span>这套教程的写法</h2>
+
+<p>
+  AI infra 的痛点是：<strong>知识树太大</strong>——OS、CUDA、分布式、编译器、Transformer 内部、网络。
+  全刷一遍要两年；只看上层 API 又会卡在第一个性能问题。
+</p>
+
+<p>这份路径用四条原则压缩它：</p>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>① Just-in-time</h3>
+    <p>不刷完整课。<strong>遇到 vLLM 某模块卡住 → 反查对应 OS 概念 → 学到能看懂 → 回到代码</strong>。每个概念都有"现在用得上"的上下文，记得住。</p>
+  </div>
+  <div class="card">
+    <h3>② 问题驱动</h3>
+    <p>每一节先抛一个问题（"vLLM 为什么不用 contiguous KV cache？"），让你先猜再读答案。强迫你形成<strong>预期</strong>，而不是被动接受信息。</p>
+  </div>
+  <div class="card">
+    <h3>③ 代码锚点</h3>
+    <p>每个概念学完，立刻给一个文件路径："去读 <code>vllm/v1/core/block_pool.py</code> 的 <code>get_new_blocks()</code>，带着这 3 个问题。"<strong>从抽象 → 真实代码</strong>的距离永远 ≤ 1 步。</p>
+  </div>
+  <div class="card">
+    <h3>④ 闭环输出</h3>
+    <p>每月一个产出物：一个 PR、一段笔记、或一份 benchmark。<strong>不输出不算学会</strong>。月末复盘强制收口，避免知识漂浮。</p>
+  </div>
+</div>
+
+<h2><span class="num">02</span>学习循环</h2>
+
+<p>每个 vLLM 模块都按这个循环走一遍，不跳步：</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="13">
+      <rect x="280" y="20" width="160" height="46" rx="6" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+      <text x="360" y="40" text-anchor="middle" font-weight="600" fill="#c2410c">① 抛问题</text>
+      <text x="360" y="58" text-anchor="middle" fill="#57534e" font-size="11">"为什么这样设计？"</text>
+
+      <rect x="520" y="100" width="160" height="46" rx="6" fill="#f7f5ee" stroke="#d6d3d1" stroke-width="1.5"/>
+      <text x="600" y="120" text-anchor="middle" font-weight="600">② 先猜</text>
+      <text x="600" y="138" text-anchor="middle" fill="#57534e" font-size="11">写下你的预期</text>
+
+      <rect x="440" y="210" width="160" height="46" rx="6" fill="#f7f5ee" stroke="#d6d3d1" stroke-width="1.5"/>
+      <text x="520" y="230" text-anchor="middle" font-weight="600">③ 补 OS 概念</text>
+      <text x="520" y="248" text-anchor="middle" fill="#57534e" font-size="11">OSTEP 那一节</text>
+
+      <rect x="120" y="210" width="160" height="46" rx="6" fill="#f7f5ee" stroke="#d6d3d1" stroke-width="1.5"/>
+      <text x="200" y="230" text-anchor="middle" font-weight="600">④ 读真实代码</text>
+      <text x="200" y="248" text-anchor="middle" fill="#57534e" font-size="11">vLLM 对应文件</text>
+
+      <rect x="40" y="100" width="160" height="46" rx="6" fill="#f7f5ee" stroke="#d6d3d1" stroke-width="1.5"/>
+      <text x="120" y="120" text-anchor="middle" font-weight="600">⑤ 输出 / 对账</text>
+      <text x="120" y="138" text-anchor="middle" fill="#57534e" font-size="11">笔记 · PR · benchmark</text>
+
+      <path d="M 440 50 Q 540 60 560 100" fill="none" stroke="#78716c" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <path d="M 600 146 Q 620 200 600 210" fill="none" stroke="#78716c" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <path d="M 440 233 L 280 233" fill="none" stroke="#78716c" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <path d="M 130 210 Q 100 200 120 146" fill="none" stroke="#78716c" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <path d="M 160 100 Q 220 50 280 43" fill="none" stroke="#78716c" stroke-width="1.5" marker-end="url(#arrow)"/>
+    </g>
+  </svg>
+  <div class="caption">每个模块都走完一圈再换下一个。少了哪步都容易忘。</div>
+</div>
+
+<h2><span class="num">03</span>谁适合读</h2>
+
+<ul>
+  <li><strong>已经会写代码</strong>的工程师 / 学生（任何语言都行，Python 优先），想从应用层往下走。</li>
+  <li>对 <strong>"LLM serving 怎么跑起来的"</strong> 有强烈好奇心。</li>
+  <li>愿意花 6 个月、每周 10–15 小时投入。少于这个强度，可以放缓节奏但流程不要砍。</li>
+  <li>OS 基础：知道进程/线程是什么、虚拟地址不是物理地址、什么是 lock 即可。深入概念这里会补。</li>
+</ul>
+
+<div class="callout warn">
+  <div class="label">⚠ 不适合谁</div>
+  这不是"零基础 AI 入门"。如果你连 PyTorch 都没写过，先去补 Andrej Karpathy 的 <a href="https://karpathy.ai/zero-to-hero.html" target="_blank">Zero-to-Hero</a>，跑通一个最小 Transformer，再回来。
+</div>
+
+<h2><span class="num">04</span>完整目录</h2>
+
+<p>每章都有<strong>驱动问题、SVG 图解、代码锚点、自检题</strong>四件套。点进去看就明白。</p>
+
+<div class="timeline">
+  <a class="step" href="tutorial/00-mental-model.html">
+    <div class="badge">00</div>
+    <div>
+      <div class="title">心智模型 · "vLLM 是 Token 的 OS"</div>
+      <div class="desc">15 分钟建立全局观：AI infra 在技术栈哪一层、为什么 vLLM 是好的入口、为什么 OS 是它的母语。<strong>所有后续章节的根</strong>。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/01-setup.html">
+    <div class="badge">Week 0</div>
+    <div>
+      <div class="title">环境 · 工具链 · 第一次跑通</div>
+      <div class="desc">租 A10、clone vLLM、跑通 <code>vllm serve</code>、配 pre-commit。<strong>故障排查矩阵</strong>覆盖 10+ 常见坑。目标是能复现。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/02-entrypoints.html">
+    <div class="badge">Month 1</div>
+    <div>
+      <div class="title">读懂入口与请求生命周期</div>
+      <div class="desc">从 HTTP 到 token 输出的完整调用链；async / queue / engine 主循环；v0 vs v1 架构对比；4 段代码深读；完整时序图。<strong>提第 1 个 PR</strong>。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/03-memory.html">
+    <div class="badge">Month 2 ★</div>
+    <div>
+      <div class="title">PagedAttention — 皇冠章节</div>
+      <div class="desc">KV cache 的数学；OS 虚拟内存深读；block table + chain hash + prefix caching；attention kernel 怎么用 block table；CPU offload。这一步学透，后面都顺。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/04-scheduler.html">
+    <div class="badge">Month 3</div>
+    <div>
+      <div class="title">调度器 · Continuous Batching</div>
+      <div class="desc">三种 batching 策略对比；prefill vs decode 的微观分析；OS 调度器复习；4 状态状态机；6 段 scheduler.py 代码深读；Sarathi chunked prefill；<strong>200 行可运行 mini-scheduler 模拟器</strong>。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/05-kernels.html">
+    <div class="badge">Month 4</div>
+    <div>
+      <div class="title">Kernel · FlashAttention · Triton</div>
+      <div class="desc">GPU 内存层级 + roofline；FlashAttention 的 online softmax 数学；paged_attention_v1.cu 完整 walkthrough；CUDA graph 机制；Triton tutorial；benchmark 实战画图。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/06-mini-vllm.html">
+    <div class="badge">Month 5</div>
+    <div>
+      <div class="title">原创项目 · mini-vLLM</div>
+      <div class="desc">~500 行 Python 从零写一个能 serve 一个请求的 paged-attention engine。v0.1 → v0.4 完整代码骨架；跟 vLLM 对照笔记；blog 写作模板。<strong>简历最重的那张牌</strong>。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/09-frontier-serving.html">
+    <div class="badge">Month 6</div>
+    <div>
+      <div class="title">前沿 serving 系统 · 从 toy engine 到生产判断力</div>
+      <div class="desc">prefill/decode 分离、KV transfer、prefix-aware routing、LMCache、speculative decoding、FP8/KV 量化、MoE/MLA serving。用交互实验判断 workload 瓶颈，设计 mini-vLLM v0.6。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/07-papers.html">
+    <div class="badge">P</div>
+    <div>
+      <div class="title">15 篇论文 · 两圈阅读顺序</div>
+      <div class="desc">第一圈 10 篇打地基，第二圈 5 篇追前沿：speculative decoding、P/D 分离、KV-centric serving、量化和 MoE/Mamba 岔路。<strong>每篇含问题—方法—代码对应—追问</strong>。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/08-os-bridge.html">
+    <div class="badge">OS</div>
+    <div>
+      <div class="title">OS ↔ vLLM 速查 (常驻参考)</div>
+      <div class="desc">24 个 vLLM 模块逐个映射到 OS 概念；决策树 + 4 对"完美同构"详解。<strong>书签它</strong>，6 个月回来很多次。</div>
+    </div>
+  </a>
+</div>
+
+<h2><span class="num">05</span>这本教材跟别的资源有何不同</h2>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>vs vLLM 官方文档</h3>
+    <p>官方文档是<strong>"用户手册 + API 参考"</strong>，假设你已经懂系统。这里是<strong>"先讲为什么，再讲怎么做"</strong>，假设你想看懂源码。</p>
+  </div>
+  <div class="card">
+    <h3>vs PagedAttention 论文</h3>
+    <p>论文 12 页讲清核心 idea，但不讲<strong>怎么在源码里找到对应实现</strong>、不讲 v0 → v1 重构、不讲 prefix cache 的 chain hash 细节。这里把这些填进来。</p>
+  </div>
+  <div class="card">
+    <h3>vs Karpathy 的 GPT 教程</h3>
+    <p>Karpathy 教你 <strong>训练</strong>。这里教你 <strong>serving</strong>。两者都需要，但 serving 是 90% 工程师工作里看不见的那 90%。</p>
+  </div>
+  <div class="card">
+    <h3>vs CS162 / OSTEP</h3>
+    <p>OSTEP 教 OS 概念。这里教<strong>怎么把这些概念用在 GPU 上</strong>。OS 是母语，vLLM 是方言；这本是从方言里反查母语的字典。</p>
+  </div>
+</div>
+
+<h2><span class="num">06</span>6 个月路线一览</h2>
+
+<div class="timeline">
+  <a class="step" href="tutorial/01-setup.html">
+    <div class="badge">Week 0</div>
+    <div>
+      <div class="title">环境 · 工具链 · 第一次跑通</div>
+      <div class="desc">租 A10、clone vLLM、跑通 <code>vllm serve</code>、配 pre-commit。目标是<strong>能复现</strong>。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/02-entrypoints.html">
+    <div class="badge">Month 1</div>
+    <div>
+      <div class="title">读懂入口与请求生命周期</div>
+      <div class="desc">从 HTTP 到 token 输出的完整调用链；async / queue / engine 主循环。<strong>提第 1 个 PR</strong>（typo 也行）。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/03-memory.html">
+    <div class="badge">Month 2</div>
+    <div>
+      <div class="title">PagedAttention — 皇冠章节</div>
+      <div class="desc">vLLM 的灵魂。学 OS 虚拟内存 → 读 <code>block_pool.py</code> → 画对照表。这一步学透，后面都顺。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/04-scheduler.html">
+    <div class="badge">Month 3</div>
+    <div>
+      <div class="title">调度器 · Continuous Batching</div>
+      <div class="desc">Orca + Sarathi-Serve；写一个 mini scheduler 假数据复现。<strong>第 2 个 PR</strong> 选这块。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/05-kernels.html">
+    <div class="badge">Month 4</div>
+    <div>
+      <div class="title">Kernel · FlashAttention · Triton</div>
+      <div class="desc">读 <code>csrc/</code>；理解 IO-aware；跑 benchmark 画图。<strong>第 3 个 PR</strong>。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/06-mini-vllm.html">
+    <div class="badge">Month 5</div>
+    <div>
+      <div class="title">原创项目 · mini-vLLM</div>
+      <div class="desc">从零写一个能跑的 paged-attention serving engine。这是简历最重的那张牌。</div>
+    </div>
+  </a>
+  <a class="step" href="tutorial/09-frontier-serving.html">
+    <div class="badge">Month 6</div>
+    <div>
+      <div class="title">前沿 serving 系统 · 收口成生产判断力</div>
+      <div class="desc">从 mini-vLLM 出发，读 DistServe / Mooncake / LMCache / vLLM disagg，把优化选择绑定到 TTFT、ITL、KV、goodput 和成本。</div>
+    </div>
+  </a>
+</div>
+
+<h2><span class="num">07</span>第一次访问应该做什么</h2>
+
+<ol>
+  <li>读 <a href="tutorial/00-mental-model.html">00 心智模型</a>（15 分钟）—— 建立全局观。</li>
+  <li>翻一眼 <a href="tutorial/08-os-bridge.html">OS ↔ vLLM 速查表</a>，<strong>不要背</strong>，只为了之后知道去哪查。</li>
+  <li>开始 <a href="tutorial/01-setup.html">Week 0 环境配置</a>，跑通 vLLM。</li>
+  <li>然后按月份顺序往下走。<strong>每月一个主题，不并行。</strong></li>
+</ol>
+
+<div class="callout tip">
+  <div class="label">💡 节奏建议</div>
+  全职 + 1 个其他大任务：每周投入 12–15h，6 个月走完 90%。<br>
+  在校学生 / 兼职：每周 6–8h，拉到 9 个月，路线不变。<br>
+  时间太碎的：先只走 M1–M3（最有杠杆的三个月），后面再决定。
+</div>
+
+<h2><span class="num">08</span>贡献 · 反馈 · 协作</h2>
+
+<p>这份教材开源在 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank">GitHub</a>，CC BY 4.0 协议。</p>
+
+<ul>
+  <li><strong>看到错的</strong>（事实错、链接死、代码不能跑）：开 issue 或直接 PR。</li>
+  <li><strong>有更好的图</strong>：欢迎贡献。SVG inline 在 HTML 里方便协作。</li>
+  <li><strong>走完了 6 个月</strong>：写一段你的体验，发 issue 标 <code>retrospective</code>，我会精选合并进来当读后感。</li>
+  <li><strong>你的 mini-vLLM</strong>：仓库 README 链回这里，我会把它加到主页 showcase。</li>
+</ul>
+
+<hr>
+
+<p class="muted small">
+  这份教程基于 <a href="vllm-learning-plan.md">vllm-learning-plan.md</a> 与 <a href="cs162-aisys-guide.md">cs162-aisys-guide.md</a> 重构而成。原文档保留以供参考。<br>
+  作者：<a href="https://weishuz.com" target="_blank">Weishu Zhang</a> · 起始日期 2026-05 · 最近一次大更新：2026-05-29 (v2 textbook edition)。
+</p>
+
+</main>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

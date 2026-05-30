@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 12 章 · 伸缩与韧性 — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="12">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part IV · 分布式系统 · 第 12 章</div>
+    <div class="ch-number">12</div>
+    <h1 class="ch-title">伸缩与韧性</h1>
+    <p class="ch-standfirst">云服务不追求永不失败，而追求失败时不扩散、负载变化时不崩溃、成本增长时不失控。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> 工程实战</span><span class="dot"></span>
+      <span><b>用时</b> 约 55 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 扩缩容路径 · 重试/背压取舍</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">云服务不追求永不失败，而追求失败时不扩散、负载变化时不崩溃、成本增长时不失控。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>自动扩缩容</b><span>根据指标自动增加或减少资源。</span></div>
+<div class="concept-card"><b>背压</b><span>下游扛不住时，主动让上游减速或失败得更早。</span></div>
+<div class="concept-card"><b>熔断</b><span>发现下游持续失败后短时间停止调用，避免雪崩。</span></div>
+<div class="concept-card"><b>SLO</b><span>用户体验层面的可靠性目标，例如 99.9% 请求 < 300ms。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">伸缩与韧性 · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 12.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="12.1 伸缩先问瓶颈在哪里"><span class="sec-no">12.1</span>伸缩先问瓶颈在哪里</h2>
+    <p>加机器不是万能药。CPU-bound 可以横向扩，数据库锁竞争不一定行；内存泄漏会被复制，网络瓶颈会转移。伸缩之前先找资源曲线和排队点。</p>
+
+    <h2 id="s2" data-nav="12.2 自动扩缩容是滞后的控制系统"><span class="sec-no">12.2</span>自动扩缩容是滞后的控制系统</h2>
+    <p>HPA 看指标、做决定、等 Pod 启动、等流量重新分配。这条链有延迟。突发流量到来时，系统必须靠余量、队列或降级撑过反应时间。</p>
+
+    <h2 id="s3" data-nav="12.3 重试既是止痛药也是毒药"><span class="sec-no">12.3</span>重试既是止痛药也是毒药</h2>
+    <p>一次超时后重试可能救回请求，也可能把已经过载的下游打得更死。没有超时、退避、幂等和预算的重试，是雪崩制造机。</p>
+
+    <h2 id="s4" data-nav="12.4 背压承认系统容量有限"><span class="sec-no">12.4</span>背压承认系统容量有限</h2>
+    <p>当队列变长、延迟升高，正确系统应该限流、降级或快速失败，而不是无限接单。云服务的成熟标志，是知道什么时候说“不”。</p>
+
+    <h2 id="s5" data-nav="12.5 可靠性和成本是一张账"><span class="sec-no">12.5</span>可靠性和成本是一张账</h2>
+    <p>多副本、跨区、预留容量、冷备热备都要钱。好的架构不是“最可靠”，而是在业务价值、SLO 和成本之间找到清晰边界。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">伸缩与韧性 · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 12.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>Autoscaling</b></td><td>Kubernetes HPA、serverless concurrency</td><td>控制系统有延迟，容量规划仍然重要。</td></tr>
+<tr><td><b>Backpressure</b></td><td>队列、限流、429</td><td>主动拒绝是保护整体系统的正当动作。</td></tr>
+<tr><td><b>SLO/Error Budget</b></td><td>可靠性工程</td><td>让可靠性从情绪变成可讨论的预算。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>伸缩要先定位瓶颈，盲目加机器会移动问题。</li>
+<li>自动扩缩容是滞后的控制系统，必须处理反应窗口。</li>
+<li>重试需要预算、退避、幂等，否则会放大故障。</li>
+<li>可靠性是业务价值、用户体验和成本之间的工程选择。</li></ul>
+      <p class="muted" style="margin-bottom:0">接下来机器会继续消失：Serverless 把服务器抽象到几乎不可见，但底层代价仍然存在。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch11-kubernetes/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">11 · 编排：Kubernetes</span>
+      </a>
+      <a class="next" href="../ch13-serverless/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">13 · Serverless</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "hpa": {
+    "t": "HPA",
+    "d": "Kubernetes 中根据指标调整副本数的 Horizontal Pod Autoscaler。",
+    "l": "#"
+  },
+  "backpressure": {
+    "t": "背压 · Backpressure",
+    "d": "下游压力过大时向上游传递减速信号。",
+    "l": "#"
+  },
+  "slo": {
+    "t": "SLO",
+    "d": "服务对用户体验做出的可衡量目标。",
+    "l": "#"
+  },
+  "jitter": {
+    "t": "Jitter",
+    "d": "给重试等待时间加入随机性，避免同步重试风暴。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "扩容不是瞬时动作。指标升高到新容量生效之间有一段危险窗口，韧性机制负责撑过去。",
+    "nodes": [
+      {
+        "icon": "📈",
+        "label": "负载升高",
+        "sub": "队列变长"
+      },
+      {
+        "icon": "📊",
+        "label": "指标触发",
+        "sub": "CPU/RPS/P99"
+      },
+      {
+        "icon": "🤖",
+        "label": "扩容决策",
+        "sub": "HPA/控制器"
+      },
+      {
+        "icon": "🚀",
+        "label": "新副本启动",
+        "sub": "冷启动"
+      },
+      {
+        "icon": "⚖",
+        "label": "流量再平衡",
+        "sub": "恢复 SLO"
+      }
+    ],
+    "steps": [
+      {
+        "title": "流量上涨",
+        "body": "请求进入速度超过处理速度，队列开始增长。",
+        "note": "排队是尾延迟的放大器。",
+        "node": 0
+      },
+      {
+        "title": "指标越线",
+        "body": "监控窗口看到 CPU 或 P99 超过目标。",
+        "note": "窗口越长越稳，反应也越慢。",
+        "node": 1
+      },
+      {
+        "title": "控制器决策",
+        "body": "Autoscaler 计算需要多少副本。",
+        "note": "这是控制循环，不是预言家。",
+        "node": 2
+      },
+      {
+        "title": "启动新容量",
+        "body": "调度、拉镜像、启动、健康检查都需要时间。",
+        "note": "冷启动窗口要靠余量或降级扛住。",
+        "node": 3
+      },
+      {
+        "title": "流量重新分配",
+        "body": "LB/Service 把请求分给新副本，队列回落。",
+        "note": "扩容成功的最终证据是 SLO 恢复。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "无重试",
+        "note": "失败暴露快，不放大负载，但临时抖动会直接伤用户。",
+        "metrics": [
+          {
+            "label": "下游压力",
+            "value": 30,
+            "warn": false
+          },
+          {
+            "label": "成功率",
+            "value": 58,
+            "warn": false
+          },
+          {
+            "label": "失败透明度",
+            "value": 90,
+            "warn": false
+          }
+        ],
+        "takeaway": "适合不可幂等或下游极脆弱的路径。"
+      },
+      {
+        "name": "立即重试",
+        "note": "短抖动可能被掩盖，但过载时迅速放大流量。",
+        "metrics": [
+          {
+            "label": "成功率",
+            "value": 72,
+            "warn": false
+          },
+          {
+            "label": "雪崩风险",
+            "value": 88,
+            "warn": true
+          },
+          {
+            "label": "尾延迟",
+            "value": 82,
+            "warn": true
+          }
+        ],
+        "takeaway": "最危险的默认值：看似负责，实则可能补刀。"
+      },
+      {
+        "name": "预算化退避",
+        "note": "限制次数、指数退避、抖动、总 deadline，配合幂等键。",
+        "metrics": [
+          {
+            "label": "成功率",
+            "value": 82,
+            "warn": false
+          },
+          {
+            "label": "雪崩风险",
+            "value": 42,
+            "warn": false
+          },
+          {
+            "label": "实现复杂度",
+            "value": 64,
+            "warn": true
+          }
+        ],
+        "takeaway": "成熟系统不是“不重试”，而是带预算地重试。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "CALC",
+      "t": "估算扩容反应窗口",
+      "d": "监控窗口 + 调度 + 拉镜像 + 就绪。"
+    },
+    {
+      "k": "DESIGN",
+      "t": "给 API 写重试策略",
+      "d": "包含 deadline、backoff、jitter、idempotency。"
+    },
+    {
+      "k": "BUDGET",
+      "t": "把 99.9% 可用性换成每月错误预算",
+      "d": "理解 SLO 的现实含义。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

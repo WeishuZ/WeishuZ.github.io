@@ -1,0 +1,360 @@
+/* ============================================================================
+   Chapter 5 — B+ tree interactives
+   ========================================================================== */
+
+.invariant-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: .8rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+}
+.mbr { display: none; }
+.inv-card {
+  min-height: 10.5rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.inv-card b {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  margin-bottom: .8rem;
+}
+.inv-card span { display: block; font-weight: 750; line-height: 1.35; }
+.inv-card p { margin: .5rem 0 0; font-size: .84rem; line-height: 1.55; color: var(--ink-faint); }
+
+/* ---------- B+ tree sandbox ---------- */
+.bt-shell { display: grid; gap: 1rem; }
+.bt-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .9rem;
+  align-items: start;
+}
+.bt-control-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+}
+.bt-control-group label,
+.calc-row label,
+.trade-row label {
+  font-size: .76rem;
+  font-weight: 700;
+  color: var(--ink-faint);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.bt-input {
+  width: 5.5rem;
+  height: 2.25rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  padding: .35rem .55rem;
+}
+.bt-range-input { width: 4.6rem; }
+.bt-demo { justify-content: flex-end; }
+.bt-demo .btn { white-space: nowrap; }
+
+.bt-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .6rem;
+}
+.bt-stat {
+  min-height: 4.1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: .65rem .75rem;
+}
+.bt-stat b {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--accent);
+}
+.bt-stat span {
+  display: block;
+  margin-top: .25rem;
+  color: var(--ink-faint);
+  font-size: .72rem;
+}
+
+.bt-stage {
+  width: 100%;
+  max-width: 100%;
+  min-height: 24rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    repeating-linear-gradient(90deg, transparent 0, transparent 35px, var(--line) 36px) border-box;
+  padding: 1.3rem;
+}
+.bt-levels {
+  min-width: 42rem;
+  display: grid;
+  gap: 1.15rem;
+}
+.bt-level {
+  display: flex;
+  justify-content: center;
+  gap: .9rem;
+  min-height: 4.75rem;
+  align-items: center;
+  position: relative;
+}
+.bt-level-label {
+  width: 4.6rem;
+  flex: none;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: .7rem;
+}
+.bt-level-nodes {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: .9rem;
+  align-items: center;
+}
+.bt-node {
+  min-width: 7.5rem;
+  max-width: 13rem;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color .18s, transform .18s, background .18s, box-shadow .18s;
+}
+.bt-node.hot {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  box-shadow: 0 0 0 4px var(--accent-wash), var(--shadow-sm);
+}
+.bt-node.changed {
+  border-color: var(--warm);
+  background: var(--warm-wash);
+}
+.bt-node.range-hit { border-color: var(--good); background: var(--good-wash); }
+.bt-node-head {
+  display: flex;
+  justify-content: space-between;
+  gap: .6rem;
+  border-bottom: 1px solid var(--line);
+  padding: .42rem .55rem;
+  font-size: .66rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 750;
+}
+.bt-node-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .28rem;
+  padding: .65rem;
+  min-height: 3.1rem;
+  align-items: center;
+  justify-content: center;
+}
+.bt-key {
+  min-width: 2.05rem;
+  height: 1.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 .35rem;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--ink);
+}
+.bt-key.hit { background: var(--warm); color: #fff; border-color: var(--warm); }
+.bt-key.range { background: var(--good); color: #fff; border-color: var(--good); }
+
+.leaf-chain {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .75rem .8rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow-x: auto;
+}
+.leaf-chip {
+  display: inline-flex;
+  gap: .25rem;
+  align-items: center;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: .76rem;
+  padding: .28rem .45rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+.leaf-chip.hit { border-color: var(--good); background: var(--good-wash); }
+.leaf-arrow { color: var(--ink-faint); font-family: var(--font-mono); }
+
+.bt-log {
+  min-height: 7.5rem;
+  max-height: 12rem;
+  overflow: auto;
+  padding: .85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: .75rem;
+  line-height: 1.6;
+}
+.bt-log div { border-bottom: 1px solid var(--line); padding: .28rem 0; }
+.bt-log div:last-child { border-bottom: none; }
+.bt-log .op { color: var(--accent); font-weight: 750; }
+.bt-log .warn { color: var(--warm); }
+.bt-log .ok { color: var(--good); }
+
+/* ---------- calculators ---------- */
+.calc-grid,
+.trade-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(16rem, .95fr);
+  gap: 1.2rem;
+  align-items: stretch;
+}
+.calc-controls,
+.trade-controls {
+  display: grid;
+  gap: .9rem;
+}
+.calc-row,
+.trade-row {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(8rem, 1fr) 5.5rem;
+  gap: .8rem;
+  align-items: center;
+}
+.calc-row output,
+.trade-row output {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--accent);
+  text-align: right;
+}
+.calc-result,
+.trade-result {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 1rem;
+}
+.big-number {
+  font-family: var(--font-serif);
+  font-size: 3rem;
+  line-height: .95;
+  color: var(--accent);
+}
+.calc-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .6rem;
+  margin-top: 1rem;
+}
+.calc-metric {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: .65rem;
+}
+.calc-metric b { display: block; font-family: var(--font-mono); color: var(--ink); }
+.calc-metric span { display: block; color: var(--ink-faint); font-size: .75rem; margin-top: .15rem; }
+.height-bars { display: flex; align-items: end; gap: .35rem; height: 6.8rem; margin-top: 1rem; }
+.height-bar {
+  flex: 1;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, var(--accent), var(--accent-wash));
+  min-height: .6rem;
+  border: 1px solid var(--line);
+}
+
+.trade-bars { display: grid; gap: .7rem; margin: 1rem 0; }
+.trade-bar {
+  height: 1rem;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.trade-bar span {
+  display: block;
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, var(--accent), var(--warm));
+}
+.trade-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .7rem;
+}
+.trade-card {
+  min-height: 9rem;
+  padding: .85rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.trade-card b { display: block; color: var(--ink); }
+.trade-card p { margin: .5rem 0 0; font-size: .82rem; line-height: 1.55; color: var(--ink-faint); }
+.trade-verdict {
+  margin-top: .9rem;
+  padding: .75rem .85rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--accent-wash);
+  color: var(--ink-soft);
+  font-size: .9rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 820px) {
+  .mbr { display: block; }
+  .ch-title { overflow-wrap: anywhere; }
+  .bt-controls,
+  .calc-grid,
+  .trade-grid,
+  .trade-side { grid-template-columns: 1fr; }
+  .bt-demo { justify-content: flex-start; }
+  .bt-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calc-row,
+  .trade-row { grid-template-columns: 1fr; gap: .35rem; }
+  .calc-row output,
+  .trade-row output { text-align: left; }
+}

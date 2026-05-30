@@ -1,0 +1,1445 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>M1 · 入口与生命周期 — Infra Learning Path</title>
+<link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="../index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+  <div class="nav-group"><div class="nav-label">起步</div><nav><ul>
+    <li><a href="../index.html"><span class="idx">/</span>主页 · 概览</a></li>
+    <li><a href="00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+    <li><a href="01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">6 个月主线</div><nav><ul>
+    <li><a href="02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+    <li><a href="03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+    <li><a href="04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+    <li><a href="05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+    <li><a href="06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+    <li><a href="09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">参考</div><nav><ul>
+    <li><a href="07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+    <li><a href="08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+  </ul></nav></div>
+  <div class="foot">源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a></div>
+</aside>
+
+<main class="content">
+
+<div class="crumbs">
+  <a href="../index.html">home</a><span class="sep">/</span>tutorial<span class="sep">/</span>M1 入口
+</div>
+
+<h1 class="page-title">Month 1 · 入口与请求生命周期</h1>
+<p class="page-sub">目标：能在白板上画出 "<code>curl</code> 进来到 token 流出" 的完整调用链。</p>
+
+<p class="lede">
+  这个月不碰 KV cache、不碰 CUDA、不碰调度细节。
+  你只做一件事：<strong>跟着一个真实请求，把它走过的每一层代码都摸一遍</strong>。
+  这一层走通，后面所有深入细节都有"挂靠点" —— 当你 M2 读到 <code>BlockManager.allocate()</code> 时，你已经知道它是谁、什么时候被叫起来、传给它的参数从哪里来。
+</p>
+
+<div class="callout q">
+  <div class="label">驱动问题</div>
+  你 <code>curl http://localhost:8000/v1/chat/completions ...</code>。
+  这个 HTTP 请求会经过哪些 Python 对象、被哪些线程/进程处理、最后是谁真的把它送上 GPU？
+  画一张图，需要画几个框？这些框之间是<strong>同步调用</strong>还是<strong>跨进程消息</strong>？哪些跑在 GIL 锁里，哪些不？
+</div>
+
+<details class="predict">
+  <summary>先猜一下层数（不用准确）</summary>
+  <div class="body">
+    <p>大概 5–7 层：HTTP server → API handler → engine wrapper (async) → engine core → scheduler → worker → model forward。
+    每层做的事不一样：HTTP 解析、tokenize、调度入队、batch 组装、GPU forward、detokenize、流式输出。</p>
+    <p>真实数字（在 v1 架构下）：<strong>3 类进程</strong>（API server、EngineCore、Worker × N），
+    <strong>2 个 IPC 边界</strong>（ZMQ 把 1↔2 连起来，多机/多 GPU 时 2↔3 走 PyTorch distributed），
+    <strong>4 个主要的内部队列</strong>（input queue、waiting、running、output queue）。这一节就是去把这张图<strong>真正画对</strong>。</p>
+  </div>
+</details>
+
+<h2><span class="num">01</span>AI infra 的"请求生命周期"到底是什么</h2>
+
+<p>
+  在动手挖代码之前，先把"为什么花一个月学这个"想清楚。AI infra 有两种完全不同的生命周期，
+  你以后做任何决定都要先分清楚自己在哪一边：
+</p>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>训练 (Training)</h3>
+    <p>给定一堆数据，跑 N 个 epoch 的梯度下降，<strong>输出是权重文件</strong>。
+    周期以小时/天计；失败容忍度高（多 checkpoint 就行）；瓶颈在数据并行 / TP / PP / 通信。</p>
+    <p style="color: var(--fg-muted); font-size: 13px;">关键词：DDP、FSDP、Megatron、torchtitan、Megatron-LM。</p>
+  </div>
+  <div class="card">
+    <h3>推理 (Serving / Inference)</h3>
+    <p>给定一个权重，<strong>处理来自 N 个用户的并发请求流</strong>，每个请求要在 P99 SLA 内出第一个 token。
+    周期以毫秒计；失败容忍度低（用户在等）；瓶颈在显存、KV cache、调度。</p>
+    <p style="color: var(--fg-muted); font-size: 13px;">关键词：vLLM、TGI、SGLang、TensorRT-LLM、batching、prefill / decode。</p>
+  </div>
+</div>
+
+<p>
+  vLLM 是<strong>推理引擎</strong>。这意味着它的中心问题是"如何把一台静态的 GPU 变成一台动态的 token 流水线"。
+  本月你要追踪的"请求生命周期"，就是这条流水线上一个 token 从被请求到被吐出的全过程。
+</p>
+
+<div class="callout tip">
+  <div class="label">为什么 M1 先做这件事，而不是 M5</div>
+  按下不表的诱惑很强 —— 直接挖 PagedAttention 论文、直接读 CUDA kernel 似乎更"硬"。
+  但<strong>不知道一个调用从哪里来、到哪里去</strong>，你读 kernel 就只能背它的签名；
+  读 scheduler 就只看见循环；读 block manager 就只看见数据结构。
+  这一个月铺的"骨架"是后面五个月所有"血肉"的挂靠点。这是 OSTEP 第一章先讲"进程"再讲"线程"的同一个道理。
+</div>
+
+<p>
+  另一个动机：vLLM 的入口（<code>vllm/entrypoints/</code>、<code>vllm/v1/engine/</code>）是<strong>整个仓库里最 Python 的部分</strong>，
+  没有 CUDA、没有 Triton、没有汇编。你能<strong>静态读懂</strong>这部分代码，意味着你已经掌握了进入更难层的"密码本"。
+</p>
+
+<h2><span class="num">02</span>前置：Python async/await 速通</h2>
+
+<p>
+  下面这些<strong>大致</strong>懂就行。模糊的现在补，不熟悉的标记一下，月底再看：
+</p>
+
+<ul>
+  <li><strong>Python async/await</strong>：知道 <code>asyncio.create_task()</code>、<code>await</code> 让出控制权、event loop 是单线程的。</li>
+  <li><strong>FastAPI / Starlette</strong>：HTTP handler 是 async function；middleware 链；SSE (Server-Sent Events) 流式响应。</li>
+  <li><strong>Producer-consumer 队列</strong>：一边塞、一边消费、用锁/CV 同步。</li>
+  <li><strong>Tokenization</strong>：知道 text → token id 的转换是 HuggingFace tokenizer 在做。具体算法（BPE / SentencePiece）这里不需要。</li>
+</ul>
+
+<p>
+  其中 <code>async</code> 是这一章绕不开的"语法地基"，把它说透。
+</p>
+
+<h3>Event loop 的单线程心智模型</h3>
+
+<p>
+  最关键的一句话：<strong>asyncio 不是多线程</strong>。它是<strong>一个线程</strong>里调度多个"协程"（coroutines），
+  让阻塞 I/O 的时候不傻等而是让出控制权，去跑别的协程。可以这样想象：</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <defs>
+      <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <!-- timeline axis -->
+      <line x1="60" y1="240" x2="680" y2="240" stroke="#78716c" stroke-width="1.5" marker-end="url(#ar2)"/>
+      <text x="690" y="244" fill="#78716c" font-size="11">t</text>
+      <text x="30" y="244" fill="#78716c" font-size="11">0</text>
+
+      <!-- task A (blue) -->
+      <text x="30" y="80" font-weight="600" fill="#1e40af">Task A</text>
+      <rect x="60" y="60" width="100" height="30" fill="#eff6ff" stroke="#3b82f6"/>
+      <text x="110" y="80" text-anchor="middle" font-size="11">CPU work</text>
+      <rect x="160" y="60" width="160" height="30" fill="#fef3c7" stroke="#facc15" stroke-dasharray="3 2"/>
+      <text x="240" y="80" text-anchor="middle" font-size="11" fill="#854d0e">await network I/O</text>
+      <rect x="500" y="60" width="80" height="30" fill="#eff6ff" stroke="#3b82f6"/>
+      <text x="540" y="80" text-anchor="middle" font-size="11">resume</text>
+
+      <!-- task B (green) -->
+      <text x="30" y="140" font-weight="600" fill="#166534">Task B</text>
+      <rect x="160" y="120" width="140" height="30" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="230" y="140" text-anchor="middle" font-size="11">CPU work</text>
+      <rect x="300" y="120" width="100" height="30" fill="#fef3c7" stroke="#facc15" stroke-dasharray="3 2"/>
+      <text x="350" y="140" text-anchor="middle" font-size="11" fill="#854d0e">await ZMQ</text>
+      <rect x="580" y="120" width="80" height="30" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="620" y="140" text-anchor="middle" font-size="11">resume</text>
+
+      <!-- task C (purple) -->
+      <text x="30" y="200" font-weight="600" fill="#9333ea">Task C</text>
+      <rect x="300" y="180" width="200" height="30" fill="#faf5ff" stroke="#9333ea"/>
+      <text x="400" y="200" text-anchor="middle" font-size="11">CPU work (SSE yield)</text>
+
+      <!-- tick marks -->
+      <g stroke="#a8a29e" stroke-dasharray="2 2">
+        <line x1="160" y1="40" x2="160" y2="230"/>
+        <line x1="300" y1="40" x2="300" y2="230"/>
+        <line x1="500" y1="40" x2="500" y2="230"/>
+        <line x1="580" y1="40" x2="580" y2="230"/>
+      </g>
+      <text x="160" y="35" text-anchor="middle" fill="#78716c" font-size="10">A awaits</text>
+      <text x="300" y="35" text-anchor="middle" fill="#78716c" font-size="10">B awaits</text>
+      <text x="500" y="35" text-anchor="middle" fill="#78716c" font-size="10">A's I/O done</text>
+      <text x="580" y="35" text-anchor="middle" fill="#78716c" font-size="10">B's I/O done</text>
+    </g>
+  </svg>
+  <div class="caption">同一个线程里，3 个协程通过 <code>await</code> 主动让出，event loop 用一个就绪队列调度它们。<strong>任何一个协程</strong>跑死循环或 CPU 重活，整个 loop 都卡住。</div>
+</div>
+
+<h3><code>async def</code> / <code>await</code> 实际编译成什么</h3>
+
+<p>
+  这是<strong>读 vLLM 源码时被反复忽略的关键</strong>。<code>async def foo()</code> 不是函数调用 —— 它是一个<strong>生成器工厂</strong>。
+  调用 <code>foo()</code> 返回的是一个 <code>coroutine</code> 对象，<strong>什么都没执行</strong>。直到你 <code>await foo()</code> 或塞给 <code>asyncio.create_task()</code>，event loop 才开始拉它的状态机。
+</p>
+
+<pre><code># 看起来像普通函数
+async def fetch_token():
+    request_id = await engine.add_request(prompt)   # ① 在这里 suspend
+    async for output in engine.generate(request_id): # ② 每个 yield 是一次 suspend
+        yield output
+
+# 调用它不执行任何代码
+gen = fetch_token()  # 这是一个 async generator object
+# 直到 ↓ 才真正跑起来
+async for tok in gen:
+    print(tok)</code></pre>
+
+<p>
+  心智模型：把 <code>await x</code> 念作 <strong>"暂停当前任务，把 x 交给 event loop，等它有结果再叫醒我"</strong>。
+  这个"叫醒"就是 vLLM 流式输出能边算边返回的关键。
+</p>
+
+<h3>asyncio.Queue vs threading.Queue</h3>
+
+<p>
+  vLLM 内部到处是队列。但两种队列<strong>不能混用</strong>：
+</p>
+
+<table>
+  <thead><tr><th></th><th><code>asyncio.Queue</code></th><th><code>queue.Queue</code> (threading)</th></tr></thead>
+  <tbody>
+    <tr><td>使用方</td><td>同一个 event loop 内的协程</td><td>多个 OS 线程</td></tr>
+    <tr><td><code>put</code> 阻塞时</td><td><code>await</code> 让出（其他协程可跑）</td><td>OS 真线程阻塞</td></tr>
+    <tr><td>跨进程？</td><td>❌（用 ZMQ / multiprocessing.Queue）</td><td>❌（同上）</td></tr>
+    <tr><td>vLLM 用在哪</td><td><code>AsyncLLM</code> 给每个 request 的 output 队列</td><td>极少（worker 内部偶有）</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <div class="label">⚠ 常见坑</div>
+  在 async 代码里写了一个 <code>queue.Queue.get()</code>（无 timeout），整个 event loop 卡死，
+  连 health check 都不响应。<strong>看到 vLLM 哪里挂死</strong>，第一时间用 <code>py-spy dump --pid X</code> 看是不是这类问题。
+</div>
+
+<h3>SSE / generator 流式响应</h3>
+
+<p>
+  SSE (Server-Sent Events) 是 HTTP 的"服务器推送"协议。vLLM 用它把 token 流回 client。FastAPI 的实现：
+</p>
+
+<pre><code>from fastapi.responses import StreamingResponse
+
+@app.post("/v1/chat/completions")
+async def chat(req: ChatRequest):
+    if req.stream:
+        async def gen():
+            async for tok in engine.generate(req):
+                # SSE 格式：data: {...}\n\n
+                yield f"data: {tok.model_dump_json()}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(gen(), media_type="text/event-stream")
+    # 非流式：等所有 token 攒齐
+    full = ""
+    async for tok in engine.generate(req):
+        full += tok.text
+    return {"choices": [{"message": {"content": full}}]}</code></pre>
+
+<p>
+  关键洞察：<strong>这个 <code>gen()</code> 是一个 async generator，每个 <code>yield</code> 都把控制权还给 event loop</strong>，
+  让别的请求也能继续推进。如果你在中间不小心写了同步 I/O（比如 <code>requests.get(...)</code> 而不是 <code>httpx.AsyncClient.get(...)</code>），
+  整个服务就只能"一次一个请求"。
+</p>
+
+<h3>常见 gotcha 速查</h3>
+
+<table>
+  <thead><tr><th>错</th><th>表现</th><th>对</th></tr></thead>
+  <tbody>
+    <tr><td>忘了 <code>await</code></td><td>函数立刻返回一个 <code>coroutine</code> 对象，没执行</td><td>记得 <code>await</code>，或 <code>asyncio.create_task()</code></td></tr>
+    <tr><td>在 async 函数里 <code>time.sleep(1)</code></td><td>整个 event loop 卡 1 秒</td><td><code>await asyncio.sleep(1)</code></td></tr>
+    <tr><td>在 async 里跑 CPU 重活</td><td>所有协程都被卡</td><td><code>await loop.run_in_executor(None, heavy_fn)</code></td></tr>
+    <tr><td>在 sync 代码里调 async 函数</td><td>得到 coroutine 但没执行</td><td><code>asyncio.run(coro())</code></td></tr>
+    <tr><td>多个 event loop</td><td>"got Future attached to a different loop"</td><td>整个进程只用一个 loop</td></tr>
+  </tbody>
+</table>
+
+<div class="callout tip">
+  <div class="label">💡 触发的 CS162 章节</div>
+  这个月会撞到的 OS 概念是 <strong>I/O 模型</strong>（阻塞 / 非阻塞 / async / epoll）。
+  深入<em>不必</em>，知道"async 是一种把多个 I/O 操作交错在一个线程里"的实现就够。
+  真正用得上 OS 调度概念是 Month 3，那时候再展开。如果你完全没接触过 select/epoll，
+  花 20 分钟看 OSTEP 第 39 章 "Event-based Concurrency" 那一节，正好。
+</div>
+
+<h2><span class="num">03</span>vLLM v0 vs v1：为什么要拆进程</h2>
+
+<p>记住两个版本概念：</p>
+
+<ul>
+  <li><strong>v0 引擎</strong> (历史架构，<code>vllm/engine/</code>)：单进程异步。</li>
+  <li><strong>v1 引擎</strong> (vLLM 0.6.4+ 默认，<code>vllm/v1/</code>)：API server 和 engine 分进程，<strong>scheduler 在 engine 进程</strong>，跑得更快、CPU 不再卡瓶颈。</li>
+</ul>
+
+<p>
+  新代码统统看 v1。但为什么要拆？这背后是一个<strong>非常 OS 风格的故事</strong> —— Python GIL。
+</p>
+
+<h3>v0 的瓶颈：GIL</h3>
+
+<p>
+  v0 的设计很自然：一个 Python 进程，一个 event loop。这个 loop 既要：
+</p>
+
+<ol>
+  <li>处理 HTTP（FastAPI / uvicorn）</li>
+  <li>跑 tokenizer（CPU 重活）</li>
+  <li>跑 scheduler（决定下一步 batch）</li>
+  <li>把 batch 发给 worker（多进程 / 多机）</li>
+  <li>等 worker 返回 logits，detokenize</li>
+  <li>把 token SSE 推回去</li>
+</ol>
+
+<p>
+  CPython 的 GIL 决定了上面这些 Python 操作<strong>不能并行</strong>，只能串行（更准确说：交错）。
+  当 QPS 高时，scheduler 那一步可能要花 1–3 ms，期间 HTTP handler 拿不到 GIL，
+  新请求积压、SSE 推送变慢、整体延迟劣化。<strong>GPU 反而经常空转等 CPU 喂</strong>。
+</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 740 360" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <!-- v0 panel -->
+      <rect x="20" y="20" width="340" height="320" rx="6" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+      <text x="190" y="44" text-anchor="middle" font-weight="700" fill="#991b1b" font-size="14">v0 · 单进程（GIL 卡）</text>
+
+      <rect x="50" y="60" width="280" height="44" rx="4" fill="white" stroke="#fca5a5"/>
+      <text x="190" y="80" text-anchor="middle" font-weight="600">Python 进程</text>
+      <text x="190" y="96" text-anchor="middle" font-size="10" fill="#7f1d1d">GIL 串行所有 Python 字节码</text>
+
+      <g font-size="11">
+        <rect x="50" y="115" width="280" height="24" rx="3" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="60" y="131">HTTP handler (async)</text>
+        <rect x="50" y="142" width="280" height="24" rx="3" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="60" y="158">tokenizer (CPU)</text>
+        <rect x="50" y="169" width="280" height="24" rx="3" fill="#fecaca" stroke="#f87171"/>
+        <text x="60" y="185" font-weight="700">scheduler.step()  ← 1–3 ms / 步</text>
+        <rect x="50" y="196" width="280" height="24" rx="3" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="60" y="212">序列化给 worker</text>
+        <rect x="50" y="223" width="280" height="24" rx="3" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="60" y="239">detokenize</text>
+        <rect x="50" y="250" width="280" height="24" rx="3" fill="#fee2e2" stroke="#fca5a5"/>
+        <text x="60" y="266">SSE push</text>
+      </g>
+
+      <text x="190" y="300" text-anchor="middle" fill="#991b1b" font-size="11" font-style="italic">CPU 是瓶颈：GPU 间歇空转</text>
+      <text x="190" y="318" text-anchor="middle" fill="#991b1b" font-size="11">throughput 受限</text>
+
+      <!-- v1 panel -->
+      <rect x="380" y="20" width="340" height="320" rx="6" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+      <text x="550" y="44" text-anchor="middle" font-weight="700" fill="#166534" font-size="14">v1 · 拆进程（GIL 独立）</text>
+
+      <rect x="400" y="60" width="140" height="240" rx="4" fill="white" stroke="#86efac"/>
+      <text x="470" y="80" text-anchor="middle" font-weight="600" font-size="12">Process A</text>
+      <text x="470" y="96" text-anchor="middle" font-size="10" fill="#166534">API Server</text>
+      <g font-size="10">
+        <rect x="410" y="108" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="470" y="123" text-anchor="middle">HTTP handler</text>
+        <rect x="410" y="134" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="470" y="149" text-anchor="middle">tokenize</text>
+        <rect x="410" y="160" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="470" y="175" text-anchor="middle">SSE push</text>
+        <rect x="410" y="186" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="470" y="201" text-anchor="middle">detokenize</text>
+      </g>
+
+      <rect x="560" y="60" width="140" height="240" rx="4" fill="white" stroke="#86efac"/>
+      <text x="630" y="80" text-anchor="middle" font-weight="600" font-size="12">Process B</text>
+      <text x="630" y="96" text-anchor="middle" font-size="10" fill="#166534">EngineCore</text>
+      <g font-size="10">
+        <rect x="570" y="108" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="630" y="123" text-anchor="middle">run_busy_loop()</text>
+        <rect x="570" y="134" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="630" y="149" text-anchor="middle" font-weight="700">scheduler.step()</text>
+        <rect x="570" y="160" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="630" y="175" text-anchor="middle">execute_model</text>
+        <rect x="570" y="186" width="120" height="22" rx="3" fill="#dcfce7" stroke="#86efac"/>
+        <text x="630" y="201" text-anchor="middle">sample</text>
+      </g>
+
+      <text x="550" y="240" text-anchor="middle" fill="#166534" font-size="11">↑↓ ZMQ IPC ↑↓</text>
+      <text x="550" y="318" text-anchor="middle" fill="#166534" font-size="11" font-style="italic">两个 GIL 互不干扰 · GPU 喂饱</text>
+    </g>
+  </svg>
+  <div class="caption">v0 vs v1 的本质差异：v1 把 HTTP / tokenize 和 scheduler / execute 拆到两个进程，
+  两边各有自己的 GIL，<strong>scheduler 不再阻塞新请求接入</strong>。代价是多一道 ZMQ 序列化。</div>
+</div>
+
+<h3>v1 解决了什么</h3>
+
+<ul>
+  <li><strong>新请求接入延迟</strong>：HTTP handler 在自己进程里，不被 scheduler 拖。p99 first-token latency 显著改善（vLLM 团队博客称 throughput 提升 1.7×–2×）。</li>
+  <li><strong>scheduler 可以更"贪"</strong>：不用担心一次 step 卡住 HTTP，可以做更复杂的调度决策（如 chunked prefill）。</li>
+  <li><strong>更清晰的状态边界</strong>：API server 不再持有 KV 池、调度状态。崩了重启只丢"飞行中"的请求，不会影响别人。</li>
+</ul>
+
+<h3>v1 的代价</h3>
+
+<ul>
+  <li><strong>多一道 IPC</strong>：每个请求至少多两次 ZMQ 序列化（API→Engine 一次，Engine→API 多次的 streaming output）。vLLM 用 msgpack 或 pickle，单次开销几十微秒。</li>
+  <li><strong>调试复杂度</strong>：两个进程，<code>py-spy</code> 要分别看，日志要交叉对齐。</li>
+  <li><strong>关停语义</strong>：API server 要管 EngineCore 子进程的生命周期，处理 graceful shutdown / SIGTERM 转发。</li>
+</ul>
+
+<div class="callout tip">
+  <div class="label">类比</div>
+  这个拆分跟 OS 里"<strong>把网络栈从内核搬到 user-space</strong>"（DPDK / netmap）的逻辑很像：
+  原本 monolithic 设计简单但被全局锁拖死；拆出去后每个组件能独立优化，代价是多一道 IPC。
+  vLLM v1 的"engine 子进程"就是它的 user-space data plane。
+</div>
+
+<h2><span class="num">04</span>v1 架构总览 · 谁拥有什么状态</h2>
+
+<p>下图是 v1 架构的"空间视图"（谁在哪个进程）：</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 480" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <!-- client -->
+      <rect x="20" y="20" width="120" height="40" rx="4" fill="#f5f5f4" stroke="#a8a29e"/>
+      <text x="80" y="42" text-anchor="middle" font-weight="600">curl / SDK</text>
+      <text x="80" y="56" text-anchor="middle" fill="#78716c" font-size="10">HTTP POST</text>
+
+      <!-- API server process -->
+      <rect x="180" y="10" width="240" height="200" rx="6" fill="#eff6ff" stroke="#3b82f6" stroke-dasharray="4 2"/>
+      <text x="300" y="30" text-anchor="middle" font-weight="700" fill="#1e40af">Process A · API Server</text>
+
+      <rect x="200" y="50" width="200" height="40" rx="4" fill="white" stroke="#94a3b8"/>
+      <text x="300" y="70" text-anchor="middle" font-weight="600">FastAPI route</text>
+      <text x="300" y="84" text-anchor="middle" fill="#78716c" font-size="10">/v1/chat/completions</text>
+
+      <rect x="200" y="100" width="200" height="40" rx="4" fill="white" stroke="#94a3b8"/>
+      <text x="300" y="120" text-anchor="middle" font-weight="600">tokenize + 包成 EngineRequest</text>
+
+      <rect x="200" y="150" width="200" height="40" rx="4" fill="white" stroke="#94a3b8"/>
+      <text x="300" y="170" text-anchor="middle" font-weight="600">AsyncLLM client</text>
+      <text x="300" y="184" text-anchor="middle" fill="#78716c" font-size="10">ZMQ IPC → engine</text>
+
+      <!-- Engine process -->
+      <rect x="460" y="10" width="280" height="260" rx="6" fill="#fff7ed" stroke="#c2410c" stroke-dasharray="4 2"/>
+      <text x="600" y="30" text-anchor="middle" font-weight="700" fill="#c2410c">Process B · Engine Core</text>
+
+      <rect x="480" y="50" width="240" height="36" rx="4" fill="white" stroke="#fdba74"/>
+      <text x="600" y="72" text-anchor="middle" font-weight="600">EngineCore.run_busy_loop()</text>
+
+      <rect x="480" y="96" width="240" height="36" rx="4" fill="white" stroke="#fdba74"/>
+      <text x="600" y="118" text-anchor="middle" font-weight="600">Scheduler.schedule()</text>
+      <text x="600" y="130" text-anchor="middle" fill="#9a3412" font-size="10">挑这一步的 batch</text>
+
+      <rect x="480" y="142" width="240" height="36" rx="4" fill="white" stroke="#fdba74"/>
+      <text x="600" y="164" text-anchor="middle" font-weight="600">BlockManager 分配 KV blocks</text>
+
+      <rect x="480" y="188" width="240" height="36" rx="4" fill="white" stroke="#fdba74"/>
+      <text x="600" y="210" text-anchor="middle" font-weight="600">Executor.execute_model()</text>
+
+      <rect x="480" y="234" width="240" height="32" rx="4" fill="white" stroke="#fdba74"/>
+      <text x="600" y="254" text-anchor="middle" font-weight="600">detokenize 输出</text>
+
+      <!-- Worker processes -->
+      <rect x="180" y="290" width="560" height="160" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-dasharray="4 2"/>
+      <text x="460" y="310" text-anchor="middle" font-weight="700" fill="#166534">Process C..N · Workers (每张 GPU 一个)</text>
+
+      <rect x="200" y="330" width="200" height="40" rx="4" fill="white" stroke="#86efac"/>
+      <text x="300" y="350" text-anchor="middle" font-weight="600">ModelRunner.execute_model()</text>
+      <text x="300" y="364" text-anchor="middle" fill="#166534" font-size="10">组 input、forward</text>
+
+      <rect x="420" y="330" width="160" height="40" rx="4" fill="white" stroke="#86efac"/>
+      <text x="500" y="350" text-anchor="middle" font-weight="600">model.forward()</text>
+      <text x="500" y="364" text-anchor="middle" fill="#166534" font-size="10">PyTorch / CUDA</text>
+
+      <rect x="600" y="330" width="120" height="40" rx="4" fill="white" stroke="#86efac"/>
+      <text x="660" y="350" text-anchor="middle" font-weight="600">attention kernel</text>
+      <text x="660" y="364" text-anchor="middle" fill="#166534" font-size="10">csrc/</text>
+
+      <rect x="200" y="385" width="520" height="40" rx="4" fill="#fef3c7" stroke="#facc15"/>
+      <text x="460" y="405" text-anchor="middle" font-weight="600">GPU 显存 · KV cache 物理块池</text>
+      <text x="460" y="418" text-anchor="middle" fill="#854d0e" font-size="10">PagedAttention 在这里发挥</text>
+
+      <!-- arrows -->
+      <g stroke="#78716c" stroke-width="1.5" fill="none">
+        <path d="M 140 40 L 180 40" marker-end="url(#ar)"/>
+        <path d="M 420 110 L 480 110" marker-end="url(#ar)"/>
+        <path d="M 600 270 L 600 290" marker-end="url(#ar)"/>
+        <path d="M 460 425 L 500 380" stroke-dasharray="3 3"/>
+      </g>
+    </g>
+  </svg>
+  <div class="caption">v1 的"空间视图"：进程边界用虚线框，箭头是数据流。注意 KV cache 物理块只存在 worker 的 GPU 显存里，scheduler 在 EngineCore 进程里只持有"<em>映射表</em>"。</div>
+</div>
+
+<p>下面是同一个系统的"时间视图"，看一次 decode step 里这些组件如何交错：</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 380" xmlns="http://www.w3.org/2000/svg" style="max-width:720px;">
+    <defs>
+      <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="11">
+      <!-- swim lanes -->
+      <g fill="#fafaf9" stroke="#e7e5e4">
+        <rect x="120" y="40" width="600" height="60"/>
+        <rect x="120" y="100" width="600" height="60"/>
+        <rect x="120" y="160" width="600" height="60"/>
+        <rect x="120" y="220" width="600" height="60"/>
+      </g>
+      <text x="115" y="74" text-anchor="end" font-weight="600" fill="#1e40af">Client</text>
+      <text x="115" y="134" text-anchor="end" font-weight="600" fill="#1e40af">API Server</text>
+      <text x="115" y="194" text-anchor="end" font-weight="600" fill="#c2410c">EngineCore</text>
+      <text x="115" y="254" text-anchor="end" font-weight="600" fill="#166534">Worker (GPU)</text>
+
+      <!-- events -->
+      <g font-size="10">
+        <!-- t=0: HTTP arrives -->
+        <circle cx="150" cy="70" r="5" fill="#3b82f6"/>
+        <text x="155" y="62" fill="#1e40af">POST</text>
+
+        <path d="M 155 70 L 195 130" stroke="#78716c" stroke-width="1.2" fill="none" marker-end="url(#ar3)"/>
+
+        <rect x="200" y="115" width="80" height="30" fill="#eff6ff" stroke="#3b82f6" rx="3"/>
+        <text x="240" y="134" text-anchor="middle">tokenize</text>
+
+        <path d="M 280 130 L 320 190" stroke="#78716c" stroke-width="1.2" fill="none" marker-end="url(#ar3)"/>
+        <text x="285" y="158" fill="#78716c" font-style="italic">ZMQ</text>
+
+        <rect x="325" y="175" width="60" height="30" fill="#fff7ed" stroke="#c2410c" rx="3"/>
+        <text x="355" y="194" text-anchor="middle">schedule</text>
+
+        <path d="M 385 190 L 425 250" stroke="#78716c" stroke-width="1.2" fill="none" marker-end="url(#ar3)"/>
+
+        <rect x="430" y="235" width="100" height="30" fill="#f0fdf4" stroke="#16a34a" rx="3"/>
+        <text x="480" y="254" text-anchor="middle">forward (5–20 ms)</text>
+
+        <path d="M 530 250 L 570 190" stroke="#78716c" stroke-width="1.2" fill="none" marker-end="url(#ar3)"/>
+
+        <rect x="570" y="175" width="60" height="30" fill="#fff7ed" stroke="#c2410c" rx="3"/>
+        <text x="600" y="194" text-anchor="middle">sample</text>
+
+        <path d="M 630 190 L 660 130" stroke="#78716c" stroke-width="1.2" fill="none" marker-end="url(#ar3)"/>
+
+        <rect x="660" y="115" width="50" height="30" fill="#eff6ff" stroke="#3b82f6" rx="3"/>
+        <text x="685" y="134" text-anchor="middle">detok</text>
+
+        <path d="M 710 130 L 705 75" stroke="#78716c" stroke-width="1.2" fill="none" marker-end="url(#ar3)"/>
+
+        <circle cx="700" cy="70" r="5" fill="#3b82f6"/>
+        <text x="700" y="62" text-anchor="middle" fill="#1e40af">SSE token</text>
+      </g>
+
+      <!-- time axis -->
+      <line x1="120" y1="320" x2="720" y2="320" stroke="#78716c" stroke-width="1.5" marker-end="url(#ar3)"/>
+      <text x="730" y="324" fill="#78716c" font-size="11">t (ms)</text>
+      <g font-size="10" fill="#78716c">
+        <line x1="200" y1="315" x2="200" y2="325" stroke="#78716c"/>
+        <text x="200" y="340" text-anchor="middle">~1</text>
+        <line x1="325" y1="315" x2="325" y2="325" stroke="#78716c"/>
+        <text x="325" y="340" text-anchor="middle">~2</text>
+        <line x1="430" y1="315" x2="430" y2="325" stroke="#78716c"/>
+        <text x="430" y="340" text-anchor="middle">~3</text>
+        <line x1="530" y1="315" x2="530" y2="325" stroke="#78716c"/>
+        <text x="530" y="340" text-anchor="middle">~15</text>
+        <line x1="660" y1="315" x2="660" y2="325" stroke="#78716c"/>
+        <text x="660" y="340" text-anchor="middle">~16</text>
+      </g>
+      <text x="420" y="365" text-anchor="middle" fill="#78716c" font-style="italic" font-size="11">
+        典型时间分布（7B 模型 / A10 / batch=8）。注意 forward 占 80%+，CPU 路径只占几 ms。
+      </text>
+    </g>
+  </svg>
+  <div class="caption">"时间视图"：4 条 swim lane 表示 4 类参与者。注意 Engine 这一行的 <code>schedule</code> 和 <code>sample</code> 是<strong>同一个进程的同一个事件循环</strong>，但要在 GPU 算的时候让出，让别的请求也能进 schedule 队列。</div>
+</div>
+
+<h3>四类参与者 · 各自的状态</h3>
+
+<table>
+  <thead><tr><th>角色</th><th>持有状态</th><th>不持有什么</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>API Server</strong></td>
+      <td>HTTP 连接、每个请求的 output queue (asyncio.Queue)、tokenizer、chat template</td>
+      <td>KV cache、scheduler 状态</td>
+    </tr>
+    <tr>
+      <td><strong>EngineCore</strong></td>
+      <td>waiting / running 队列、<strong>block 映射表</strong>（不是 block 本身）、scheduler 配置、metrics</td>
+      <td>实际的 KV 张量、模型权重</td>
+    </tr>
+    <tr>
+      <td><strong>Executor</strong></td>
+      <td>Worker 集合、TP/PP 拓扑、通信句柄</td>
+      <td>模型权重（在 Worker 里）</td>
+    </tr>
+    <tr>
+      <td><strong>Worker</strong></td>
+      <td>模型权重、<strong>实际 KV cache 张量（GPU 显存）</strong>、CUDA stream、CUDA graph</td>
+      <td>调度决策、HTTP 状态</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>跨进程消息一览</h3>
+
+<ul>
+  <li><strong>API → Engine</strong>：<code>EngineCoreRequest</code>（含 request_id、prompt token ids、sampling params）、abort 信号。</li>
+  <li><strong>Engine → API</strong>：<code>EngineCoreOutput</code>（含 request_id、新 token ids、finished flag、metrics）。</li>
+  <li><strong>Engine → Worker</strong>：<code>SchedulerOutput</code>（这一步要算哪些 token、block table、attn metadata）。多 GPU 时由 Executor 广播到所有 Worker。</li>
+  <li><strong>Worker → Engine</strong>：<code>ModelRunnerOutput</code>（这一步的 sampled token ids、logprobs 等）。</li>
+</ul>
+
+<h2><span class="num">05</span>请求生命周期 · 13 步详解</h2>
+
+<p>下面这套调用链是 v1 在 vLLM <code>main</code> 分支的形态（路径可能微调，但结构稳定）。
+<strong>拿这张表去对照你 clone 下来的代码</strong>。</p>
+
+<table>
+  <thead><tr><th>#</th><th>发生了什么</th><th>关键代码位置</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>HTTP 请求到 FastAPI route handler</td><td><code>vllm/entrypoints/openai/api_server.py</code></td></tr>
+    <tr><td>2</td><td>构造 <code>ChatCompletionRequest</code>，绑模板 → prompt text</td><td><code>vllm/entrypoints/openai/serving_chat.py</code></td></tr>
+    <tr><td>3</td><td>Tokenize prompt → <code>list[int]</code></td><td><code>vllm/transformers_utils/tokenizer.py</code></td></tr>
+    <tr><td>4</td><td>构造 <code>EngineCoreRequest</code> 通过 ZMQ 发到 engine</td><td><code>vllm/v1/engine/async_llm.py</code></td></tr>
+    <tr><td>5</td><td>Engine 主循环把它加入 waiting 队列</td><td><code>vllm/v1/engine/core.py</code> 中 <code>run_busy_loop()</code></td></tr>
+    <tr><td>6</td><td>每一步 <code>schedule()</code> 决定哪些 request 进入这一步的 batch</td><td><code>vllm/v1/core/sched/scheduler.py</code></td></tr>
+    <tr><td>7</td><td><code>BlockManager</code> 给每个 sequence 分配 KV blocks</td><td><code>vllm/v1/core/kv_cache_manager.py</code></td></tr>
+    <tr><td>8</td><td>Executor 把 batch 序列化发给 worker</td><td><code>vllm/v1/executor/</code></td></tr>
+    <tr><td>9</td><td>Worker 在 GPU 上跑 <code>model.forward()</code></td><td><code>vllm/v1/worker/gpu_model_runner.py</code></td></tr>
+    <tr><td>10</td><td>Attention kernel 用 block table 访问 KV</td><td><code>csrc/attention/</code> (CUDA) 或 <code>vllm/v1/attention/</code> (Triton)</td></tr>
+    <tr><td>11</td><td>采样得到下一个 token，回写 KV</td><td><code>vllm/v1/sample/sampler.py</code></td></tr>
+    <tr><td>12</td><td>Detokenize 这个 token → str，发回 API server</td><td><code>vllm/v1/engine/output_processor.py</code></td></tr>
+    <tr><td>13</td><td>SSE 流式 yield 给 HTTP client</td><td>回到 step 2 的 streaming generator</td></tr>
+  </tbody>
+</table>
+
+<p>下面把这 13 步当作 13 个小故事来讲，每一步注明：<strong>读什么状态、写什么状态、怎么会出错</strong>。</p>
+
+<h3>步骤 1–4 · 接入阶段（API Server 进程）</h3>
+
+<p>
+  <strong>步骤 1</strong> · uvicorn 收到 TCP 包，Starlette 解析 HTTP，把请求路由到 <code>chat_completion</code> handler。
+  <em>状态读</em>：路由表、CORS / auth middleware 缓存。<em>状态写</em>：当前请求的 ASGI scope。
+  <em>故障点</em>：连接打满（uvicorn 默认 worker 数有限）、JSON 解析失败、内容超长被 middleware 截。
+</p>
+
+<p>
+  <strong>步骤 2</strong> · <code>OpenAIServingChat.create_chat_completion()</code> 把 <code>messages</code> 数组用 Jinja chat template 渲染成单一 prompt 字符串，
+  顺带处理 <code>tool_choice</code>、<code>response_format</code>。
+  <em>状态读</em>：模型的 chat template（启动时从 tokenizer 加载）。<em>状态写</em>：内部 <code>ChatCompletionRequest</code> dataclass。
+  <em>故障点</em>：未知 role、template 渲染失败、tool schema 不合法。
+</p>
+
+<p>
+  <strong>步骤 3</strong> · 渲染好的 prompt 喂给 HuggingFace tokenizer，得到 <code>list[int]</code>。
+  <em>状态读</em>：tokenizer vocab、merges。<em>状态写</em>：<code>prompt_token_ids</code>。
+  <em>故障点</em>：超长（&gt; <code>max_model_len</code>）—— vLLM 会 reject；
+  特殊 token 不一致 —— 这是相当多模型的兼容性 bug 来源。
+</p>
+
+<p>
+  <strong>步骤 4</strong> · 构造 <code>EngineCoreRequest</code>，通过 <code>AsyncLLM</code> 的 ZMQ socket 发到 EngineCore 进程。
+  <em>状态读</em>：sampling params、stop tokens。<em>状态写</em>：API server 端为该 request 开一个 asyncio.Queue 接收 output；
+  发出 <code>EngineCoreRequest</code> 字节流。
+  <em>故障点</em>：序列化失败（很少）、ZMQ socket 满（背压，理论上会发生但生产配置下罕见）。
+</p>
+
+<h3>步骤 5–8 · 调度阶段（EngineCore 进程）</h3>
+
+<p>
+  <strong>步骤 5</strong> · EngineCore 的 <code>run_busy_loop</code> 从 ZMQ 收到 request，调用 <code>Scheduler.add_request()</code> 入 <code>waiting</code> 队列。
+  <em>状态读</em>：当前 running 集合、KV pool 剩余 block。<em>状态写</em>：waiting 队列追加。
+  <em>故障点</em>：max_num_seqs 达上限（罕见）、请求格式不一致。
+</p>
+
+<p>
+  <strong>步骤 6</strong> · 每次 <code>schedule()</code> 决定：哪些 waiting 进入 prefill、哪些 running 继续 decode、是否要 preempt 出某些 running 来腾 KV block。
+  <em>状态读</em>：waiting / running / preempted、KV pool。<em>状态写</em>：这一步的 batch 描述、被 evict 的 sequence。
+  <em>故障点</em>：deadlock（一个长 prompt 占不下任何位置，scheduler 死循环）—— 通过 chunked prefill 缓解。
+</p>
+
+<p>
+  <strong>步骤 7</strong> · <code>BlockManager.allocate()</code> 给新进 prefill 的 sequence 分配 KV block，或给 decode 的 sequence 在写满当前 block 时补一个。
+  <em>状态读</em>：free block list、prefix cache hash 表。<em>状态写</em>：block 引用计数、sequence 的 block_table。
+  <em>故障点</em>：没 block 了（应该不发生，scheduler 该兜住）；prefix cache miss 算错（M2 会深挖）。
+</p>
+
+<p>
+  <strong>步骤 8</strong> · <code>Executor.execute_model()</code> 把 <code>SchedulerOutput</code> 序列化广播到所有 Worker。
+  单卡时 Executor 直接 in-process 调 Worker；TP/PP 时走 PyTorch distributed 的 broadcast。
+  <em>状态读</em>：worker handle、通信 topology。<em>状态写</em>：序列化的请求 payload。
+  <em>故障点</em>：worker hang、通信 timeout、payload 序列化爆栈（罕见）。
+</p>
+
+<h3>步骤 9–11 · 计算阶段（Worker 进程，GPU）</h3>
+
+<p>
+  <strong>步骤 9</strong> · <code>gpu_model_runner.execute_model()</code> 把 batch 转成 PyTorch tensor：把所有 sequence 的 input_ids 拼平、构造 <code>positions</code>、查每个 sequence 的 block_table。
+  <em>状态读</em>：模型权重、当前的 KV cache 池、上一步的 token。<em>状态写</em>：input batch tensor、attn metadata。
+  <em>故障点</em>：shape 不对（debug 噩梦）、显存 OOM。
+</p>
+
+<p>
+  <strong>步骤 10</strong> · 跑 <code>model.forward()</code>，关键是 attention 层 —— 它用 attn metadata（block table、slot mapping）告诉 PagedAttention kernel 去哪儿读 KV、写新 KV。
+  <em>状态读</em>：input tensor、attn metadata、KV cache 池。<em>状态写</em>：每个 sequence 的新 KV、最后一层 logits。
+  <em>故障点</em>：kernel illegal memory（block table 错位最常见）、numerics 不稳定（fp16 vs bf16）。
+</p>
+
+<p>
+  <strong>步骤 11</strong> · Sampler 从 logits 采样下一个 token（greedy / topk / topp / temperature）。多个请求并行采样。
+  <em>状态读</em>：logits、各请求的 sampling params。<em>状态写</em>：每个 sequence 的 next token id。
+  <em>故障点</em>：采样器实现 bug（最近的 PR 经常在这里）、bad logits（NaN / Inf）。
+</p>
+
+<h3>步骤 12–13 · 输出阶段（回到 EngineCore 再到 API Server）</h3>
+
+<p>
+  <strong>步骤 12</strong> · EngineCore 把 token id 流过 <code>output_processor</code>（detokenize + 处理 stop strings + finish reason），打包成 <code>EngineCoreOutput</code> 发回 API server。
+  <em>状态读</em>：detokenizer 状态、stop strings。<em>状态写</em>：每个 sequence 的累计 text。
+  <em>故障点</em>：BPE 半字符 token（detokenize 必须维持状态，不能逐 token 解码）—— vLLM 用增量 detokenizer 处理。
+</p>
+
+<p>
+  <strong>步骤 13</strong> · API server 端的 asyncio.Queue 拿到 output，handler 的 <code>async for</code> 拉出来 yield 成 SSE 帧推给 client。
+  当 <code>finished=True</code> 时 yield <code>data: [DONE]</code>。
+  <em>状态读</em>：当前 request 的 output queue。<em>状态写</em>：HTTP 响应 body。
+  <em>故障点</em>：client 提前断开 —— 需要把 abort 信号反向传回 EngineCore（用 <code>asyncio.CancelledError</code>）。
+</p>
+
+<div class="callout warn">
+  <div class="label">⚠ 路径可能小变</div>
+  vLLM 改名/重构频繁。如果上面某个文件找不到，<strong>用 <code>git grep</code></strong>：比如 <code>git grep -l "run_busy_loop"</code> 就能定位。
+  这是日常技能 —— 教程里的路径只是"线索"，不是"地图"。
+</div>
+
+<h2><span class="num">06</span>代码深读 · api_server.py</h2>
+
+<p>
+  这一节起，我们挑 4 段最关键的代码做"深读"。每一段先看<strong>结构骨架</strong>（伪代码层面），再点出 1–2 个细节"<strong>读到这里要停一下</strong>"的地方。
+</p>
+
+<p>
+  <code>vllm/entrypoints/openai/api_server.py</code> 是整个引擎的 HTTP 边界。它做四件事：
+  <strong>启动时加载模型</strong>、<strong>注册路由</strong>、<strong>把每个请求转给引擎</strong>、<strong>关停时清理</strong>。
+  下面是它的骨架（删掉细节，保留结构）：
+</p>
+
+<pre><code>from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from fastapi.responses import StreamingResponse
+
+# ── ① lifespan：启动 / 关停的 hook ──
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动：构建 AsyncLLM（会 fork EngineCore 子进程）
+    engine = await build_async_engine_client(args)
+    app.state.engine = engine
+    yield   # ← FastAPI 在这里把控制权还给主线程
+    # 关停：发送 abort 给所有 in-flight 请求，shutdown engine
+    await engine.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+# ── ② 健康检查 ──
+@app.get("/health")
+async def health(req: Request):
+    if req.app.state.engine.is_running():
+        return {"status": "ok"}
+    raise HTTPException(503)
+
+# ── ③ Chat completion 主路由 ──
+@app.post("/v1/chat/completions")
+async def create_chat_completion(req: ChatCompletionRequest, raw: Request):
+    handler: OpenAIServingChat = raw.app.state.openai_serving_chat
+    generator = await handler.create_chat_completion(req, raw)
+
+    if isinstance(generator, ErrorResponse):
+        return JSONResponse(content=generator.model_dump(), status_code=generator.code)
+
+    if req.stream:
+        # SSE 流式
+        return StreamingResponse(content=generator, media_type="text/event-stream")
+    else:
+        # 非流式：消费完所有 chunk 攒成一个 dict
+        return JSONResponse(content=generator.model_dump())
+
+# ── ④ Completions / embeddings / 等等路由略 ──</code></pre>
+
+<div class="code-anchor">
+  <div class="label">读这里 · 关键 1</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/entrypoints/openai/api_server.py" target="_blank">api_server.py · build_async_engine_client</a></div>
+  这个函数是<strong>整个进程拓扑的起点</strong>。它会决定要不要 fork EngineCore 子进程（默认 yes），怎么连 ZMQ socket（IPC 还是 TCP），以及 graceful shutdown 顺序。
+  <div class="ask">如果我设 <code>--disable-async-output-proc</code>，谁会少一个子进程？为什么 v0 模式不能享受这个拆分？</div>
+</div>
+
+<h3>Streaming response 的生命周期</h3>
+
+<p>
+  关键魔法在 <code>StreamingResponse(content=generator, ...)</code> 这一行。
+  这个 <code>generator</code> 是一个 async generator，每次 <code>yield</code> 一个 SSE 帧。
+  Starlette 拿到它后，会：
+</p>
+
+<ol>
+  <li>开一个 background task 去消费这个 generator</li>
+  <li>每拿到一个 chunk，写到 TCP socket（<code>send</code>）</li>
+  <li>如果 client 中途断开，<code>send</code> 抛 <code>ConnectionResetError</code>，generator 收到 <code>asyncio.CancelledError</code></li>
+  <li>generator 的 <code>finally</code> 块负责<strong>反向通知 engine</strong>把这个 request abort 掉</li>
+</ol>
+
+<pre><code># serving_chat.py 里的简化版 generator
+async def chat_completion_stream_generator(...) -> AsyncIterator[str]:
+    request_id = f"chatcmpl-{uuid()}"
+    try:
+        async for output in engine.generate(prompt, params, request_id):
+            chunk = build_sse_chunk(output)
+            yield f"data: {chunk}\n\n"   # ← 每次 yield 让出控制权
+        yield "data: [DONE]\n\n"
+    except asyncio.CancelledError:
+        # client 断开
+        await engine.abort(request_id)
+        raise
+    finally:
+        # 兜底清理
+        pass</code></pre>
+
+<div class="callout tip">
+  <div class="label">💡 这就是 async 的杠杆</div>
+  上面这个 generator 表面上像一个串行循环，实际上 <strong>同时有几十个</strong> 这样的 generator 在 event loop 里跑，
+  每个 <code>async for</code> 都在等 engine 推下一个 token。这是"<strong>用 200 行代码服务 1000 并发</strong>"的核心机制。
+</div>
+
+<h2><span class="num">07</span>代码深读 · async_llm.py 与 ZMQ</h2>
+
+<p>
+  <code>vllm/v1/engine/async_llm.py</code> 里的 <code>AsyncLLM</code> 类是 API server 进程<strong>看到的 engine</strong>。
+  实际 engine 在子进程，AsyncLLM 只是个 RPC 代理。它持有 ZMQ socket，把 add_request / abort / get_output 转成跨进程消息。
+</p>
+
+<h3>骨架：send / receive 双循环</h3>
+
+<pre><code>class AsyncLLM:
+    def __init__(self, engine_args):
+        # fork 出 EngineCore 子进程
+        self.engine_proc = start_engine_subprocess(engine_args)
+        # 两个 ZMQ socket
+        self.input_socket = zmq_ctx.socket(zmq.PUSH)
+        self.input_socket.connect(input_path)    # → 给 engine 发请求
+        self.output_socket = zmq_ctx.socket(zmq.PULL)
+        self.output_socket.connect(output_path)  # ← 从 engine 收 output
+
+        # 每个 request_id → asyncio.Queue，存它的 output
+        self.output_queues: dict[str, asyncio.Queue] = {}
+
+        # 后台任务：把 output_socket 收到的消息分发到各 queue
+        asyncio.create_task(self._output_handler_loop())
+
+    async def add_request(self, request_id, prompt_token_ids, params):
+        # 准备这个 request 的 output queue
+        self.output_queues[request_id] = asyncio.Queue()
+        # 序列化并通过 PUSH socket 发给 engine
+        msg = EngineCoreRequest(request_id, prompt_token_ids, params)
+        await self.input_socket.send(msgpack.packb(msg))
+
+    async def generate(self, prompt, params, request_id) -> AsyncIterator[Output]:
+        await self.add_request(request_id, ..., params)
+        queue = self.output_queues[request_id]
+        try:
+            while True:
+                output = await queue.get()        # ← await 让出
+                yield output
+                if output.finished:
+                    break
+        finally:
+            del self.output_queues[request_id]
+
+    async def _output_handler_loop(self):
+        # 后台循环：不停从 ZMQ 收 output，路由到对应 queue
+        while True:
+            raw = await self.output_socket.recv()
+            output = msgpack.unpackb(raw)
+            queue = self.output_queues.get(output.request_id)
+            if queue:
+                await queue.put(output)</code></pre>
+
+<div class="code-anchor">
+  <div class="label">读这里 · 关键 2</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/engine/async_llm.py" target="_blank">async_llm.py · _output_handler_loop</a></div>
+  整个 streaming 的"心跳"在这里。EngineCore 把 output 通过 ZMQ 推过来，这个后台 task 负责扇出（fan-out）到每个 request 的私有 queue。
+  <div class="ask">如果一个 request 的 client 断了（queue 没人消费），会怎样？背压怎么处理？</div>
+</div>
+
+<h3>ZMQ socket 类型选择</h3>
+
+<table>
+  <thead><tr><th>方向</th><th>socket 类型</th><th>语义</th></tr></thead>
+  <tbody>
+    <tr><td>API → Engine 请求</td><td>PUSH / PULL</td><td>单向、消息排队、无应答；多 Producer 时 ZMQ 自动 round-robin</td></tr>
+    <tr><td>Engine → API output</td><td>PUSH / PULL</td><td>同上，反方向</td></tr>
+    <tr><td>多 API server replicas</td><td>DEALER / ROUTER</td><td>双向、可寻址；用 identity 标识 client；不常用</td></tr>
+  </tbody>
+</table>
+
+<p>
+  实际代码可能用 <code>DEALER/ROUTER</code> 以便支持多个 API server replicas 连同一个 engine（如果做 multi-tenant），
+  但单机最常见的是 <code>PUSH/PULL</code> + Unix domain socket（路径形如 <code>ipc:///tmp/vllm-XXX</code>）。
+</p>
+
+<h3>序列化格式</h3>
+
+<p>
+  vLLM 当前主要用 <strong>msgpack</strong>（带自定义 hook 处理 numpy / dataclass）。
+  msgpack 比 pickle 安全（不执行任意代码）、比 JSON 紧凑、比 protobuf 简单。
+  单次开销在<strong>几十微秒到几百微秒</strong>，跟 forward 的 10+ ms 比是小数。
+</p>
+
+<div class="callout tip">
+  <div class="label">为什么不直接共享内存</div>
+  共享内存（<code>mmap</code> / <code>SharedMemory</code>）确实更快，但要自己管同步、生命周期、版本兼容。
+  vLLM 在 worker 间用过共享内存（<code>vllm/distributed/device_communicators/</code>），但 API↔Engine 这一层用 ZMQ —— 消息量不大，调试方便，扩展性好（同样的代码能跑多机）。这是 trade-off。
+</div>
+
+<h3>背压：当 client 太慢</h3>
+
+<p>
+  ZMQ 默认会缓冲消息，缓冲满了发送方会阻塞（<code>HWM</code>，high water mark）。
+  在 vLLM 里这极少触发 —— output 推送很快，client 通常跟得上。
+  真正要担心的是<strong>反向</strong>：client 一次发上千请求把 input socket 塞爆。vLLM 用 <code>max_num_seqs</code> 在更上层兜住。
+</p>
+
+<h2><span class="num">08</span>代码深读 · EngineCore.run_busy_loop()</h2>
+
+<p>
+  这是<strong>整个引擎的心跳函数</strong>。读懂这 50 行（实际更多但骨架就这些），你就理解了 vLLM 怎么把"接收请求"和"算 token"交错起来。
+</p>
+
+<pre><code>class EngineCore:
+    def run_busy_loop(self):
+        while True:
+            # ── ① 处理新到的请求（非阻塞 poll）──
+            while not self.input_queue.empty():
+                req = self.input_queue.get_nowait()
+                if isinstance(req, EngineCoreRequest):
+                    self.scheduler.add_request(req)
+                elif isinstance(req, AbortRequest):
+                    self.scheduler.abort(req.request_id)
+
+            # ── ② 没事干就 idle wait ──
+            if not self.scheduler.has_unfinished_requests():
+                req = self.input_queue.get()   # 阻塞，等新请求
+                self._handle_input(req)
+                continue
+
+            # ── ③ 调度这一步的 batch ──
+            scheduler_output = self.scheduler.schedule()
+
+            # ── ④ 执行模型（这一步会去 GPU 上跑 forward）──
+            model_output = self.model_executor.execute_model(scheduler_output)
+
+            # ── ⑤ 更新调度状态（标记已完成的 sequence）──
+            engine_outputs = self.scheduler.update_from_output(
+                scheduler_output, model_output
+            )
+
+            # ── ⑥ detokenize 并推回 API server ──
+            for output in engine_outputs:
+                detokenized = self.output_processor.process(output)
+                self.output_queue.put(detokenized)</code></pre>
+
+<p>关键观察：</p>
+
+<ol>
+  <li><strong>这是一个 sync 循环，不是 async</strong>。EngineCore 进程的 main loop 是同步的 —— 因为它只有一件事要做（驱动 GPU），不需要协程交错。</li>
+  <li><strong>每一圈 = 一个 step = 一次 forward</strong>。一次 forward 可能 produce 几十个新 token（每个 sequence 一个，这一步 batch 多大就多少个）。</li>
+  <li><strong>请求接入是"轮询"</strong>：每圈先 drain input queue 一次。不会阻塞太久（GPU 在算的时候 CPU 这边可以处理新接入），但也不是真的 zero-latency。</li>
+  <li><strong>有一个隐藏的优化</strong>：execute_model 的 GPU 时间和下一轮的 schedule 可以重叠（vLLM 内部用 CUDA event 或单独 CPU 线程做 pipeline），这就是 "async output processing"。</li>
+</ol>
+
+<div class="diagram">
+  <svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <defs>
+      <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2410c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+      <!-- ring -->
+      <circle cx="360" cy="140" r="100" fill="none" stroke="#c2410c" stroke-width="1.5" stroke-dasharray="3 4"/>
+
+      <!-- nodes around the ring -->
+      <g>
+        <rect x="305" y="20" width="110" height="36" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="360" y="43" text-anchor="middle" font-weight="600">① drain input</text>
+
+        <rect x="510" y="80" width="110" height="36" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="565" y="103" text-anchor="middle" font-weight="600">③ schedule()</text>
+
+        <rect x="510" y="200" width="110" height="36" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="565" y="223" text-anchor="middle" font-weight="600">④ execute_model</text>
+
+        <rect x="305" y="225" width="110" height="36" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="360" y="248" text-anchor="middle" font-weight="600">⑤ update state</text>
+
+        <rect x="100" y="200" width="110" height="36" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="155" y="223" text-anchor="middle" font-weight="600">⑥ detok + push</text>
+
+        <rect x="100" y="80" width="110" height="36" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+        <text x="155" y="98" text-anchor="middle" font-weight="600">② idle wait?</text>
+        <text x="155" y="111" text-anchor="middle" font-size="10" fill="#9a3412">(只有空闲时)</text>
+      </g>
+
+      <!-- arrows clockwise -->
+      <g stroke="#c2410c" stroke-width="1.5" fill="none">
+        <path d="M 415 40 Q 500 55 530 85" marker-end="url(#ar4)"/>
+        <path d="M 565 116 L 565 198" marker-end="url(#ar4)"/>
+        <path d="M 530 234 Q 460 250 415 245" marker-end="url(#ar4)"/>
+        <path d="M 305 245 Q 245 250 210 234" marker-end="url(#ar4)"/>
+        <path d="M 155 198 L 155 118" marker-end="url(#ar4)"/>
+        <path d="M 195 85 Q 240 55 305 40" marker-end="url(#ar4)"/>
+      </g>
+
+      <!-- center -->
+      <text x="360" y="138" text-anchor="middle" font-weight="700" fill="#9a3412">run_busy_loop()</text>
+      <text x="360" y="155" text-anchor="middle" font-style="italic" fill="#9a3412" font-size="11">一圈 ≈ 一次 forward ≈ 一个 token / sequence</text>
+    </g>
+  </svg>
+  <div class="caption">EngineCore 一圈循环。在 7B / A10 / batch=16 的典型场景下，一圈大约 15–25 ms：execute_model 占 80%+，schedule 几 ms，其他都是 sub-ms。</div>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读这里 · 关键 3</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/engine/core.py" target="_blank">v1/engine/core.py · run_busy_loop</a></div>
+  对照上面的骨架找真实代码。重点是 schedule → execute → update 这个三段式，跟 OS 调度器的 dispatch loop 同构。
+  <div class="ask">如果我想在一圈里跑 2 次 forward（speculative decoding 风格），最少要改哪几行？</div>
+</div>
+
+<h2><span class="num">09</span>代码深读 · worker 端的 input prep</h2>
+
+<p>
+  到这里 scheduler 已经给出 "下一步算哪些 token"，但<strong>真的开始算之前</strong>，worker 还有一段非常微妙的 input prep。
+  这一段是 vLLM 性能的核心，看懂了你才能在 M4 读 attention kernel 时不迷路。
+</p>
+
+<h3>从 SchedulerOutput 到模型输入</h3>
+
+<p>
+  <code>SchedulerOutput</code> 是一个紧凑的描述："这一步 batch 里有 N 个 sequence，sequence A 是 prefill（要算 1024 个 token），sequence B 是 decode（只算 1 个 token）..."。
+  <code>gpu_model_runner.prepare_inputs()</code> 要把它翻译成 PyTorch 能直接 forward 的 tensor：
+</p>
+
+<pre><code># 简化的伪代码 —— 真实代码在 vllm/v1/worker/gpu_model_runner.py
+def prepare_inputs(scheduler_output: SchedulerOutput):
+    # ── ① 拼接所有 sequence 这一步要算的 token ──
+    # prefill sequence 把整段 prompt 都放进来；decode sequence 只放最后一个 token
+    input_ids = []     # shape: [sum_of_lens]
+    positions = []     # 每个 token 在它所在 sequence 里的位置
+    seq_lens = []      # 每个 sequence 在 input_ids 里的长度
+    for seq in scheduler_output.sequences:
+        if seq.is_prefill:
+            input_ids.extend(seq.prompt_token_ids[seq.computed_len:])
+            positions.extend(range(seq.computed_len, seq.total_len))
+            seq_lens.append(seq.total_len - seq.computed_len)
+        else:  # decode
+            input_ids.append(seq.last_token_id)
+            positions.append(seq.total_len - 1)
+            seq_lens.append(1)
+
+    # ── ② 构造 attn metadata ──
+    attn_metadata = AttentionMetadata(
+        # block_table: 每个 sequence 用了哪些物理 KV block
+        block_tables=stack_block_tables(scheduler_output.sequences),
+        # slot_mapping: 每个新 token 的 KV 要写到 KV pool 里哪个 slot
+        slot_mapping=compute_slot_mapping(scheduler_output.sequences),
+        # context_lens: 每个 sequence 当前一共看过多少 token (含 prefill)
+        context_lens=[s.total_len for s in scheduler_output.sequences],
+        seq_lens=seq_lens,
+        # ... 还有 num_prefills、num_decode_tokens 等
+    )
+
+    return ModelInput(
+        input_ids=torch.tensor(input_ids, device="cuda"),
+        positions=torch.tensor(positions, device="cuda"),
+        attn_metadata=attn_metadata,
+    )</code></pre>
+
+<h3>三个最容易混的名词</h3>
+
+<table>
+  <thead><tr><th>名词</th><th>形状</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>block_table</code></td>
+      <td><code>[num_seqs, max_blocks_per_seq]</code></td>
+      <td>每个 sequence 用了哪些物理 KV block（block 编号）。
+      <strong>类比</strong>：进程的页表（虚拟页 → 物理页）。</td>
+    </tr>
+    <tr>
+      <td><code>slot_mapping</code></td>
+      <td><code>[num_new_tokens]</code></td>
+      <td>这一步要新算的每个 token，它的 KV 要写到 KV pool 里哪个 slot（slot = block_id × block_size + offset）。
+      <strong>这是 kernel 写 KV 的目标地址</strong>。</td>
+    </tr>
+    <tr>
+      <td><code>context_lens</code></td>
+      <td><code>[num_seqs]</code></td>
+      <td>每个 sequence 当前累计的 token 数（含 prompt + 已 decode）。
+      attention kernel 用它来决定 causal mask 的范围。</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout tip">
+  <div class="label">为什么这一步是性能关键</div>
+  <code>prepare_inputs</code> 跑在 CPU 上，单步可能要 1–2 ms。
+  vLLM 的优化方向：把这一步缓存（CUDA graph capture）、用 <code>torch.compile</code>、提前 prepare 下一步（pipelining）。
+  M1 只需要看懂结构；M4 你会真正去测它。
+</div>
+
+<div class="code-anchor">
+  <div class="label">读这里 · 关键 4</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu_model_runner.py" target="_blank">gpu_model_runner.py · prepare_inputs / execute_model</a></div>
+  对照上面的伪代码看真实实现。重点：<code>slot_mapping</code> 是怎么算的？block_table 里"还没分配"的位置怎么处理？
+  <div class="ask">PagedAttention kernel 在哪里"接通" KV cache？看 <code>attn_metadata</code> 怎么从这里流到 kernel。</div>
+</div>
+
+<h2><span class="num">10</span>完整时序图 · 从 curl 到 token</h2>
+
+<p>
+  把前面 10 节合到一张图上。下图是一个 single chat request 从发出到收到第一个 token 的完整时序，
+  时间是<strong>典型值</strong>（7B 模型、A10 卡、batch_size=8、prompt 长度 200）：
+</p>
+
+<div class="diagram">
+  <svg viewBox="0 0 760 540" xmlns="http://www.w3.org/2000/svg" style="max-width:740px;">
+    <defs>
+      <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="11">
+      <!-- swim lanes -->
+      <g fill="#fafaf9" stroke="#e7e5e4">
+        <rect x="120" y="40" width="600" height="100"/>
+        <rect x="120" y="140" width="600" height="120"/>
+        <rect x="120" y="260" width="600" height="160"/>
+        <rect x="120" y="420" width="600" height="100"/>
+      </g>
+      <text x="115" y="80" text-anchor="end" font-weight="600" fill="#1c1917">curl</text>
+      <text x="115" y="180" text-anchor="end" font-weight="600" fill="#1e40af">API Server</text>
+      <text x="115" y="320" text-anchor="end" font-weight="600" fill="#c2410c">EngineCore</text>
+      <text x="115" y="460" text-anchor="end" font-weight="600" fill="#166534">Worker (GPU)</text>
+
+      <!-- t=0: HTTP request -->
+      <circle cx="140" cy="80" r="5" fill="#1c1917"/>
+      <text x="140" y="68" text-anchor="middle" font-size="10">t=0</text>
+      <text x="140" y="100" text-anchor="middle" font-size="9">POST /v1/chat...</text>
+
+      <path d="M 145 82 L 175 175" stroke="#78716c" fill="none" marker-end="url(#ar5)"/>
+
+      <!-- API: tokenize -->
+      <rect x="180" y="160" width="60" height="22" rx="3" fill="#eff6ff" stroke="#3b82f6"/>
+      <text x="210" y="175" text-anchor="middle" font-size="10">tokenize</text>
+      <text x="210" y="195" text-anchor="middle" font-size="9" fill="#1e40af">~0.5 ms</text>
+
+      <!-- API: build EngineCoreRequest -->
+      <rect x="245" y="160" width="70" height="22" rx="3" fill="#eff6ff" stroke="#3b82f6"/>
+      <text x="280" y="175" text-anchor="middle" font-size="10">build req</text>
+      <text x="280" y="195" text-anchor="middle" font-size="9" fill="#1e40af">~0.2 ms</text>
+
+      <!-- ZMQ to engine -->
+      <path d="M 315 178 L 360 310" stroke="#78716c" fill="none" marker-end="url(#ar5)"/>
+      <text x="340" y="250" font-size="9" fill="#78716c" font-style="italic">ZMQ (~50 µs)</text>
+
+      <!-- EngineCore: add_request -->
+      <rect x="365" y="295" width="70" height="22" rx="3" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="400" y="310" text-anchor="middle" font-size="10">add_request</text>
+
+      <!-- EngineCore: schedule -->
+      <rect x="365" y="320" width="70" height="22" rx="3" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="400" y="335" text-anchor="middle" font-size="10">schedule</text>
+
+      <!-- EngineCore: allocate blocks -->
+      <rect x="365" y="345" width="70" height="22" rx="3" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="400" y="360" text-anchor="middle" font-size="9">allocate KV</text>
+
+      <text x="400" y="385" text-anchor="middle" font-size="9" fill="#c2410c">~2 ms total</text>
+
+      <!-- to worker -->
+      <path d="M 435 360 L 470 455" stroke="#78716c" fill="none" marker-end="url(#ar5)"/>
+
+      <!-- Worker: prefill forward (200 tokens) -->
+      <rect x="475" y="440" width="120" height="22" rx="3" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="535" y="455" text-anchor="middle" font-size="10">prefill 200 tok</text>
+      <text x="535" y="475" text-anchor="middle" font-size="9" fill="#166534">~30 ms</text>
+
+      <!-- Worker: sample -->
+      <rect x="600" y="440" width="50" height="22" rx="3" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="625" y="455" text-anchor="middle" font-size="10">sample</text>
+      <text x="625" y="475" text-anchor="middle" font-size="9" fill="#166534">~1 ms</text>
+
+      <!-- back to engine -->
+      <path d="M 650 450 L 680 370" stroke="#78716c" fill="none" marker-end="url(#ar5)"/>
+
+      <!-- EngineCore: detok -->
+      <rect x="660" y="355" width="50" height="22" rx="3" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="685" y="370" text-anchor="middle" font-size="10">detok</text>
+
+      <!-- back to API -->
+      <path d="M 685 355 L 695 200" stroke="#78716c" fill="none" marker-end="url(#ar5)"/>
+
+      <!-- API: SSE push -->
+      <rect x="660" y="185" width="60" height="22" rx="3" fill="#eff6ff" stroke="#3b82f6"/>
+      <text x="690" y="200" text-anchor="middle" font-size="10">SSE push</text>
+
+      <!-- back to client -->
+      <path d="M 690 185 L 660 92" stroke="#78716c" fill="none" marker-end="url(#ar5)"/>
+      <circle cx="660" cy="85" r="5" fill="#1c1917"/>
+      <text x="660" y="74" text-anchor="middle" font-size="10">first token</text>
+      <text x="660" y="105" text-anchor="middle" font-size="9">t ≈ 35 ms</text>
+
+      <!-- time axis -->
+      <line x1="120" y1="535" x2="720" y2="535" stroke="#78716c" stroke-width="1" marker-end="url(#ar5)"/>
+      <text x="715" y="525" font-size="10" fill="#78716c">t</text>
+    </g>
+  </svg>
+  <div class="caption">完整 first-token 时序（典型值，因模型/硬件而异）。<strong>第一个 token 的延迟主要在 prefill</strong>（~30 ms），其后每个 decode token 大约 15–25 ms / token，整段 200 token 输出大概 5 秒。</div>
+</div>
+
+<p>
+  对照上面的图，<strong>SLO 优化的杠杆点</strong>分布如下：
+</p>
+
+<ul>
+  <li><strong>第一个 token 延迟（TTFT）</strong>：主要是 prefill 时长 → chunked prefill、prefix cache、speculative decoding。</li>
+  <li><strong>后续 token 延迟（ITL / TBT）</strong>：主要是 decode forward 时长 → batch 加大、TP、attention kernel 优化。</li>
+  <li><strong>吞吐（QPS）</strong>：CPU 路径效率 + KV cache 利用率 → v1 架构本身 + PagedAttention。</li>
+</ul>
+
+<h2><span class="num">11</span>动手 · curl 一个真实请求并追踪它</h2>
+
+<p>
+  下面是一个<strong>必做练习</strong>。读了 10 节代码，现在让一个真实请求在你眼前过一遍。
+</p>
+
+<h3>步骤 A · 起一个带 DEBUG 日志的 vLLM</h3>
+
+<pre><code># 单卡 A10 / 7B 模型
+VLLM_LOGGING_LEVEL=DEBUG \
+  vllm serve meta-llama/Llama-3.1-8B-Instruct \
+  --port 8000 \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.85 \
+  2>&1 | tee /tmp/vllm.log</code></pre>
+
+<p>
+  等到日志里出现 <code>Application startup complete.</code>，你就准备好了。
+  <strong>另开</strong>一个 terminal：
+</p>
+
+<h3>步骤 B · 发一个 chat completion 请求</h3>
+
+<pre><code>curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "messages": [{"role": "user", "content": "Explain async/await in 2 sentences."}],
+    "stream": true,
+    "max_tokens": 64
+  }'</code></pre>
+
+<p>
+  你会看到 SSE 帧一条条流出来。
+</p>
+
+<h3>步骤 C · 把日志和 13 步对齐</h3>
+
+<p>
+  打开 <code>/tmp/vllm.log</code>，搜下面这些关键词，把它们和上面的 13 步对齐：
+</p>
+
+<table>
+  <thead><tr><th>关键日志（截断 / 大致样貌）</th><th>对应步骤</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST /v1/chat/completions</code></td><td>步骤 1（HTTP 到达）</td></tr>
+    <tr><td><code>Received request chatcmpl-xxx</code></td><td>步骤 2–4</td></tr>
+    <tr><td><code>Added request chatcmpl-xxx to waiting</code></td><td>步骤 5</td></tr>
+    <tr><td><code>Engine step 12345: scheduled X prefill + Y decode</code></td><td>步骤 6</td></tr>
+    <tr><td><code>KV cache: allocated N blocks</code></td><td>步骤 7</td></tr>
+    <tr><td><code>Executor: forward took A ms</code></td><td>步骤 8–10</td></tr>
+    <tr><td><code>Sampled token X for chatcmpl-xxx</code></td><td>步骤 11</td></tr>
+    <tr><td><code>Finished request chatcmpl-xxx</code></td><td>步骤 12–13</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <div class="label">⚠ 日志格式因版本而异</div>
+  上面的字符串是<strong>示意</strong>。真实日志可能不完全匹配。
+  用 <code>grep -i</code> + 关键词搜（<code>schedule</code>、<code>block</code>、<code>forward</code>、<code>token</code>），
+  把<strong>能找到的</strong>都标上 13 步对照号。
+</div>
+
+<h3>步骤 D · 用 py-spy 看一眼运行时栈</h3>
+
+<p>
+  这是<strong>非常有教育意义的</strong>一招。在请求处理时（保持 vLLM 跑着、curl 一边发请求），另开 terminal：
+</p>
+
+<pre><code># 找到 EngineCore 子进程 PID
+ps aux | grep EngineCore
+
+# 抓一个栈
+py-spy dump --pid <engine_pid></code></pre>
+
+<p>
+  你应该能看到栈最顶上是 <code>run_busy_loop</code>，往下是 <code>execute_model</code> → <code>model.forward</code> → 一堆 attention / matmul。
+  这是<strong>你画的那张图的物证</strong>。
+</p>
+
+<div class="callout check">
+  <div class="label">✓ 你的状态</div>
+  做完上面 4 步，你应该有：(a) 一份日志截图，13 步对齐过；
+  (b) 一张 py-spy 抓的栈截图；(c) 心里能复述这次请求走了多少 ms 在每一段。
+  这就是 M1 的<strong>实际产出物</strong>。
+</div>
+
+<h2><span class="num">12</span>这个月你要读的 5 段代码</h2>
+
+<p>下面 5 个 anchor，<strong>按顺序</strong>读完，每段带一个核心问题。前面深读章节是"导读"，下面是你<strong>自己</strong>要去做的事。</p>
+
+<div class="code-anchor">
+  <div class="label">读 ① · 1–2 小时</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/entrypoints/openai/api_server.py" target="_blank">vllm/entrypoints/openai/api_server.py</a></div>
+  HTTP 入口。看它怎么注册 routes、怎么启动 engine、怎么 graceful shutdown。
+  <div class="ask">这里有几个 async 的"分叉点"？streaming response 是怎么从 engine 拿数据的？</div>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读 ② · 1 小时</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/entrypoints/openai/serving_chat.py" target="_blank">vllm/entrypoints/openai/serving_chat.py</a></div>
+  Chat 协议的具体处理：应用 chat template、处理 tool calling、构造 prompt。<strong>这是协议层，与 vLLM 引擎无关</strong>。
+  <div class="ask">如果我想加一个新的 sampling 参数，要改几个文件？</div>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读 ③ · 2–3 小时（最重要）</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/engine/async_llm.py" target="_blank">vllm/v1/engine/async_llm.py</a></div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/engine/core.py" target="_blank">vllm/v1/engine/core.py</a></div>
+  两个进程通过 ZMQ 通信的本体。<strong>这里读懂，你就理解了"为什么 v1 比 v0 快"</strong>。
+  <div class="ask">API server 进程和 engine 进程各持有什么状态？它们之间发什么消息？为什么不放一个进程？</div>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读 ④ · 30 分钟（先看结构，不细究算法）</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/core/sched/scheduler.py" target="_blank">vllm/v1/core/sched/scheduler.py</a> · <code>schedule()</code></div>
+  <strong>不要</strong>试图全看懂。只看：函数签名、return 什么、循环结构。
+  Month 3 会深入。
+  <div class="ask">这个函数的 input 是什么 state？output 是什么 state？</div>
+</div>
+
+<div class="code-anchor">
+  <div class="label">读 ⑤ · 30 分钟</div>
+  <div class="path"><a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu_model_runner.py" target="_blank">vllm/v1/worker/gpu_model_runner.py</a> · <code>execute_model()</code></div>
+  Worker 这一头。看它怎么把 scheduler 给的 batch 转成 PyTorch 输入。
+  <div class="ask">PagedAttention 在哪里"接通"了 KV cache？看 <code>attn_metadata</code> 怎么构造的。</div>
+</div>
+
+<h2><span class="num">13</span>本月作业 · 画图 + PR</h2>
+
+<h3>作业 A · 画一张请求生命周期图</h3>
+
+<p>读完上面 5 段，<strong>不看任何东西</strong>，自己在白板/Notion/纸上画：</p>
+
+<ol>
+  <li>所有出现的进程 / 线程框（标注哪个是 async 的、哪个是 worker subprocess）</li>
+  <li>每个框里存的关键状态（队列、cache、KV pool）</li>
+  <li>跨进程的消息箭头（ZMQ payload 是什么形状）</li>
+  <li>"一次 decode step" 这条主路径标红</li>
+</ol>
+
+<p>画完后跟本文 §04 那两张图对照。<strong>发现的不一致就是你下个月的研究方向</strong>。</p>
+
+<h3>作业 B · 第一个非 trivial 的 PR（可选）</h3>
+
+<p>Month 1 KPI 是<strong>至少一个 PR 已 merge</strong>。除了 Week 0 的 typo PR，本月可选挑战：</p>
+
+<ul>
+  <li>给 API server 加一个新的 OpenAI 兼容字段（参考最近相似 PR 的写法）。</li>
+  <li>修一个 streaming response 的 edge case bug（用 <code>label:bug</code> 在 issue 列表筛）。</li>
+  <li>给 <code>serving_chat.py</code> 写测试覆盖一个未测的分支。</li>
+  <li>给 <code>async_llm.py</code> 的某个 metric 路径加日志（小但实用，且能 force 你读完那段代码）。</li>
+</ul>
+
+<div class="callout tip">
+  <div class="label">💡 找 issue 的诀窍</div>
+  <code>label:good-first-issue</code> 标签下的 issue 通常已被人盯，<strong>抢手</strong>。
+  更可靠的来源：看最近 merged PR 的 reviewer 留言里 <em>"we should also do X..."</em> 这种隐藏 todo，主动 ping 那位 reviewer。
+</div>
+
+<h3>作业 C · 把请求追踪日志贴到你的笔记里</h3>
+
+<p>
+  §11 那个动手练习的产出物。用 markdown 表格记下：日志关键行 → 13 步号 → 你的一句话解释。
+  这份笔记会在 M2 / M3 反复用到。
+</p>
+
+<h2><span class="num">14</span>本页自检</h2>
+
+<div class="selfcheck">
+  <h4>Month 1 结束时这些应该全部 ✓</h4>
+  <ul>
+    <li><input type="checkbox" id="c1"/><label for="c1">我能<strong>不看代码</strong>讲清楚 v1 中 API server 进程和 engine 进程的职责分工。</label></li>
+    <li><input type="checkbox" id="c2"/><label for="c2">"async" 在 vLLM 里具体解决了什么问题？（提示：单线程多请求并发 + 不阻塞 event loop）</label></li>
+    <li><input type="checkbox" id="c3"/><label for="c3">我画过的请求生命周期图，能给同事讲 5 分钟，覆盖至少 3 个进程边界。</label></li>
+    <li><input type="checkbox" id="c4"/><label for="c4">我知道 <code>schedule()</code> 在调用栈的哪个位置（不必懂内部算法），并能说出它的 input / output 是什么。</label></li>
+    <li><input type="checkbox" id="c5"/><label for="c5">我能解释 v0 vs v1 的核心差异（GIL）和 v1 的代价（IPC 开销 + 调试复杂度）。</label></li>
+    <li><input type="checkbox" id="c6"/><label for="c6">我看过一次真实 vLLM 的日志，把里面的事件对到 13 步表格上至少 8 步。</label></li>
+    <li><input type="checkbox" id="c7"/><label for="c7">我能解释 <code>block_table</code>、<code>slot_mapping</code>、<code>context_lens</code> 三个名词的区别。</label></li>
+    <li><input type="checkbox" id="c8"/><label for="c8">本月已有 ≥1 PR merged。</label></li>
+  </ul>
+</div>
+
+<p class="muted small">勾选状态会保存在你的浏览器 localStorage 里，下次打开继续。</p>
+
+<h2><span class="num">15</span>延伸阅读</h2>
+
+<ul>
+  <li><a href="https://blog.vllm.ai/2025/01/27/v1-alpha-release.html" target="_blank">vLLM v1 alpha release blog</a> · 官方对 v1 架构的设计解释，含 throughput 对比数据。</li>
+  <li><a href="https://www.anyscale.com/blog/continuous-batching-llm-inference" target="_blank">Anyscale · How continuous batching enables 23x throughput</a> · 经典文章，建立 continuous batching 直觉。</li>
+  <li><a href="https://realpython.com/async-io-python/" target="_blank">Real Python · async IO tutorial</a> · 如果 §02 的 async 速通对你不够，这是更系统的教程。</li>
+  <li><a href="https://pages.cs.wisc.edu/~remzi/OSTEP/threads-events.pdf" target="_blank">OSTEP · Event-based Concurrency</a> · 39 章。把 async / event loop 放回 OS 课本里看，理解会更深。</li>
+  <li><a href="https://zguide.zeromq.org/" target="_blank">ZMQ Guide</a> · 想真正搞懂 PUSH/PULL/DEALER/ROUTER 的区别，没有比这本指南更好的入门。第 1–3 章足够。</li>
+  <li><a href="https://github.com/vllm-project/vllm/discussions" target="_blank">vLLM Discussions</a> · 找代码以外的问题答案的好地方；新人问题常被 maintainer 直接答。</li>
+</ul>
+
+<div class="pagenav">
+  <a class="prev" href="01-setup.html"><div class="dir">prev</div><div class="ttl">01 · Week 0</div></a>
+  <a class="next" href="03-memory.html"><div class="dir">next</div><div class="ttl">M2 · 内存 · PagedAttention</div></a>
+</div>
+
+</main>
+</div>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

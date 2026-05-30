@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 13 章 · Serverless — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="13">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part V · 通往 AI 基建 · 第 13 章</div>
+    <div class="ch-number">13</div>
+    <h1 class="ch-title">Serverless 与正在消失的机器</h1>
+    <p class="ch-standfirst">Serverless 不是没有服务器，而是你不再把服务器作为思考和付费的基本单位。机器消失在接口背后，冷启动、状态和成本模型留下来。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> 现代云</span><span class="dot"></span>
+      <span><b>用时</b> 约 45 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 函数调用路径 · 冷启动取舍</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">Serverless 不是没有服务器，而是你不再把服务器作为思考和付费的基本单位。机器消失在接口背后，冷启动、状态和成本模型留下来。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>函数即服务</b><span>以单个函数/事件处理器为部署和计费单位。</span></div>
+<div class="concept-card"><b>冷启动</b><span>没有热实例可用时，需要创建运行环境导致额外延迟。</span></div>
+<div class="concept-card"><b>事件驱动</b><span>对象上传、队列消息、HTTP 请求等事件触发计算。</span></div>
+<div class="concept-card"><b>状态外置</b><span>函数实例短暂且可替换，持久状态放到外部服务。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">Serverless · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 13.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="13.1 Serverless 把容量规划换成接口约束"><span class="sec-no">13.1</span>Serverless 把容量规划换成接口约束</h2>
+    <p>你不再预先声明几台机器，而是交一个函数和触发器。平台按请求创建、复用、销毁执行环境。省心的代价是执行时间、内存、并发、网络等约束变成产品边界。</p>
+
+    <h2 id="s2" data-nav="13.2 冷启动是抽象漏出来的声音"><span class="sec-no">13.2</span>冷启动是抽象漏出来的声音</h2>
+    <p>当没有热环境可复用，平台要下载代码、准备 runtime、初始化依赖、建立网络。用户看到的是一个慢请求；系统看到的是一次被隐藏的部署。</p>
+
+    <h2 id="s3" data-nav="13.3 无状态不是建议，是生存条件"><span class="sec-no">13.3</span>无状态不是建议，是生存条件</h2>
+    <p>函数实例可能随时消失，也可能并发复制。把会话存在内存里会出事；状态必须放数据库、对象存储、队列或缓存。</p>
+
+    <h2 id="s4" data-nav="13.4 事件驱动让 glue code 变少，也让链路更隐蔽"><span class="sec-no">13.4</span>事件驱动让 glue code 变少，也让链路更隐蔽</h2>
+    <p>对象上传触发缩略图，队列消息触发处理，定时器触发清理。系统更松耦合，但调试从“看一台服务”变成“追一串事件”。</p>
+
+    <h2 id="s5" data-nav="13.5 Serverless 是经济模型"><span class="sec-no">13.5</span>Serverless 是经济模型</h2>
+    <p>低流量、突发、不稳定任务非常适合按调用付费；持续高负载可能比常驻服务更贵。架构选择最终要落到 workload 曲线。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">Serverless · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 13.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>冷启动</b></td><td>AI 推理服务模型加载</td><td>加载大依赖/大模型时，冷启动成本会被放大。</td></tr>
+<tr><td><b>事件驱动</b></td><td>数据管道、异步任务</td><td>队列和对象存储把计算串成云上工作流。</td></tr>
+<tr><td><b>状态外置</b></td><td>数据库、缓存、对象存储</td><td>无状态 worker 是扩缩容和容错的基础。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>Serverless 隐藏服务器，但不消除服务器。</li>
+<li>冷启动是执行环境准备成本暴露到用户请求上。</li>
+<li>函数实例短暂可替换，状态必须外置。</li>
+<li>Serverless 首先是适合特定 workload 的经济模型。</li></ul>
+      <p class="muted" style="margin-bottom:0">最后一章把所有线索汇到 AI 基础设施：GPU、KV cache、batching、调度和云平台如何共同服务大模型。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch12-scaling-resilience/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">12 · 伸缩与韧性</span>
+      </a>
+      <a class="next" href="../ch14-ai-inference/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">14 · GPU 与 AI 推理上云</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "serverless": {
+    "t": "Serverless",
+    "d": "以事件/函数为接口，平台自动管理底层资源的计算模型。",
+    "l": "#"
+  },
+  "cold": {
+    "t": "冷启动 · Cold Start",
+    "d": "无可复用实例时创建执行环境产生的额外延迟。",
+    "l": "#"
+  },
+  "event": {
+    "t": "事件驱动 · Event-driven",
+    "d": "由事件触发计算，而不是固定进程循环等待。",
+    "l": "#"
+  },
+  "stateless": {
+    "t": "状态外置",
+    "d": "不把持久状态保存在短暂计算实例里。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "一次 serverless 调用可能走热路径，也可能触发冷启动。平台隐藏机器，但无法隐藏初始化成本。",
+    "nodes": [
+      {
+        "icon": "⚡",
+        "label": "事件到达",
+        "sub": "HTTP/Queue"
+      },
+      {
+        "icon": "🔍",
+        "label": "找热实例",
+        "sub": "复用优先"
+      },
+      {
+        "icon": "❄",
+        "label": "冷启动",
+        "sub": "准备 runtime"
+      },
+      {
+        "icon": "▶",
+        "label": "执行函数",
+        "sub": "业务逻辑"
+      },
+      {
+        "icon": "🧹",
+        "label": "冻结/回收",
+        "sub": "等待复用"
+      }
+    ],
+    "steps": [
+      {
+        "title": "事件触发",
+        "body": "HTTP 请求、队列消息或对象上传触发函数。",
+        "note": "入口已经不是一台服务器，而是事件源。",
+        "node": 0
+      },
+      {
+        "title": "寻找热实例",
+        "body": "平台检查是否有可复用的执行环境。",
+        "note": "热路径延迟很低。",
+        "node": 1
+      },
+      {
+        "title": "必要时冷启动",
+        "body": "没有热实例时，平台创建环境、加载代码、初始化 runtime。",
+        "note": "抽象背后的机器在此刻重新出现。",
+        "node": 2
+      },
+      {
+        "title": "执行用户代码",
+        "body": "函数处理事件，访问外部状态服务。",
+        "note": "实例本地状态不可靠，持久状态必须外置。",
+        "node": 3
+      },
+      {
+        "title": "冻结或回收",
+        "body": "执行环境可能保留一段时间，也可能被销毁。",
+        "note": "你不能依赖它一定还在。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "低流量突发",
+        "note": "大部分时间没请求，serverless 按调用付费很划算。",
+        "metrics": [
+          {
+            "label": "成本效率",
+            "value": 90,
+            "warn": false
+          },
+          {
+            "label": "冷启动影响",
+            "value": 45,
+            "warn": true
+          },
+          {
+            "label": "运维负担",
+            "value": 18,
+            "warn": false
+          }
+        ],
+        "takeaway": "个人项目、webhook、异步任务常在这里胜出。"
+      },
+      {
+        "name": "稳定高流量",
+        "note": "实例几乎一直热，常驻服务可能更便宜、更可控。",
+        "metrics": [
+          {
+            "label": "成本效率",
+            "value": 45,
+            "warn": true
+          },
+          {
+            "label": "延迟稳定",
+            "value": 82,
+            "warn": false
+          },
+          {
+            "label": "控制权",
+            "value": 76,
+            "warn": false
+          }
+        ],
+        "takeaway": "机器消失不代表账单也消失。"
+      },
+      {
+        "name": "延迟敏感",
+        "note": "需要预热、provisioned concurrency 或改用常驻服务。",
+        "metrics": [
+          {
+            "label": "P99 风险",
+            "value": 84,
+            "warn": true
+          },
+          {
+            "label": "可控性",
+            "value": 58,
+            "warn": false
+          },
+          {
+            "label": "额外成本",
+            "value": 72,
+            "warn": true
+          }
+        ],
+        "takeaway": "Serverless 的关键问题常常不是平均延迟，而是冷路径尾部。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "CLASSIFY",
+      "t": "判断一个任务适不适合 serverless",
+      "d": "看流量形状、状态、执行时长、延迟要求。"
+    },
+    {
+      "k": "TRACE",
+      "t": "画冷启动步骤",
+      "d": "代码下载、runtime、依赖、网络、handler。"
+    },
+    {
+      "k": "PRICE",
+      "t": "比较按调用与常驻实例成本",
+      "d": "用同一个 QPS 假设算一遍。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

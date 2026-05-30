@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>云计算 · 从机器向上 — 一本会动的教材</title>
+<link rel="stylesheet" href="styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<header class="cover">
+  <div class="cover-inner">
+    <div class="cover-top">
+      <div class="cover-kicker">交互式教材 · Interactive Textbook</div>
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+    </div>
+    <div class="cover-kicker" style="color:var(--warm);margin-bottom:1rem">为想一周吃下一学期的人而写</div>
+    <h1>云计算<span class="accent">·</span><br>从<span class="accent">机器</span>向上</h1>
+    <p class="sub">Cloud Computing, from the machine up —— 把“别人的电脑”一层层剥开，<br>从一颗 CPU 的幻觉，到一整座数据中心的编排。</p>
+    <p class="cover-lead">这不是 PPT 的搬运，也不是术语的罗列。每一个晦涩的流程——一次系统调用如何陷入内核、一次缺页中断如何被修好、一个请求如何穿过负载均衡到达容器——都被拆成你可以一步步播放、亲手调参、自己检查的交互。</p>
+    <div class="cover-cta">
+      <a class="btn primary" href="ch01-what-is-cloud/index.html">▶ 从第 1 章开始</a>
+      <a class="btn" href="#toc">浏览全书目录</a>
+    </div>
+    <div class="cover-stats">
+      <div class="s"><b>5</b><span>部 · Parts</span></div>
+      <div class="s"><b>14</b><span>章 · Chapters</span></div>
+      <div class="s"><b>全章就绪</b><span>OS · Cloud · AI Infra</span></div>
+      <div class="s"><b>28+</b><span>交互流程与取舍实验</span></div>
+    </div>
+  </div>
+</header>
+<section class="toc-wrap" id="toc">
+  <div class="toc-grid">
+    <h2>全书地图</h2>
+    <p class="toc-intro">一条主线贯穿始终：<b>你租了一台云上的虚拟机——它到底是什么？</b>顺着这个问题往下剥，你会自然地走过操作系统、虚拟化、容器、网络、分布式，最后抵达 AI 推理基础设施。</p>
+    
+    <div class="part-block">
+      <div class="part-head">
+        <span class="pno">PART I</span>
+        <span class="pt">地面：云到底是什么</span>
+        <span class="pd">建立总体心智模型</span>
+      </div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch01-what-is-cloud/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">01</span>
+          <span class="ct">云是别人的电脑</span>
+          <span class="cd">跟着一个请求走完全程；看清你租的到底是什么；IaaS / PaaS / SaaS 一次说透。</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head">
+        <span class="pno">PART II</span>
+        <span class="pt">一台机器：即时补齐 OS</span>
+        <span class="pd">CS162 的精华，按需登场</span>
+      </div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch02-cpu-virtualization/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">02</span>
+          <span class="ct">幻觉机器：虚拟化 CPU</span>
+          <span class="cd">进程、线程、上下文切换、调度器——一台 CPU 如何假装成很多台。</span>
+        </a>
+<a class="ch-card" href="ch03-virtual-memory/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">03</span>
+          <span class="ct">内存的海市蜃楼</span>
+          <span class="cd">地址空间、分页、TLB、缺页中断——每个程序都以为自己独占内存。</span>
+        </a>
+<a class="ch-card" href="ch04-concurrency/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">04</span>
+          <span class="ct">同时做很多事：并发</span>
+          <span class="cd">线程、锁、竞态、死锁——以及为什么并发是云的灵魂与噩梦。</span>
+        </a>
+<a class="ch-card" href="ch05-io-storage/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">05</span>
+          <span class="ct">I/O、文件与存储</span>
+          <span class="cd">系统调用、文件系统、块设备——数据如何离开 CPU 抵达磁盘和网络。</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head">
+        <span class="pno">PART III</span>
+        <span class="pt">很多机器，汇成一朵云</span>
+        <span class="pd">从单机走向资源池</span>
+      </div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch06-virtualization/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">06</span>
+          <span class="ct">虚拟化与 Hypervisor</span>
+          <span class="cd">一台物理机如何裂变成几十台虚拟机，而它们互不知情。</span>
+        </a>
+<a class="ch-card" href="ch07-containers/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">07</span>
+          <span class="ct">容器：轻量的幻觉</span>
+          <span class="cd">namespace 与 cgroup——不靠虚拟机，也能造出隔离的小世界。</span>
+        </a>
+<a class="ch-card" href="ch08-networking/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">08</span>
+          <span class="ct">网络即计算机</span>
+          <span class="cd">负载均衡、虚拟网络、请求之路——把第 1 章的旅程彻底讲透。</span>
+        </a>
+<a class="ch-card" href="ch09-storage-scale/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">09</span>
+          <span class="ct">规模化存储</span>
+          <span class="cd">块 / 对象 / 分布式文件系统，复制与一致性的第一课。</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head">
+        <span class="pno">PART IV</span>
+        <span class="pt">分布式系统：残酷的真相</span>
+        <span class="pd">当机器开始互相不信任</span>
+      </div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch10-distributed/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">10</span>
+          <span class="ct">当机器们意见不合</span>
+          <span class="cd">CAP、共识、时间与时钟——分布式为什么这么难。</span>
+        </a>
+<a class="ch-card" href="ch11-kubernetes/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">11</span>
+          <span class="ct">编排：Kubernetes</span>
+          <span class="cd">声明式、调和循环——你说“我要什么”，系统自己想办法实现。</span>
+        </a>
+<a class="ch-card" href="ch12-scaling-resilience/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">12</span>
+          <span class="ct">伸缩与韧性</span>
+          <span class="cd">自动扩缩容、容错、重试与雪崩——以及云的经济学。</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="part-block">
+      <div class="part-head">
+        <span class="pno">PART V</span>
+        <span class="pt">前沿：通往 AI 基础设施</span>
+        <span class="pd">你的目的地</span>
+      </div>
+      <div class="ch-cards">
+        <a class="ch-card" href="ch13-serverless/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">13</span>
+          <span class="ct">Serverless</span>
+          <span class="cd">函数即服务、冷启动——当“机器”这个概念被彻底抽象掉。</span>
+        </a>
+<a class="ch-card" href="ch14-ai-inference/index.html">
+          <span class="badge ready">已就绪</span>
+          <span class="cno">14</span>
+          <span class="ct">GPU 与 AI 推理上云</span>
+          <span class="cd">GPU 调度、KV cache、连续批处理、vLLM——前 13 章在这里汇合。</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="howto">
+  <div class="howto-inner">
+    <h2>这本书怎么读</h2>
+    <div class="howto-grid">
+      <div class="howto-item"><div class="ic">▶</div><h4>会动的流程</h4><p>遇到复杂流程，点播放或用 <span class="kbd">←</span> <span class="kbd">→</span> 一步步走。</p></div>
+      <div class="howto-item"><div class="ic">🎛</div><h4>可玩的模拟器</h4><p>切策略、看指标、理解为什么工程里没有“免费最好”。</p></div>
+      <div class="howto-item"><div class="ic">⌇</div><h4>悬停即释义</h4><p>带虚线的<span class="term" data-gloss="demo">术语</span>会给你即时定义，不让知识断片。</p></div>
+      <div class="howto-item"><div class="ic">⌄</div><h4>深潜可选</h4><p>主线顺读，深潜折叠；想跳就跳，想钻就钻。</p></div>
+    </div>
+  </div>
+</section>
+<footer class="site-foot">云计算 · 从机器向上 &nbsp;·&nbsp; 一本为快速学习者设计的交互式教材 &nbsp;·&nbsp; 云优先，OS 即时补齐（参考 Berkeley CS162）</footer>
+<script>
+  window.CB_GLOSS = { demo: { t: "术语悬浮释义", d: "鼠标放在带虚线下划线的词上，立刻得到一句话解释。", l: "#" } };
+</script>
+<script src="lib/components.js"></script>
+</body>
+</html>

@@ -436,12 +436,14 @@ footer {
       <a href="https://github.com/WeishuZ" target="_blank" rel="noopener">GitHub</a>
       <a href="https://linkedin.com/in/Weishuz" target="_blank" rel="noopener">LinkedIn</a>
       <a href="/blog/">Blog</a>
+      <a href="/learning/">Learning</a>
     </div>
 
     <nav class="nav" aria-label="page navigation">
       <a href="#about">About</a>
       <a href="#news">News</a>
       <a href="#systems">Selected systems</a>
+      <a href="#learning">Learning</a>
       <a href="#writing">Writing</a>
       <a href="#experience">Experience</a>
     </nav>
@@ -472,6 +474,9 @@ footer {
     <section id="news">
       <h2>News</h2>
       <ul class="news">
+        <li><span class="date">2026.05</span><span>Published <a href="/learning/infra-learning-path/">Infra Learning Path</a>, a textbook-style AI infrastructure path anchored on vLLM and mini-vLLM.</span></li>
+        <li><span class="date">2026.05</span><span>Published <a href="/learning/cloud-os/">Cloud Computing, from the machine up</a>, a Chinese learning site for OS concepts, cloud architecture, Kubernetes, serverless, and GPU inference.</span></li>
+        <li><span class="date">2026.05</span><span>Published <a href="/learning/db-book/">Data Systems Illustrated</a>, a CS186-style visual companion for databases from SQL down to storage and recovery.</span></li>
         <li><span class="date">2026.05</span><span>Released <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">mini-vLLM</a>: a reproducible, CPU-only simulator of modern LLM serving internals.</span></li>
         <li><span class="date">2026.05</span><span>Updated benchmark suite for continuous batching, prefix caching, preemption, and serving latency tradeoffs.</span></li>
         <li><span class="date">2026.01</span><span>Started backend infrastructure work at BalanX-BIO for a health-agent system.</span></li>
@@ -589,9 +594,93 @@ footer {
       </article>
     </section>
 
+    <section id="learning">
+      <h2>Learning</h2>
+
+      <article class="item">
+        <div class="item-head">
+          <h3>Infra Learning Path</h3>
+          <div class="item-links">
+            <a href="/learning/infra-learning-path/">open</a>
+            <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">source</a>
+          </div>
+        </div>
+        <div class="item-kicker">AI infrastructure textbook anchored on vLLM</div>
+        <p>
+          A six-month path for learning LLM serving systems through vLLM: request lifecycle, PagedAttention, scheduler design, kernels, mini-vLLM, and frontier serving systems.
+        </p>
+        <ul class="bullets">
+          <li>Connects operating systems concepts to real LLM serving internals instead of teaching them as isolated theory.</li>
+          <li>Includes diagrams, source-reading anchors, self-checks, paper reading order, and a mini-vLLM project arc.</li>
+          <li>Adds a frontier serving chapter on prefill/decode disaggregation, KV transfer, prefix-aware routing, speculative decoding, and FP8/KV quantization.</li>
+        </ul>
+        <div class="tags">
+          <span class="tag">vLLM</span>
+          <span class="tag">PagedAttention</span>
+          <span class="tag">KV cache</span>
+          <span class="tag">LLM serving</span>
+          <span class="tag">Systems</span>
+        </div>
+      </article>
+
+      <article class="item">
+        <div class="item-head">
+          <h3>Cloud Computing, from the machine up</h3>
+          <div class="item-links">
+            <a href="/learning/cloud-os/">open</a>
+          </div>
+        </div>
+        <div class="item-kicker">Cloud / OS illustrated companion in Chinese</div>
+        <p>
+          A learning site that follows one cloud request down through CPU scheduling, virtual memory, I/O, virtualization, containers, networking, Kubernetes, serverless, and GPU inference.
+        </p>
+        <ul class="bullets">
+          <li>Organizes 14 chapters around the path from a single machine to cloud-scale infrastructure.</li>
+          <li>Connects CS162-style operating systems concepts to virtual machines, containers, orchestration, and AI serving.</li>
+          <li>Published as a static learning artifact under the site’s Learning section.</li>
+        </ul>
+        <div class="tags">
+          <span class="tag">Cloud</span>
+          <span class="tag">Operating systems</span>
+          <span class="tag">Kubernetes</span>
+          <span class="tag">Serverless</span>
+          <span class="tag">GPU inference</span>
+        </div>
+      </article>
+
+      <article class="item">
+        <div class="item-head">
+          <h3>Data Systems Illustrated</h3>
+          <div class="item-links">
+            <a href="/learning/db-book/">open</a>
+          </div>
+        </div>
+        <div class="item-kicker">CS186-style visual companion for database systems</div>
+        <p>
+          A local-first illustrated textbook that walks from SQL and relational algebra down to buffer pools, B+ trees, query execution, locking, recovery, distributed commit, and modern data systems.
+        </p>
+        <ul class="bullets">
+          <li>Organizes 12 database systems chapters around diagrams, invariants, and I/O cost intuition.</li>
+          <li>Includes a B+ tree sandbox plus static visual chapters for sorting, joins, optimization, recovery, and distributed transactions.</li>
+          <li>Built as a personal learning artifact rather than a copy of course notes.</li>
+        </ul>
+        <div class="tags">
+          <span class="tag">Databases</span>
+          <span class="tag">CS186</span>
+          <span class="tag">Storage</span>
+          <span class="tag">Transactions</span>
+          <span class="tag">Recovery</span>
+        </div>
+      </article>
+    </section>
+
     <section id="writing">
       <h2>Writing</h2>
       <ul class="writing">
+        <li>
+          <a href="/learning/infra-learning-path/">Infra Learning Path</a>
+          <span>Textbook-style path for learning AI infrastructure through vLLM and mini-vLLM.</span>
+        </li>
         <li>
           <a href="/blog/anatomy-of-recsys-graph/">Anatomy of a Recommender System as a Graph</a>
           <span>Networks, recommendation, sparsity, and fairness.</span>

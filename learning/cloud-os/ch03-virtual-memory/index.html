@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 3 章 · 内存的海市蜃楼 — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="3">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part II · 一台机器 · 第 3 章</div>
+    <div class="ch-number">03</div>
+    <h1 class="ch-title">内存的海市蜃楼：虚拟内存</h1>
+    <p class="ch-standfirst">每个进程都看到一片从 0 开始、连续、私有的地址空间。真实内存却是有限、碎片化、被所有人共享的。虚拟内存负责把这个谎圆上。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> CS162 核心</span><span class="dot"></span>
+      <span><b>用时</b> 约 60 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 地址翻译流程 · TLB/页大小取舍</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">每个进程都看到一片从 0 开始、连续、私有的地址空间。真实内存却是有限、碎片化、被所有人共享的。虚拟内存负责把这个谎圆上。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>地址空间</b><span>进程看到的私有内存宇宙。它是抽象，不等于真实 DRAM。</span></div>
+<div class="concept-card"><b>页表</b><span>虚拟页到物理页的映射表，由内核维护、硬件 MMU 查询。</span></div>
+<div class="concept-card"><b>TLB</b><span>地址翻译的小缓存。命中时很快，未命中时要走页表。</span></div>
+<div class="concept-card"><b>缺页中断</b><span>访问的页不在物理内存时，硬件陷入内核，由内核把页调入。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">内存的海市蜃楼 · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 3.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="3.1 为什么每个进程都从 0 开始"><span class="sec-no">3.1</span>为什么每个进程都从 0 开始</h2>
+    <p>如果程序直接使用物理地址，两个程序就会踩进彼此的内存。虚拟内存给每个进程一份私有地址空间，再由页表把虚拟地址翻译到真实物理页。安全、隔离、按需分配都从这里来。</p>
+
+    <h2 id="s2" data-nav="3.2 页是内存管理的基本货币"><span class="sec-no">3.2</span>页是内存管理的基本货币</h2>
+    <p>内核不按单个字节搬运内存，而是按页管理。常见页大小是 4KB，也可以有 huge page。页越大，页表越小、TLB 覆盖范围越大，但内部碎片也可能变多。</p>
+
+    <h2 id="s3" data-nav="3.3 TLB 是速度的关键"><span class="sec-no">3.3</span>TLB 是速度的关键</h2>
+    <p>每次访存如果都查多级页表，CPU 会慢得离谱。TLB 缓存最近的地址翻译，让多数访问在硬件里快速完成。云上 noisy neighbor、容器密度、数据库性能，都可能被 TLB 和缓存行为影响。</p>
+
+    <h2 id="s4" data-nav="3.4 缺页不是 bug，而是协议"><span class="sec-no">3.4</span>缺页不是 bug，而是协议</h2>
+    <p>当进程访问一个尚未加载的页，硬件触发 page fault。内核可能从磁盘调页，也可能做 copy-on-write，也可能判定非法访问并杀掉进程。一次 fault 是硬件和内核之间的对话。</p>
+
+    <h2 id="s5" data-nav="3.5 从虚拟内存到云内存"><span class="sec-no">3.5</span>从虚拟内存到云内存</h2>
+    <p>虚拟机还有 guest page table 和 host page table，容器还有 memory limit，大模型推理还有 KV cache。所有这些都在问：有限内存如何被安全、高效、可预测地共享？</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">内存的海市蜃楼 · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 3.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>页表</b></td><td>虚拟机的二级地址翻译</td><td>guest 虚拟地址最终还要走到 host 物理地址。</td></tr>
+<tr><td><b>缺页</b></td><td>serverless 冷启动、容器 OOM</td><td>内存懒加载和限制会直接影响启动延迟。</td></tr>
+<tr><td><b>TLB/页大小</b></td><td>数据库、GPU 推理、KV cache</td><td>大块连续访问能显著受益于更少的地址翻译。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>虚拟内存给每个进程一片私有地址空间。</li>
+<li>页表负责映射，TLB 负责让常见翻译足够快。</li>
+<li>缺页中断是按需分配、懒加载和 copy-on-write 的机制基础。</li>
+<li>云上的内存问题本质仍是有限物理内存的共享与隔离。</li></ul>
+      <p class="muted" style="margin-bottom:0">有了 CPU 和内存的幻觉，下一步是让多个执行流共享同一份世界。于是并发登场，也带来了竞态和死锁。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch02-cpu-virtualization/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">02 · 幻觉机器：虚拟化 CPU</span>
+      </a>
+      <a class="next" href="../ch04-concurrency/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">04 · 同时做很多事：并发</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "vmem": {
+    "t": "虚拟内存 · Virtual Memory",
+    "d": "把进程看到的地址空间映射到物理内存的抽象。",
+    "l": "#"
+  },
+  "tlb": {
+    "t": "TLB",
+    "d": "缓存虚拟页到物理页翻译的硬件结构。",
+    "l": "#"
+  },
+  "fault": {
+    "t": "缺页中断 · Page Fault",
+    "d": "访问的页不可用时触发的异常，由内核处理。",
+    "l": "#"
+  },
+  "cow": {
+    "t": "写时复制 · Copy-on-Write",
+    "d": "共享旧页，直到有人写入时才复制。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "虚拟地址不是直接送到 DRAM。它先经过 MMU 和 TLB，必要时查页表，最坏情况下陷入内核处理缺页。",
+    "nodes": [
+      {
+        "icon": "🧾",
+        "label": "虚拟地址",
+        "sub": "进程看到"
+      },
+      {
+        "icon": "⚡",
+        "label": "TLB 查询",
+        "sub": "翻译缓存"
+      },
+      {
+        "icon": "🗺",
+        "label": "页表",
+        "sub": "映射来源"
+      },
+      {
+        "icon": "🚨",
+        "label": "缺页中断",
+        "sub": "内核介入"
+      },
+      {
+        "icon": "💾",
+        "label": "物理页",
+        "sub": "真实 DRAM"
+      }
+    ],
+    "steps": [
+      {
+        "title": "发出虚拟地址",
+        "body": "程序执行一次 load/store，地址看起来只是一个数字，例如 <code>0x7ffe...</code>。",
+        "note": "这个数字只在该进程的地址空间里有意义。",
+        "node": 0
+      },
+      {
+        "title": "TLB 命中",
+        "body": "MMU 先查 TLB。如果命中，虚拟页号立刻翻译成物理页号。",
+        "note": "快路径完全在硬件里完成。",
+        "node": 1
+      },
+      {
+        "title": "TLB 未命中",
+        "body": "如果 TLB 没有记录，硬件或内核按页表层层查找映射。",
+        "note": "多级页表是在节省页表空间和查询成本之间折中。",
+        "node": 2
+      },
+      {
+        "title": "页面不在内存",
+        "body": "页表说这个页当前不在物理内存，CPU 触发 page fault，内核接管。",
+        "note": "fault 可能是正常的 lazy allocation，也可能是非法访问。",
+        "node": 3
+      },
+      {
+        "title": "映射到物理页",
+        "body": "内核准备好物理页并更新页表，指令重试，程序像什么都没发生一样继续。",
+        "note": "抽象的精妙之处：慢路径被藏在异常处理里。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "4KB 页",
+        "note": "粒度细，浪费少，页表项多。通用系统默认偏向这个点。",
+        "metrics": [
+          {
+            "label": "内存浪费",
+            "value": 18,
+            "warn": false
+          },
+          {
+            "label": "页表压力",
+            "value": 78,
+            "warn": true
+          },
+          {
+            "label": "TLB 覆盖",
+            "value": 35,
+            "warn": false
+          }
+        ],
+        "takeaway": "小页让分配精细，但会让地址翻译元数据变多。"
+      },
+      {
+        "name": "2MB Huge Page",
+        "note": "页表更小，TLB 覆盖更大，适合大数组、数据库 buffer pool、模型权重。",
+        "metrics": [
+          {
+            "label": "内存浪费",
+            "value": 48,
+            "warn": true
+          },
+          {
+            "label": "页表压力",
+            "value": 30,
+            "warn": false
+          },
+          {
+            "label": "TLB 覆盖",
+            "value": 86,
+            "warn": false
+          }
+        ],
+        "takeaway": "大页的优势不是“更大”，而是减少翻译开销。"
+      },
+      {
+        "name": "内存压力",
+        "note": "物理内存不够时，缺页和回收开始主导性能。",
+        "metrics": [
+          {
+            "label": "缺页频率",
+            "value": 84,
+            "warn": true
+          },
+          {
+            "label": "尾延迟",
+            "value": 90,
+            "warn": true
+          },
+          {
+            "label": "有效吞吐",
+            "value": 38,
+            "warn": false
+          }
+        ],
+        "takeaway": "云上机器看起来还有 CPU，却可能因为内存抖动慢到不可用。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "DRAW",
+      "t": "画出 VA → PA",
+      "d": "包含 TLB、页表、page fault 三条路径。"
+    },
+    {
+      "k": "COMPARE",
+      "t": "比较 4KB 与 huge page",
+      "d": "讲清 TLB 覆盖、碎片、页表大小。"
+    },
+    {
+      "k": "TRACE",
+      "t": "解释一次 OOM",
+      "d": "区分虚拟地址空间、RSS、limit 和 swap。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

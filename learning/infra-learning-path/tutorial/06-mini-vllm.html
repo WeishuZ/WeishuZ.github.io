@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>M5 · 原创 mini-vLLM — Infra Learning Path</title>
+<link rel="stylesheet" href="../assets/style.css" />
+</head>
+<body>
+
+<button class="menu-btn" aria-label="菜单">☰ 目录</button>
+
+<div class="layout">
+
+<aside class="sidebar">
+  <a href="../index.html" class="brand"><span class="dot"></span>Infra Learning Path</a>
+  <div class="tagline">用 vLLM 学 AI infra · just-in-time · 问题驱动</div>
+  <div class="nav-group"><div class="nav-label">起步</div><nav><ul>
+    <li><a href="../index.html"><span class="idx">/</span>主页 · 概览</a></li>
+    <li><a href="00-mental-model.html"><span class="idx">00</span>心智模型</a></li>
+    <li><a href="01-setup.html"><span class="idx">01</span>Week 0 · 环境</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">6 个月主线</div><nav><ul>
+    <li><a href="02-entrypoints.html"><span class="idx">M1</span>入口与生命周期</a></li>
+    <li><a href="03-memory.html"><span class="idx">M2</span>内存 · PagedAttention</a></li>
+    <li><a href="04-scheduler.html"><span class="idx">M3</span>调度器</a></li>
+    <li><a href="05-kernels.html"><span class="idx">M4</span>Kernel &amp; 性能</a></li>
+    <li><a href="06-mini-vllm.html"><span class="idx">M5</span>原创 mini-vLLM</a></li>
+    <li><a href="09-frontier-serving.html"><span class="idx">M6</span>前沿 serving 系统</a></li>
+  </ul></nav></div>
+  <div class="nav-group"><div class="nav-label">参考</div><nav><ul>
+    <li><a href="07-papers.html"><span class="idx">P</span>15 篇论文导读</a></li>
+    <li><a href="08-os-bridge.html"><span class="idx">OS</span>OS ↔ vLLM 速查</a></li>
+  </ul></nav></div>
+  <div class="foot">源仓库 <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">WeishuZ/infra-learning-path</a></div>
+</aside>
+
+<main class="content">
+
+<div class="crumbs">
+  <a href="../index.html">home</a><span class="sep">/</span>tutorial<span class="sep">/</span>M5 mini-vLLM
+</div>
+
+<h1 class="page-title">Month 5 · 原创项目 · mini-vLLM</h1>
+<p class="page-sub">从零写一个能 serve 一个请求的 paged-attention engine。这是简历最重的那张牌。</p>
+
+<p class="lede">
+  到目前为止，你都在<strong>读别人的代码</strong>。这个月反过来：
+  把 M2-M4 学到的东西<strong>用自己的代码重新发明一遍</strong>。
+  发明的过程会暴露所有你以为懂、其实没懂的地方——
+  这正是这一步的价值，也是这门课最贵的一张牌。
+</p>
+
+<div class="callout q">
+  <div class="label">驱动问题</div>
+  给你一台 A10 (24GB)、一个 Llama 3.1 8B Instruct、PyTorch 2.4 和 FlashAttention 2 现成 kernel。
+  <strong>不允许 import vllm</strong>。你要在 3 周内 serve 一个 OpenAI 兼容请求，能 streaming 输出。
+  从哪儿写第一行代码？
+</div>
+
+<details class="predict">
+  <summary>先想一想，再展开建议路径</summary>
+  <div class="body">
+    <p>反直觉答案：<strong>从最简单的 single-request loop 开始，先丑后美</strong>。</p>
+    <p>不要先写 block manager、不要先想 batching、不要先用 FastAPI。
+    第一周的目标只是："一个 hardcoded prompt 进去，几行 token id 出来"。</p>
+    <p>这就是 v0.1 → v0.5 的渐进路径：</p>
+    <ul>
+      <li><strong>v0.1</strong>：单请求、朴素 KV cache、贪婪 sampling。证明能跑文本。</li>
+      <li><strong>v0.2</strong>：换成 block-based KV，但仍单请求。证明分页正确。</li>
+      <li><strong>v0.3</strong>：加 scheduler，多请求 continuous batching。证明能并发。</li>
+      <li><strong>v0.4</strong>：套 FastAPI + SSE。证明能跟外部协议接。</li>
+      <li><strong>v0.5</strong>：跟 vLLM benchmark，写 README + blog。证明能讲清楚。</li>
+    </ul>
+    <p>每一版都要<strong>跑通再前进</strong>。不要并行开 4 个分支同时写。</p>
+  </div>
+</details>
+
+<h2><span class="num">01</span>项目意义 · 为什么"重新发明轮子"是顶投资</h2>
+
+<p>有人会说：vLLM 已经写完了，开源、文档全、社区活跃，你写一个慢 3 倍的 toy 有什么用？
+这个问题问得对——但答案不在最终产物，而在<strong>制造过程</strong>。</p>
+
+<h3>"读" 是识别，"写" 是召回</h3>
+
+<p>
+  人脑对信息有两种掌握程度：<strong>识别 (recognition)</strong> 和 <strong>召回 (recall)</strong>。
+  读一段代码、点头说"嗯我懂这个 if 在干嘛"，是识别。
+  让你<em>关掉编辑器</em>、自己写一遍同样功能的代码，是召回。
+  这两个差一个数量级——你以为懂的 80%，召回时只剩 20%。
+</p>
+
+<p>
+  M1-M4 你都在做识别：读 vLLM 源码、看论文、画状态图。
+  M5 强制你切换到召回模式：合上 vLLM 的 tab，在空白的 <code>engine.py</code> 里从 0 写。
+  写出来你会发现一堆<strong>"咦，这里 vLLM 是怎么处理的来着？"</strong> 那些就是你的<em>盲点</em>。
+</p>
+
+<div class="callout tip">
+  <div class="label">认知科学背景</div>
+  这是教育研究里"generation effect" 的标准结论：自己生成内容比被动阅读，留存率高 2-3×。
+  Andy Matuschak 和 Michael Nielsen 在 <em>How can we develop transformative tools for thought?</em>
+  里反复强调这一点。M5 是这门课唯一逼你做"generation"的环节，所以它是最贵的一张牌。
+</div>
+
+<h3>你会发现的具体盲点</h3>
+
+<p>下面这些是历届做 mini-vLLM 的人<strong>真实写到的总结</strong>，几乎每个人都中招：</p>
+
+<ul>
+  <li><strong>KV cache 的 shape 你以为懂</strong>，写第一行 <code>torch.zeros(...)</code> 时才发现：
+    layer × 2 (K/V) × seq × n_kv_heads × head_dim？还是 layer × seq × 2 × ...？vLLM 的 layout 跟 HF 不一样，
+    paged 之后又不一样。这种细节<strong>读 10 遍都印不进脑子</strong>，写一遍就再也忘不了。</li>
+  <li><strong>logits 切片你以为是 <code>[:, -1, :]</code></strong>，写完一跑全是乱码——
+    才发现 HF 的 <code>generate()</code> 默认会丢掉一个 bos token，你手写时漏了；
+    或 chat template 没套，模型在做 continuation 而不是 instruct。</li>
+  <li><strong>"prefill 和 decode 用同一个 forward"</strong> 你点过头，自己写时才意识到
+    decode 时 <code>position_ids = [seq_len - 1]</code> 而不是 <code>[0, ..., seq_len-1]</code>，
+    KV cache 只查不写 vs 写一格。</li>
+  <li><strong>block table 你画过图</strong>，自己写 BlockManager 时才发现：
+    block 0 是<em>所有序列共享</em>的特殊块还是普通块？free 时要不要 zero-out？vLLM 用 ref count 还是用 owner？</li>
+  <li><strong>scheduler 的 token budget</strong>——你以为是 max_batch_size × max_seq_len，
+    自己写时才发现 vLLM 是<em>每步固定 token 数</em>，prefill 和 decode 共享这个预算。这是一个不写一遍体会不到的设计。</li>
+</ul>
+
+<p>每个盲点都是 vLLM 源码里你<strong>滑过去没注意</strong>的一个细节。
+你的笔记本会从这些"咦"积累出一份比任何博客都准的 vLLM 注解。</p>
+
+<h3>简历价值：可验证的 hard signal</h3>
+
+<p>
+  在 infra/serving 的招聘市场里，最稀缺的不是"懂论文的人"，而是<strong>能交付端到端系统的人</strong>。
+  "我读完了 vLLM 全部源码"——招聘方只能信你。
+  "我从零写了一个 500 行的 mini-vLLM，github 公开仓库，benchmark 表在 README"——
+  招聘方可以 5 分钟自己验证。这个差别在 hiring 里叫 <em>hard signal vs soft signal</em>，重要性差一个数量级。
+</p>
+
+<p>
+  更进一步：当面试官问你"PagedAttention 跟 OS 虚拟内存的区别"，
+  读过 vLLM 的人能答出 3 个；<strong>写过 BlockManager 的人能答出 3 个 + 自己踩过的 1 个反直觉点</strong>。
+  后者是 senior signal，能让你的薪资段跳一档。
+</p>
+
+<h3>时间预算：3 周够吗？</h3>
+
+<p>
+  v0.5 的目标定得很谨慎，<strong>3 周（约 60-80 小时）对单人完全够</strong>。
+  历届做完的人里，最快 1.5 周 v0.1 跑通、3 周 v0.5 收尾；
+  最慢的人卡在 v0.1 一周，主要因为 HF 模型 load 不熟。
+  本章后面的"急救包"专门治这些卡点。
+</p>
+
+<div class="callout warn">
+  <div class="label">⚠ 时间陷阱</div>
+  3 周不是"3 周自由探索"，是 <strong>3 周交付 v0.5</strong>。
+  最常见的失败模式：第一周想做完美的 architecture，第二周还没写一行模型代码，第三周匆忙凑 demo。
+  反过来：第一天就写 <code>main.py</code> 那个最 dumb 的 forward 循环。
+  漂亮的架构在 v0.3 才需要。
+</div>
+
+<h2><span class="num">02</span>项目范围 · 明确做什么和不做什么</h2>
+
+<p>第一周开工前，把这张表抄一份贴在显示器边上。每次冒出"要不要加 X"的念头，看一眼。</p>
+
+<div class="cards-2">
+  <div class="card">
+    <h3>✅ 做</h3>
+    <ul>
+      <li>单卡 fp16 推理 Llama 3.1 8B Instruct</li>
+      <li>自己的 BlockManager（固定 16 token block）</li>
+      <li>自己的 continuous batching Scheduler（FCFS + recompute preempt）</li>
+      <li>OpenAI-compatible chat API (FastAPI)</li>
+      <li>SSE 流式输出</li>
+      <li>temperature + top_p + top_k sampling</li>
+      <li>跟 vLLM 对照的 benchmark + 差距分析</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>❌ 不做（这版不要）</h3>
+    <ul>
+      <li>多 GPU TP/PP（单卡先跑通，多卡 = M5+）</li>
+      <li>量化（fp16 即可，量化 = LLM compression 另一条线）</li>
+      <li>多 LoRA（用例太少，不值这周时间）</li>
+      <li>自己写 CUDA attention kernel（用 FlashAttention 2 现成的）</li>
+      <li>编译器优化（torch.compile 可选，CUDA graph 留给延伸）</li>
+      <li>支持多种模型架构（只 Llama，泛化 = 工程问题不是学习问题）</li>
+      <li>prefix caching / speculative decoding（功能性优化，留给延伸）</li>
+    </ul>
+  </div>
+</div>
+
+<p><strong>为什么是这些"不做"</strong>？三条标准：</p>
+
+<ol>
+  <li><strong>不在学习路径上</strong>：比如量化是另一个 6 个月的领域，强塞进来稀释主线。</li>
+  <li><strong>工程量远大于学习量</strong>：比如多模型架构支持，写一遍 Mistral 适配跟 Llama 几乎一样，但要花一周做适配层。</li>
+  <li><strong>依赖你还没掌握的东西</strong>：比如多 GPU TP 要 NCCL 通讯调试，先把单卡跑通再说。</li>
+</ol>
+
+<div class="callout tip">
+  <div class="label">💡 scope creep 是 1 号杀手</div>
+  当 v0.3 跑通后你会有强烈冲动"要不顺手加个 prefix caching？反正都是 KV 操作"。
+  <strong>抑制住</strong>。先把 v0.5 交付完整，再开 v0.6 branch。
+  完整 v0.5 比半成品 v0.7 在简历和 blog 上都强 3 倍。
+</div>
+
+<h2><span class="num">03</span>架构 · 4 个核心模块</h2>
+
+<div class="diagram">
+  <svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <defs>
+      <marker id="ay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="12">
+
+      <rect x="280" y="20" width="160" height="50" rx="6" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="360" y="42" text-anchor="middle" font-weight="700">FastAPI server</text>
+      <text x="360" y="58" text-anchor="middle" fill="#78716c" font-size="10">~80 行</text>
+
+      <rect x="280" y="110" width="160" height="50" rx="6" fill="#fff7ed" stroke="#c2410c" stroke-width="1.5"/>
+      <text x="360" y="132" text-anchor="middle" font-weight="700">Engine + Scheduler</text>
+      <text x="360" y="148" text-anchor="middle" fill="#78716c" font-size="10">~150 行</text>
+
+      <rect x="100" y="200" width="180" height="50" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+      <text x="190" y="222" text-anchor="middle" font-weight="700">BlockManager</text>
+      <text x="190" y="238" text-anchor="middle" fill="#78716c" font-size="10">~80 行</text>
+
+      <rect x="440" y="200" width="180" height="50" rx="6" fill="#fef3c7" stroke="#facc15" stroke-width="1.5"/>
+      <text x="530" y="222" text-anchor="middle" font-weight="700">ModelRunner</text>
+      <text x="530" y="238" text-anchor="middle" fill="#78716c" font-size="10">~150 行</text>
+
+      <rect x="280" y="290" width="160" height="50" rx="6" fill="#fef2f2" stroke="#dc2626" stroke-width="1.5"/>
+      <text x="360" y="312" text-anchor="middle" font-weight="700">Llama (HF) + FlashAttn</text>
+      <text x="360" y="328" text-anchor="middle" fill="#78716c" font-size="10">外部依赖</text>
+
+      <g stroke="#78716c" stroke-width="1.5" fill="none">
+        <path d="M 360 70 L 360 110" marker-end="url(#ay)"/>
+        <path d="M 320 160 L 240 200" marker-end="url(#ay)"/>
+        <path d="M 400 160 L 480 200" marker-end="url(#ay)"/>
+        <path d="M 530 250 L 400 290" marker-end="url(#ay)"/>
+      </g>
+
+      <text x="640" y="225" fill="#16a34a" font-size="11" font-weight="600">M2 学的</text>
+      <text x="80" y="225" fill="#c2410c" font-size="11" font-weight="600">M3 学的</text>
+    </g>
+  </svg>
+  <div class="caption">总计 &lt; 500 行 Python 跑通最小可用。简洁是目的，不是约束。</div>
+</div>
+
+<h3>模块清单 · 每个一段</h3>
+
+<p>开工前把每个模块的 spec 写在 <code>design.md</code> 里，不要写完一个改一个。下面是参考规格。</p>
+
+<table>
+  <thead><tr><th>模块</th><th>职责</th><th>关键状态</th><th>关键方法</th><th>行数预算</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>BlockManager</strong></td>
+      <td>管理固定大小的 KV block 池；分配/释放/查询 block_table</td>
+      <td><code>free_blocks: deque[int]</code><br><code>block_tables: dict[req_id, list[int]]</code><br><code>ref_count: dict[int, int]</code></td>
+      <td><code>allocate(req_id, n)</code><br><code>append(req_id)</code><br><code>free(req_id)</code><br><code>can_allocate(n)</code></td>
+      <td>~80</td>
+    </tr>
+    <tr>
+      <td><strong>Scheduler</strong></td>
+      <td>每个 step 决定谁参与、prefill/decode、是否抢占</td>
+      <td><code>waiting: deque[Request]</code><br><code>running: list[Request]</code><br><code>token_budget: int</code></td>
+      <td><code>add_request(req)</code><br><code>schedule() -&gt; SchedulerOutput</code><br><code>_preempt(req)</code></td>
+      <td>~150</td>
+    </tr>
+    <tr>
+      <td><strong>ModelRunner</strong></td>
+      <td>把 SchedulerOutput 翻译成 forward 调用；管 GPU tensor</td>
+      <td><code>model: LlamaForCausalLM</code><br><code>kv_cache: list[tensor]</code> (paged)</td>
+      <td><code>execute(sched_out) -&gt; logits</code><br><code>sample(logits, params)</code></td>
+      <td>~150</td>
+    </tr>
+    <tr>
+      <td><strong>Engine</strong></td>
+      <td>主循环：拉 request → schedule → execute → detokenize → emit token</td>
+      <td><code>scheduler</code><br><code>runner</code><br><code>tokenizer</code></td>
+      <td><code>add_request(prompt)</code><br><code>step()</code><br><code>run_forever()</code></td>
+      <td>~80</td>
+    </tr>
+    <tr>
+      <td><strong>API server</strong></td>
+      <td>HTTP 接收 OpenAI 协议 → 推到 engine → SSE 回</td>
+      <td>FastAPI app · async queue</td>
+      <td><code>chat_completions()</code><br><code>stream_response()</code></td>
+      <td>~80</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>请求生命周期 · 一图看穿</h3>
+
+<div class="diagram">
+  <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" style="max-width:680px;">
+    <defs>
+      <marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2410c"/>
+      </marker>
+    </defs>
+    <g font-family="ui-sans-serif, system-ui" font-size="11">
+      <!-- Lanes -->
+      <text x="20" y="35" font-weight="700" fill="#3b82f6">API</text>
+      <text x="20" y="105" font-weight="700" fill="#c2410c">Engine</text>
+      <text x="20" y="175" font-weight="700" fill="#16a34a">Scheduler</text>
+      <text x="20" y="245" font-weight="700" fill="#854d0e">ModelRunner</text>
+
+      <line x1="80" y1="20" x2="700" y2="20" stroke="#e7e5e4"/>
+      <line x1="80" y1="90" x2="700" y2="90" stroke="#e7e5e4"/>
+      <line x1="80" y1="160" x2="700" y2="160" stroke="#e7e5e4"/>
+      <line x1="80" y1="230" x2="700" y2="230" stroke="#e7e5e4"/>
+      <line x1="80" y1="300" x2="700" y2="300" stroke="#e7e5e4"/>
+
+      <rect x="90" y="25" width="100" height="34" rx="3" fill="#eff6ff" stroke="#3b82f6"/>
+      <text x="140" y="45" text-anchor="middle">POST /v1/chat</text>
+
+      <path d="M 140 59 L 200 100" stroke="#c2410c" stroke-width="1.5" fill="none" marker-end="url(#aR)"/>
+
+      <rect x="200" y="95" width="120" height="34" rx="3" fill="#fff7ed" stroke="#c2410c"/>
+      <text x="260" y="115" text-anchor="middle">add_request()</text>
+
+      <path d="M 260 129 L 320 170" stroke="#c2410c" stroke-width="1.5" fill="none" marker-end="url(#aR)"/>
+
+      <rect x="320" y="165" width="120" height="34" rx="3" fill="#f0fdf4" stroke="#16a34a"/>
+      <text x="380" y="185" text-anchor="middle">schedule()</text>
+
+      <path d="M 380 199 L 440 240" stroke="#c2410c" stroke-width="1.5" fill="none" marker-end="url(#aR)"/>
+
+      <rect x="440" y="235" width="120" height="34" rx="3" fill="#fef3c7" stroke="#facc15"/>
+      <text x="500" y="255" text-anchor="middle">execute()</text>
+
+      <path d="M 500 235 L 440 130" stroke="#c2410c" stroke-width="1.5" stroke-dasharray="3 2" fill="none" marker-end="url(#aR)"/>
+      <text x="475" y="180" font-size="10" fill="#78716c">token</text>
+
+      <path d="M 320 99 L 240 60" stroke="#c2410c" stroke-width="1.5" stroke-dasharray="3 2" fill="none" marker-end="url(#aR)"/>
+      <text x="280" y="80" font-size="10" fill="#78716c">SSE chunk</text>
+
+      <rect x="560" y="235" width="120" height="34" rx="3" fill="#fef3c7" stroke="#facc15" stroke-dasharray="3 2"/>
+      <text x="620" y="251" text-anchor="middle">execute()</text>
+      <text x="620" y="263" text-anchor="middle" font-size="9" fill="#78716c">next step</text>
+
+      <text x="370" y="318" text-anchor="middle" font-size="10" fill="#78716c">每 step 循环：每 token 都走 schedule → execute → 回 API → SSE → 浏览器</text>
+    </g>
+  </svg>
+  <div class="caption">一个请求的全程：FastAPI 把 prompt 推给 Engine；Engine 主循环每个 step 调一次 schedule 和 execute；每生成一个 token 沿原路反推回浏览器。</div>
+</div>
+
+<h2><span class="num">04</span>每周里程碑 · v0.1 → v0.5</h2>
+
+<p>下面这张时间线是<strong>硬性目标</strong>。每周末必须有一个可演示的版本。
+"差不多写完了，差一点收尾"不算通过——下一周开始前能 <code>python demo.py</code> 跑出预期输出才算。</p>
+
+<div class="timeline">
+  <div class="step">
+    <div class="badge">Week 1</div>
+    <div>
+      <div class="title">单请求跑通 (v0.1)</div>
+      <div class="desc">
+        <strong>交付物</strong>：<code>main.py</code> 一个文件，<code>python main.py "解释一下 PagedAttention"</code> 能流式打印 200 个 token。<br>
+        <strong>关键步骤</strong>：load HF Llama 3.1 8B → 套 chat template → 朴素 contiguous KV cache → naive decode loop → greedy sampling → 打印。<br>
+        <strong>验收</strong>：(1) 输出文字通顺 (2) 显存占用 ~17GB (3) ~30 tok/s。<br>
+        <strong>常见卡点</strong>：chat template 没套；fp16 vs bf16 选错；attention mask 维度错；EOS token id 错。这周不开 BlockManager、不开 batching。
+      </div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge">Week 1.5</div>
+    <div>
+      <div class="title">加 BlockManager (v0.2)</div>
+      <div class="desc">
+        <strong>交付物</strong>：<code>block_manager.py</code> + <code>paged_attention.py</code>，main.py 改用 paged KV。<br>
+        <strong>关键步骤</strong>：预分配 N 个 block 的全局 KV pool；写 allocate / append / free；attention forward 时按 block_table gather；用 FlashAttention 2 的 <code>flash_attn_with_kvcache</code> 或自己 PyTorch gather。<br>
+        <strong>验收</strong>：(1) 输出跟 v0.1 完全一致 (greedy 模式下) (2) 显存利用率提升、能塞更长 context (3) 单元测试覆盖 allocate / free / OOM。<br>
+        <strong>常见卡点</strong>：block_table 的 last_block 总是要 partial 写入；free 后没清 ref；attention 输入的 cache_seqlens 算错。
+      </div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge">Week 2</div>
+    <div>
+      <div class="title">加 Scheduler (v0.3)</div>
+      <div class="desc">
+        <strong>交付物</strong>：<code>scheduler.py</code> + <code>engine.py</code>，支持 <code>engine.add_request()</code> 并发塞 32 个请求，全部正确生成。<br>
+        <strong>关键步骤</strong>：Request dataclass；FCFS waiting queue；每 step 算 token_budget；prefill 和 decode 混跑；KV 不够时 preempt (recompute)。<br>
+        <strong>验收</strong>：(1) 32 并发完成，输出跟单独跑一致 (2) throughput 提升至少 5× (3) 没有死锁、没有泄漏 (运行 10 分钟显存稳定)。<br>
+        <strong>常见卡点</strong>：scheduler 和 model 的 token 顺序对不上；preempt 后 KV 没释放干净；request finish 后 block 没回收。<strong>这是整个项目最难的一周</strong>。
+      </div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge">Week 2.5</div>
+    <div>
+      <div class="title">加 HTTP layer (v0.4)</div>
+      <div class="desc">
+        <strong>交付物</strong>：<code>server.py</code>，<code>python -m mini_vllm.server</code> 起服务；用 <code>openai-python</code> SDK 流式调用成功。<br>
+        <strong>关键步骤</strong>：FastAPI + uvicorn；<code>/v1/chat/completions</code> 路由；async queue 桥接 HTTP 和 Engine；SSE format 写对 (<code>data: {...}\n\n</code>)；OpenAI 协议字段 (model, choices, delta) 全覆盖。<br>
+        <strong>验收</strong>：(1) curl 能拿到完整非流式响应 (2) openai SDK <code>stream=True</code> 能逐 chunk 回 (3) 多客户端并发 SDK 调用正常。<br>
+        <strong>常见卡点</strong>：HTTP request lifecycle 跟 engine step 不同步；async generator 没 yield 给 FastAPI；client 提前断连时 engine 没清理。
+      </div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge">Week 3</div>
+    <div>
+      <div class="title">Benchmark + 写 README (v0.5)</div>
+      <div class="desc">
+        <strong>交付物</strong>：<code>benchmarks/</code> 目录脚本 + 数据 + 画图；<code>README.md</code> 包含架构图 + benchmark 表 + 差距分析 + 限制列表；blog 草稿。<br>
+        <strong>关键步骤</strong>：用同 model 同硬件跑 vLLM + mini-vLLM 对照；ShareGPT 5K prompts；记 throughput / TTFT / TPOT / 显存利用率；分析 2-5× 差距来源。<br>
+        <strong>验收</strong>：(1) benchmark 数字能被别人复现 (2) README 里有 3 个差距来源具体讨论 (3) blog 第一稿至少 1500 字。<br>
+        <strong>常见卡点</strong>：benchmark 跑不动—— vLLM 装错版本；mini-vLLM tail latency 巨高没注意；写 README 摊大饼写不完。<strong>这周时间最容易超</strong>，准备多投半周。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <div class="label">⚠ 别在 v0.1 卡住超过 3 天</div>
+  Week 1 卡 3 天 = 整个项目偏移 1 周 = v0.5 交不上 = 没 blog 没 benchmark。
+  这是历届最常见的失败模式。3 天还没出第一个 token，<strong>停下来对照 vLLM <code>examples/offline_inference.py</code></strong>
+  看它怎么 load 怎么 decode。抄结构不丢人，抄完再换成自己的代码。
+</div>
+
+<h2><span class="num">05</span>关键设计决策 · 每个都要算一遍</h2>
+
+<p>开工前把这 6 个决策都<strong>写下来 + 算清楚</strong>，存进 <code>design.md</code>。
+不算清楚就开写，第 2 周一定要回头改架构。</p>
+
+<h3>5.1 block_size 选多少 (= 16)</h3>
+
+<p>vLLM 默认 16。你也选 16，但要能讲清楚为什么。trade-off 的两端：</p>
+
+<table>
+  <thead><tr><th>block_size</th><th>内部碎片</th><th>外部碎片</th><th>block_table 大小</th><th>attention kernel 适配</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>0%</td><td>0%</td><td>巨大 (每 token 一项)</td><td>退化成 unpaged</td></tr>
+    <tr><td>8</td><td>~6%</td><td>低</td><td>大</td><td>tile 对齐有压力</td></tr>
+    <tr><td><strong>16</strong></td><td>~12%</td><td>低</td><td>中</td><td><strong>对齐 32/64 head_dim tile 友好</strong></td></tr>
+    <tr><td>32</td><td>~25%</td><td>中</td><td>小</td><td>kernel 友好</td></tr>
+    <tr><td>128</td><td>~50%</td><td>高</td><td>很小</td><td>退化成几乎 contiguous</td></tr>
+  </tbody>
+</table>
+
+<p>
+  16 是 attention kernel tile size 跟内部碎片的甜点。
+  内部碎片公式：<code>(block_size / 2) / avg_seq_len</code>，假设 avg_seq_len = 256，block 16 浪费 ≈ 3%。
+  没什么动力换。
+</p>
+
+<h3>5.2 KV cache 池多大 (Llama 3.1 8B fp16 on A10 24GB)</h3>
+
+<p>这是<strong>最值得手算一遍</strong>的题。算式拆成几步：</p>
+
+<p><strong>(a) 单 token KV 大小</strong></p>
+
+<p>Llama 3.1 8B 架构：32 layers, 8 KV heads (GQA), head_dim = 128, fp16 (2 bytes)。</p>
+
+<p><code>per_token_kv = 2 (K+V) × 32 × 8 × 128 × 2 = 131072 bytes ≈ 128 KB</code></p>
+
+<p><strong>(b) 单 block 大小 (block_size=16)</strong></p>
+
+<p><code>per_block = 128 KB × 16 = 2 MB</code></p>
+
+<p><strong>(c) 可用 KV 显存</strong></p>
+
+<ul>
+  <li>A10 总显存：24 GB</li>
+  <li>模型权重 fp16：8B × 2 bytes = 16 GB</li>
+  <li>activation 与临时缓冲：~2 GB</li>
+  <li>留给 KV pool：24 - 16 - 2 = <strong>6 GB</strong></li>
+</ul>
+
+<p><strong>(d) block 总数</strong></p>
+
+<p><code>num_blocks = 6 GB / 2 MB = 3072 块</code></p>
+
+<p><strong>(e) 等价并发能力</strong></p>
+
+<ul>
+  <li>每块 16 token = 总 49152 token 容量</li>
+  <li>假设 avg 2048 token/seq → 同时容纳 <strong>~24 个并发请求</strong></li>
+  <li>vLLM 实测约 30-40，因为 GPU memory 估算更激进、prefix 共享、partial block 复用。</li>
+</ul>
+
+<p>把这一坨算完写进 <code>design.md</code>，再写成函数 <code>compute_kv_pool_size(gpu_mem, model)</code>。
+启动时打印这些数字——出问题第一时间就知道是 OOM 边界。</p>
+
+<div class="callout tip">
+  <div class="label">💡 留一点 headroom</div>
+  实际工程里 KV pool 通常留 90% 上限：<code>num_blocks = int(0.9 × 6GB / 2MB)</code>。
+  剩下 10% 给 CUDA workspace、cuBLAS 工作区、CUDA graph buffer。
+  你写 prototype 可以拉到 95%，但跑 benchmark 时压力大会 OOM 别意外。
+</div>
+
+<h3>5.3 token budget · 一步算多少 token</h3>
+
+<p>
+  scheduler 的核心数。设过小 → 每步 batch 小、吞吐低；设过大 → 单 step 太久、tail latency 高。
+  vLLM 默认 2048-8192，依硬件而定。
+</p>
+
+<p>从 prefill throughput 反推合理值：</p>
+
+<ul>
+  <li>A10 上 Llama 8B 朴素 prefill 吞吐 ≈ 5000 tok/s</li>
+  <li>目标 step time ≤ 100ms (TPOT 目标)</li>
+  <li>token_budget ≈ 5000 × 0.1 = <strong>500 tok/step</strong> 是下限</li>
+</ul>
+
+<p>但 decode 是 memory-bound，500 token 的 decode batch 几乎不增加耗时；
+所以实际值定 1024-2048 之间，先用 <strong>2048</strong>，benchmark 后再调。</p>
+
+<h3>5.4 preempt 策略 · recompute vs swap</h3>
+
+<table>
+  <thead><tr><th>维度</th><th>recompute</th><th>swap</th></tr></thead>
+  <tbody>
+    <tr><td>实现复杂度</td><td>低 (free block + 状态回 waiting)</td><td>高 (写 cudaMemcpyAsync + host 池)</td></tr>
+    <tr><td>显存彻底释放</td><td>✅</td><td>❌ (block 还占着 host 内存)</td></tr>
+    <tr><td>抢占代价</td><td>O(seq_len) 重算</td><td>O(seq_len) 拷贝 (PCIe)</td></tr>
+    <tr><td>长上下文成本</td><td>4K prompt 重 prefill 可能 200ms</td><td>4K KV 拷贝 ~50ms (16 GB/s PCIe)</td></tr>
+    <tr><td>v0.5 选什么</td><td><strong>✅ recompute</strong></td><td>留给 v0.6</td></tr>
+  </tbody>
+</table>
+
+<p>选 recompute 的理由：你已经有 prefill path，<strong>只需要清掉 block 让 request 回到 waiting</strong>，
+20 行代码以内能搞定。swap 要写 host 内存池、异步拷贝、跨 step 状态机，单独是一周工作量。</p>
+
+<h3>5.5 attention backend</h3>
+
+<p>三种可选。建议组合：</p>
+
+<table>
+  <thead><tr><th>阶段</th><th>kernel</th><th>原因</th></tr></thead>
+  <tbody>
+    <tr><td>prefill</td><td>FlashAttention 2 <code>flash_attn_func</code></td><td>contiguous 输入，标准用法，~3× 朴素</td></tr>
+    <tr><td>decode (paged)</td><td><code>flash_attn_with_kvcache</code></td><td>原生支持 page_table 输入，省去自己 gather</td></tr>
+    <tr><td>fallback (debug)</td><td>PyTorch <code>F.scaled_dot_product_attention</code></td><td>调试时换上，确认输入对不对</td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>不要</strong>自己写 paged attention CUDA kernel——M4 学的 Triton 知识够你看懂 FlashAttention，
+  不够你写一个生产级 paged kernel。把这个时间留给 scheduler 和 benchmark。
+</p>
+
+<h3>5.6 sampling · temperature + top_p + top_k</h3>
+
+<p>完整 sampling 公式：</p>
+
+<ol>
+  <li>logits → <code>logits / temperature</code> (temperature=0 → greedy)</li>
+  <li>top_k 截断：保留 top k 个 logits，其余设为 -inf</li>
+  <li>softmax → 概率分布</li>
+  <li>top_p (nucleus) 截断：累积概率超过 p 的低概率位置设为 0，重归一</li>
+  <li>multinomial 采样</li>
+</ol>
+
+<p>PyTorch 全部能搞，~20 行。OpenAI 协议默认 temperature=1, top_p=1。
+注意 top_k 在 top_p 之前，符合 HuggingFace transformers 的惯例 (尽管 vLLM 顺序略有差异——cross-check)。</p>
+
+<h2><span class="num">06</span>完整代码骨架 · v0.1 单请求版</h2>
+
+<p>下面这段 ~150 行<strong>是可以直接 copy-paste 跑起来的</strong> (Linux + CUDA + transformers + flash-attn)。
+v0.1 不追求美，追求<em>跑出文本</em>。读完每一节再去敲。</p>
+
+<h3>6.1 imports 与 setup</h3>
+
+<pre><code># mini_vllm/v01.py
+"""mini-vLLM v0.1 — naive single-request decoder.
+No paging, no batching, no HTTP. Just prove the model speaks.
+"""
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+MODEL_NAME = "meta-llama/Llama-3.1-8B-Instruct"
+DEVICE = "cuda"
+DTYPE = torch.float16
+MAX_NEW_TOKENS = 200</code></pre>
+
+<p>注意 <code>torch.float16</code> 在 A10 上跑得通；如果你拿到的卡是 A100/H100，
+推荐 <code>torch.bfloat16</code> 数值更稳。Llama 官方权重对 bf16 更友好。</p>
+
+<h3>6.2 load model · 一次性</h3>
+
+<pre><code>def load_model():
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME,
+        torch_dtype=DTYPE,
+        attn_implementation="flash_attention_2",  # 关键：用 FA2
+        device_map=DEVICE,
+    )
+    model.eval()
+    return tokenizer, model
+
+tokenizer, model = load_model()
+config = model.config
+print(f"Loaded {MODEL_NAME} · {sum(p.numel() for p in model.parameters())/1e9:.1f}B params")</code></pre>
+
+<p>
+  <code>attn_implementation="flash_attention_2"</code> 在 transformers 4.40+ 是支持的；
+  如果你的版本不支持，换成 <code>"sdpa"</code>，慢一点但跑得通。
+</p>
+
+<h3>6.3 prepare prompt · chat template</h3>
+
+<pre><code>def prepare_prompt(user_msg: str) -> torch.Tensor:
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": user_msg},
+    ]
+    # 套 chat template 是关键的一步；缺了 instruct 模型输出会乱
+    prompt_ids = tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,   # 末尾加 assistant 的 prompt header
+        return_tensors="pt",
+    ).to(DEVICE)
+    return prompt_ids  # shape: [1, prompt_len]
+
+prompt_ids = prepare_prompt("用一句话解释 PagedAttention。")
+print("Prompt tokens:", prompt_ids.shape[1])</code></pre>
+
+<div class="callout warn">
+  <div class="label">⚠ 这一步最容易踩</div>
+  <code>add_generation_prompt=True</code> 必须加，否则模型不知道现在轮到它说话。
+  少了它输出会自言自语补 user turn。如果你的输出像 "Human: ... Assistant: ..."
+  这种乱讲，先查这里。
+</div>
+
+<h3>6.4 朴素 KV cache · 最 dumb 版</h3>
+
+<pre><code>def make_kv_cache(max_len: int):
+    """Naive contiguous KV cache: [num_layers, 2, max_len, n_kv_heads, head_dim]
+    Reality check: layout 必须跟 HF Llama forward 接受的 past_key_values 形状匹配。
+    HF 用 list[tuple[K, V)] 而不是单 tensor — 我们包一层。
+    """
+    n_layers = config.num_hidden_layers
+    n_kv_heads = config.num_key_value_heads
+    head_dim = config.hidden_size // config.num_attention_heads
+    # 每层一对 (K, V)，shape [batch=1, n_kv_heads, max_len, head_dim]
+    kv = []
+    for _ in range(n_layers):
+        K = torch.zeros(1, n_kv_heads, max_len, head_dim, dtype=DTYPE, device=DEVICE)
+        V = torch.zeros(1, n_kv_heads, max_len, head_dim, dtype=DTYPE, device=DEVICE)
+        kv.append((K, V))
+    return kv</code></pre>
+
+<p>这个 layout 跟 vLLM 的 paged layout 完全不同。<strong>v0.1 用的是 HF 标准 contiguous，
+v0.2 才换成 paged</strong>。一步一步来。</p>
+
+<h3>6.5 prefill · 一次性塞 prompt</h3>
+
+<pre><code>@torch.no_grad()
+def prefill(prompt_ids):
+    """跑完整 prompt 一次 forward, 返回 logits[最后 token] 和填好的 KV。"""
+    out = model(
+        input_ids=prompt_ids,
+        use_cache=True,
+        return_dict=True,
+    )
+    logits = out.logits[:, -1, :]            # [1, vocab]
+    past_kv = out.past_key_values            # tuple of (K, V)
+    return logits, past_kv
+
+logits, past_kv = prefill(prompt_ids)
+print("Prefill done, KV layers:", len(past_kv), "K shape:", past_kv[0][0].shape)</code></pre>
+
+<p>注意 <code>past_key_values</code> 是 HF 模型 forward 的<strong>第二份返回</strong>。
+v0.1 直接信任 HF 的 layout，自己不动它；v0.2 才会自己管。</p>
+
+<h3>6.6 decode loop · 一次一个 token</h3>
+
+<pre><code>@torch.no_grad()
+def decode_step(token_id: int, past_kv):
+    """单 token forward，返回 next logits 和更新后的 KV。"""
+    input_ids = torch.tensor([[token_id]], device=DEVICE)
+    out = model(
+        input_ids=input_ids,
+        past_key_values=past_kv,
+        use_cache=True,
+        return_dict=True,
+    )
+    return out.logits[:, -1, :], out.past_key_values
+
+def sample_greedy(logits):
+    return int(logits.argmax(dim=-1).item())
+
+def generate(prompt_ids, max_new_tokens=MAX_NEW_TOKENS):
+    logits, past_kv = prefill(prompt_ids)
+    eos = tokenizer.eos_token_id
+    out_tokens = []
+    for _ in range(max_new_tokens):
+        next_tok = sample_greedy(logits)
+        if next_tok == eos:
+            break
+        out_tokens.append(next_tok)
+        # 流式打印
+        print(tokenizer.decode([next_tok], skip_special_tokens=True), end="", flush=True)
+        logits, past_kv = decode_step(next_tok, past_kv)
+    print()
+    return out_tokens
+
+generate(prompt_ids)</code></pre>
+
+<p>跑通这段就是 v0.1 验收通过。<strong>跑通之后再继续</strong>，不要先跳到 v0.2。</p>
+
+<div class="callout check">
+  <div class="label">✓ v0.1 验收清单</div>
+  <ul>
+    <li>能稳定输出连贯文字 (不是乱码或重复)</li>
+    <li>遇到 EOS 能停 (不会无限输出)</li>
+    <li>显存占用稳定在 ~17 GB</li>
+    <li>throughput ~30 tok/s (粗糙没关系)</li>
+  </ul>
+</div>
+
+<h2><span class="num">07</span>完整代码骨架 · v0.2 加 BlockManager</h2>
+
+<p>v0.1 用的是 HF 的 contiguous KV。v0.2 换成 paged。核心改动：
+(a) 自己管 KV pool tensor；(b) 写 BlockManager；(c) 改 forward 路径不再用 <code>past_key_values</code>，而是自己 gather。</p>
+
+<h3>7.1 BlockManager · ~80 行</h3>
+
+<pre><code># mini_vllm/block_manager.py
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Dict, List
+
+BLOCK_SIZE = 16
+
+@dataclass
+class BlockManager:
+    num_blocks: int
+    free_blocks: deque = field(default_factory=deque)
+    block_tables: Dict[str, List[int]] = field(default_factory=dict)
+    seq_lens: Dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.free_blocks = deque(range(self.num_blocks))
+
+    def can_allocate(self, n_tokens: int) -> bool:
+        n_blocks = (n_tokens + BLOCK_SIZE - 1) // BLOCK_SIZE
+        return len(self.free_blocks) &gt;= n_blocks
+
+    def allocate(self, req_id: str, n_tokens: int) -> List[int]:
+        """初次分配 (prefill 时调一次)"""
+        n_blocks = (n_tokens + BLOCK_SIZE - 1) // BLOCK_SIZE
+        if len(self.free_blocks) &lt; n_blocks:
+            raise RuntimeError(f"OOM: need {n_blocks} blocks, have {len(self.free_blocks)}")
+        blocks = [self.free_blocks.popleft() for _ in range(n_blocks)]
+        self.block_tables[req_id] = blocks
+        self.seq_lens[req_id] = n_tokens
+        return blocks
+
+    def append_token(self, req_id: str) -> int:
+        """decode 时每生成一个 token 调一次; 必要时新增一个 block."""
+        seq_len = self.seq_lens[req_id]
+        new_len = seq_len + 1
+        # 当前 block 还没满 → 不用新分配
+        if new_len % BLOCK_SIZE != 1 or new_len == 1:
+            self.seq_lens[req_id] = new_len
+            return self.block_tables[req_id][-1]
+        # 需要新 block
+        if not self.free_blocks:
+            raise RuntimeError("OOM during append")
+        new_block = self.free_blocks.popleft()
+        self.block_tables[req_id].append(new_block)
+        self.seq_lens[req_id] = new_len
+        return new_block
+
+    def free(self, req_id: str):
+        for b in self.block_tables.pop(req_id, []):
+            self.free_blocks.append(b)
+        self.seq_lens.pop(req_id, None)
+
+    def get_block_table(self, req_id: str) -> List[int]:
+        return self.block_tables[req_id]
+
+    def stats(self):
+        return {
+            "free": len(self.free_blocks),
+            "used": self.num_blocks - len(self.free_blocks),
+            "util": 1 - len(self.free_blocks) / self.num_blocks,
+        }</code></pre>
+
+<h3>7.2 paged KV pool · 全局一坨大 tensor</h3>
+
+<pre><code># mini_vllm/kv_pool.py
+import torch
+
+class PagedKVCache:
+    def __init__(self, num_blocks, num_layers, n_kv_heads, head_dim, dtype, device):
+        # Layout: [num_layers, 2 (K/V), num_blocks, BLOCK_SIZE, n_kv_heads, head_dim]
+        # 这是 FlashAttention 2 的 page_table API 友好的 layout
+        self.cache = torch.zeros(
+            num_layers, 2, num_blocks, BLOCK_SIZE, n_kv_heads, head_dim,
+            dtype=dtype, device=device,
+        )
+
+    def get_k(self, layer):
+        return self.cache[layer, 0]  # [num_blocks, BLOCK_SIZE, n_kv_heads, head_dim]
+
+    def get_v(self, layer):
+        return self.cache[layer, 1]</code></pre>
+
+<h3>7.3 paged attention 调用</h3>
+
+<pre><code># mini_vllm/paged_attention.py
+# 调 FlashAttention 2 的 with_kvcache 接口 —— 它原生支持 page_table。
+# 注意：这是真实 API；具体签名请对照你装的 flash-attn 版本。
+from flash_attn import flash_attn_with_kvcache
+
+def paged_decode_attention(
+    q,                  # [1, 1, n_q_heads, head_dim]  当前 token 的 query
+    k_cache,            # [num_blocks, BLOCK_SIZE, n_kv_heads, head_dim]
+    v_cache,            # 同上
+    k_new, v_new,       # [1, 1, n_kv_heads, head_dim]  当前 token 的 K/V (写入用)
+    block_table,        # [1, max_blocks]  本 batch 的 block 索引
+    cache_seqlens,      # [1]              本 batch 已写入的 token 数
+):
+    """FA2 自动:
+       1. 把 k_new/v_new 写入 k_cache/v_cache 的 cache_seqlens 位置
+       2. 用 block_table 做 paged gather
+       3. 算 attention 输出
+    """
+    out = flash_attn_with_kvcache(
+        q=q,
+        k_cache=k_cache,
+        v_cache=v_cache,
+        k=k_new,
+        v=v_new,
+        block_table=block_table,
+        cache_seqlens=cache_seqlens,
+        causal=True,
+    )
+    return out  # [1, 1, n_q_heads, head_dim]</code></pre>
+
+<div class="callout tip">
+  <div class="label">💡 不强求 FA2</div>
+  如果 <code>flash_attn_with_kvcache</code> 装不上，写一个 PyTorch fallback：
+  <ol>
+    <li>按 block_table gather K/V 到 contiguous tensor</li>
+    <li><code>F.scaled_dot_product_attention(q, K, V, is_causal=True)</code></li>
+  </ol>
+  慢 5-10×，但能跑通逻辑。v0.5 benchmark 再换 FA2。
+</div>
+
+<h3>7.4 改造 Llama forward · 替换 attention 层</h3>
+
+<p>HF Llama 自带 attention 层不支持 page_table。两种选项：</p>
+
+<ul>
+  <li><strong>(简)</strong> Monkey-patch <code>LlamaAttention.forward</code>，把它替换成调上面的 <code>paged_decode_attention</code>。</li>
+  <li><strong>(更干净)</strong> 复制 modeling_llama.py 到本地，改 attention 层。</li>
+</ul>
+
+<p>v0.2 推荐 monkey-patch，等 v0.3 scheduler 稳定后再 refactor。
+具体怎么 patch 不在这一节展开——这是 transformers 内部 API，
+建议<strong>读 vLLM 的 <code>vllm/model_executor/models/llama.py</code></strong>看它如何把 attention 接到自己的 paged kernel。</p>
+
+<h2><span class="num">08</span>完整代码骨架 · v0.3 加 Scheduler</h2>
+
+<p>v0.3 是<strong>整个项目最难的一步</strong>。这周不要碰 HTTP、不要碰 sampling 复杂逻辑，
+全力打磨调度器。</p>
+
+<h3>8.1 Request dataclass</h3>
+
+<pre><code># mini_vllm/request.py
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Optional
+import uuid
+
+class RequestState(Enum):
+    WAITING = "waiting"          # 还没 prefill
+    RUNNING = "running"          # 已经在 batch 里 decode
+    PREEMPTED = "preempted"      # 被抢占，回到 waiting
+    FINISHED = "finished"
+
+@dataclass
+class SamplingParams:
+    temperature: float = 1.0
+    top_p: float = 1.0
+    top_k: int = -1              # -1 表示不截断
+    max_tokens: int = 256
+    stop_token_ids: List[int] = field(default_factory=list)
+
+@dataclass
+class Request:
+    request_id: str
+    prompt_token_ids: List[int]
+    sampling_params: SamplingParams
+    state: RequestState = RequestState.WAITING
+    output_token_ids: List[int] = field(default_factory=list)
+    # KV cache 长度 = prompt + output 已 commit 到 cache 的 token 数
+    num_computed_tokens: int = 0
+    arrival_time: float = 0.0
+
+    @property
+    def total_len(self) -&gt; int:
+        return len(self.prompt_token_ids) + len(self.output_token_ids)
+
+    @property
+    def is_prefill(self) -&gt; bool:
+        return self.num_computed_tokens &lt; len(self.prompt_token_ids)
+
+    @staticmethod
+    def new(prompt_ids: List[int], params: SamplingParams) -&gt; "Request":
+        return Request(
+            request_id=str(uuid.uuid4()),
+            prompt_token_ids=prompt_ids,
+            sampling_params=params,
+        )</code></pre>
+
+<h3>8.2 SchedulerOutput · 一次 step 的计划</h3>
+
+<pre><code># mini_vllm/scheduler.py
+from dataclasses import dataclass, field
+from collections import deque
+from typing import List, Dict
+from .request import Request, RequestState
+
+@dataclass
+class SchedulerOutput:
+    # 本 step 要跑的 requests
+    scheduled_reqs: List[Request] = field(default_factory=list)
+    # 每个请求本步要算的 token 数（prefill 时可能 chunked）
+    num_tokens_per_req: Dict[str, int] = field(default_factory=dict)
+    # 本步抢占了谁
+    preempted_req_ids: List[str] = field(default_factory=list)
+    # 本步完成了谁 (EOS / max_tokens)
+    finished_req_ids: List[str] = field(default_factory=list)</code></pre>
+
+<h3>8.3 Scheduler 主体 · ~120 行</h3>
+
+<pre><code>class Scheduler:
+    def __init__(self, block_manager, token_budget: int = 2048, max_running: int = 64):
+        self.block_manager = block_manager
+        self.token_budget = token_budget
+        self.max_running = max_running
+        self.waiting: deque[Request] = deque()
+        self.running: List[Request] = []
+
+    def add_request(self, req: Request):
+        self.waiting.append(req)
+
+    def schedule(self) -&gt; SchedulerOutput:
+        out = SchedulerOutput()
+        budget_remaining = self.token_budget
+
+        # ----- 阶段 1: running 队列继续 decode -----
+        new_running = []
+        for req in self.running:
+            if budget_remaining &lt; 1:
+                break
+            # decode 一定要先确保 KV 有空间 (需要 append 一个 token)
+            if not self.block_manager.can_allocate(1):
+                # 显存压力 → 抢占队尾
+                victim = self.running[-1] if self.running[-1] is not req else None
+                if victim is not None:
+                    self._preempt(victim)
+                    out.preempted_req_ids.append(victim.request_id)
+                    new_running = [r for r in new_running if r.request_id != victim.request_id]
+                else:
+                    break
+            out.scheduled_reqs.append(req)
+            out.num_tokens_per_req[req.request_id] = 1
+            budget_remaining -= 1
+            new_running.append(req)
+        self.running = new_running
+
+        # ----- 阶段 2: waiting 队列入场 (prefill) -----
+        while self.waiting and budget_remaining &gt; 0 and len(self.running) &lt; self.max_running:
+            req = self.waiting[0]
+            need = len(req.prompt_token_ids) - req.num_computed_tokens
+            # chunked prefill: 一次最多塞 budget_remaining 个 token
+            chunk = min(need, budget_remaining)
+            if not self.block_manager.can_allocate(chunk):
+                break
+            if req.state == RequestState.WAITING:
+                # 第一次 prefill，分配 block
+                self.block_manager.allocate(req.request_id, chunk)
+                req.state = RequestState.RUNNING
+                self.running.append(req)
+            self.waiting.popleft()
+            out.scheduled_reqs.append(req)
+            out.num_tokens_per_req[req.request_id] = chunk
+            budget_remaining -= chunk
+
+        return out
+
+    def _preempt(self, req: Request):
+        """recompute preempt: 丢 KV，回 waiting，重置 num_computed_tokens."""
+        self.block_manager.free(req.request_id)
+        req.state = RequestState.PREEMPTED
+        req.num_computed_tokens = 0
+        # 已生成的 output tokens 保留 (假设它们值得保留)
+        # 简化：直接当 prompt 部分重 prefill
+        self.waiting.appendleft(req)
+
+    def mark_finished(self, req: Request):
+        req.state = RequestState.FINISHED
+        self.block_manager.free(req.request_id)
+        self.running = [r for r in self.running if r.request_id != req.request_id]</code></pre>
+
+<div class="callout warn">
+  <div class="label">⚠ 真实的 scheduler 比这复杂得多</div>
+  上面这版省略了：(a) prefill 和 decode 的 token 在同一个 forward 里的 attention mask 拼接；
+  (b) 多种 sampling param 的 batch；(c) 优先级、admission control。
+  v0.3 这一版能跑通就够；想看完整的看 <a href="04-scheduler.html">M3 scheduler</a>对照 vLLM 源码。
+</div>
+
+<h3>8.4 Engine 主循环 · 串起来</h3>
+
+<pre><code># mini_vllm/engine.py
+from .scheduler import Scheduler
+from .block_manager import BlockManager
+from .request import Request, SamplingParams, RequestState
+from .runner import ModelRunner
+
+class Engine:
+    def __init__(self, model_name: str, num_blocks: int):
+        self.runner = ModelRunner(model_name, num_blocks)
+        self.block_manager = BlockManager(num_blocks=num_blocks)
+        self.scheduler = Scheduler(self.block_manager)
+        self.tokenizer = self.runner.tokenizer
+
+    def add_request(self, prompt: str, params: SamplingParams) -&gt; str:
+        # 套 chat template
+        prompt_ids = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            add_generation_prompt=True,
+        )
+        req = Request.new(prompt_ids, params)
+        self.scheduler.add_request(req)
+        return req.request_id
+
+    def step(self) -&gt; List[tuple]:
+        """跑一步, 返回 [(req_id, new_token_id, finished_bool), ...]"""
+        sched_out = self.scheduler.schedule()
+        if not sched_out.scheduled_reqs:
+            return []
+        # 执行 forward
+        logits_per_req = self.runner.execute(sched_out)
+        # 采样
+        outputs = []
+        for req in sched_out.scheduled_reqs:
+            if req.is_prefill:
+                # prefill chunk 没结束就不采样
+                req.num_computed_tokens += sched_out.num_tokens_per_req[req.request_id]
+                if req.num_computed_tokens &lt; len(req.prompt_token_ids):
+                    continue
+            new_tok = self.runner.sample(logits_per_req[req.request_id], req.sampling_params)
+            req.output_token_ids.append(new_tok)
+            self.block_manager.append_token(req.request_id)
+            finished = (
+                new_tok == self.tokenizer.eos_token_id
+                or len(req.output_token_ids) &gt;= req.sampling_params.max_tokens
+            )
+            if finished:
+                self.scheduler.mark_finished(req)
+            outputs.append((req.request_id, new_tok, finished))
+        return outputs</code></pre>
+
+<h2><span class="num">09</span>完整代码骨架 · v0.4 加 FastAPI</h2>
+
+<p>v0.4 把 Engine 套上 OpenAI 协议。重点是<strong>异步</strong>——HTTP request 等 streaming 时，
+engine 主循环还在跑 step；两边用 asyncio queue 桥接。</p>
+
+<h3>9.1 server 主体</h3>
+
+<pre><code># mini_vllm/server.py
+import asyncio
+import json
+import time
+import uuid
+from typing import AsyncIterator
+from fastapi import FastAPI, Request as HTTPRequest
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from .engine import Engine
+from .request import SamplingParams
+
+app = FastAPI()
+engine: Engine = None  # 启动时填
+# req_id -> asyncio.Queue 用来推 token 给等待中的 HTTP 处理函数
+output_queues: dict[str, asyncio.Queue] = {}
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatCompletionRequest(BaseModel):
+    model: str
+    messages: list[ChatMessage]
+    temperature: float = 1.0
+    top_p: float = 1.0
+    max_tokens: int = 256
+    stream: bool = False
+
+@app.on_event("startup")
+async def startup():
+    global engine
+    engine = Engine("meta-llama/Llama-3.1-8B-Instruct", num_blocks=3000)
+    asyncio.create_task(engine_loop())
+
+async def engine_loop():
+    """背景任务：不停 step, 把 token 推到对应 req 的 queue"""
+    while True:
+        outputs = engine.step()
+        for req_id, tok, finished in outputs:
+            q = output_queues.get(req_id)
+            if q is not None:
+                await q.put((tok, finished))
+        if not outputs:
+            await asyncio.sleep(0.001)  # 让出 event loop
+
+@app.post("/v1/chat/completions")
+async def chat_completions(req: ChatCompletionRequest):
+    user_msg = req.messages[-1].content  # 简化
+    params = SamplingParams(
+        temperature=req.temperature,
+        top_p=req.top_p,
+        max_tokens=req.max_tokens,
+    )
+    req_id = engine.add_request(user_msg, params)
+    output_queues[req_id] = asyncio.Queue()
+
+    if req.stream:
+        return StreamingResponse(
+            stream_sse(req_id, req.model),
+            media_type="text/event-stream",
+        )
+    # 非流式：等到 finished
+    tokens = []
+    while True:
+        tok, finished = await output_queues[req_id].get()
+        tokens.append(tok)
+        if finished:
+            break
+    output_queues.pop(req_id, None)
+    text = engine.tokenizer.decode(tokens, skip_special_tokens=True)
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": req.model,
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+    }
+
+async def stream_sse(req_id: str, model_name: str) -&gt; AsyncIterator[str]:
+    cmpl_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    try:
+        while True:
+            tok, finished = await output_queues[req_id].get()
+            text = engine.tokenizer.decode([tok], skip_special_tokens=True)
+            chunk = {
+                "id": cmpl_id,
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": model_name,
+                "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": "stop" if finished else None}],
+            }
+            yield f"data: {json.dumps(chunk)}\n\n"
+            if finished:
+                yield "data: [DONE]\n\n"
+                break
+    finally:
+        output_queues.pop(req_id, None)</code></pre>
+
+<p>跑起来：</p>
+
+<pre><code>uvicorn mini_vllm.server:app --host 0.0.0.0 --port 8000</code></pre>
+
+<p>验证：</p>
+
+<pre><code>import openai
+client = openai.OpenAI(base_url="http://localhost:8000/v1", api_key="not-needed")
+stream = client.chat.completions.create(
+    model="mini-vllm",
+    messages=[{"role": "user", "content": "为什么 KV cache 要分页？"}],
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="", flush=True)</code></pre>
+
+<h2><span class="num">10</span>"对账"方法论 · 跟 vLLM 对照</h2>
+
+<p>这是这个月最有价值的副产物：<strong>每写完一个模块，立刻打开 vLLM 同位置的代码对照</strong>。
+盲目读 vLLM 学到的是知识；写完自己版本再对账，学到的是<em>设计 trade-off</em>。</p>
+
+<h3>对账清单 · 文件级别</h3>
+
+<table>
+  <thead><tr><th>你的</th><th>vLLM 对应</th><th>重点对照</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>block_manager.py</code></td>
+      <td><code>vllm/v1/core/block_pool.py</code><br><code>vllm/v1/core/kv_cache_manager.py</code></td>
+      <td>是否有 ref_count? prefix sharing? hash-based dedup?</td>
+    </tr>
+    <tr>
+      <td><code>scheduler.py</code></td>
+      <td><code>vllm/v1/core/sched/scheduler.py</code></td>
+      <td>chunked prefill? finish_token_ids 处理? admission control?</td>
+    </tr>
+    <tr>
+      <td><code>engine.py</code></td>
+      <td><code>vllm/v1/engine/core.py</code><br><code>vllm/v1/engine/llm_engine.py</code></td>
+      <td>多 worker 进程模型? IPC?</td>
+    </tr>
+    <tr>
+      <td><code>runner.py</code></td>
+      <td><code>vllm/v1/worker/gpu_model_runner.py</code></td>
+      <td>CUDA graph capture? prepare_inputs 优化?</td>
+    </tr>
+    <tr>
+      <td><code>server.py</code></td>
+      <td><code>vllm/entrypoints/openai/serving_chat.py</code></td>
+      <td>tool calls? guided decoding? logprobs?</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>你会在对账中发现的典型差异</h3>
+
+<ul>
+  <li><strong>vLLM 的 BlockManager 有 ref_count</strong>，你的没有。
+    它是为 prefix caching 准备的——多个序列共享同一 prompt 时，前缀 block 引用计数 &gt; 1。
+    你简化掉是对的，但要在 README 里写"v0.5 不支持 prefix sharing"。</li>
+  <li><strong>vLLM 的 schedule() 有 ~600 行</strong>，你的 ~100 行。
+    多在：chunked prefill 边界、多种 sampling param 的分组、speculative decoding hook、metrics。
+    每一段都是一个 PR 解决一个真实问题——读 PR 记录比读最终代码更长见识。</li>
+  <li><strong>vLLM 用多进程</strong> (engine + 多个 worker)。
+    你单进程跑没问题，但 v0.5 benchmark 时会发现 GIL 影响 tokenization 吞吐。
+    这是 v0.6 优化方向之一，先记在 NOTES.md。</li>
+  <li><strong>vLLM 的 prepare_inputs 用 Triton</strong>。
+    把 SchedulerOutput 翻译成 GPU tensor 这一步，vLLM 写了 Triton kernel 加速。
+    你用 Python + torch ops，慢 10×——这是单请求 latency 差距的来源之一。</li>
+</ul>
+
+<p>每一条都写进 <code>NOTES.md</code>。<strong>这份 NOTES.md 就是你 blog 第二篇的草稿</strong>。</p>
+
+<h2><span class="num">11</span>Benchmark · 跟 vLLM 跑同样测试</h2>
+
+<p>这是 v0.5 的硬通货。<strong>没有 benchmark，整个项目少 80% 价值</strong>。</p>
+
+<h3>11.1 benchmark protocol</h3>
+
+<ul>
+  <li><strong>硬件</strong>：单卡 A10 (24GB) 或 A100 (40GB)。文档里写清楚。</li>
+  <li><strong>模型</strong>：Llama 3.1 8B Instruct, fp16。</li>
+  <li><strong>工作负载</strong>：ShareGPT 数据集 1000 prompts (vLLM benchmark 标配)。
+    或者 azure-llm-trace 真实生产 trace。</li>
+  <li><strong>并发设置</strong>：1, 8, 16, 32, 64 并发分别跑。</li>
+  <li><strong>指标</strong>：
+    <ul>
+      <li>Throughput (tokens/sec, requests/sec)</li>
+      <li>TTFT (Time To First Token, p50/p95/p99)</li>
+      <li>TPOT (Time Per Output Token, p50/p95)</li>
+      <li>显存峰值占用</li>
+    </ul>
+  </li>
+  <li><strong>warmup</strong>：跑 50 个 request warmup 再开始 metric 记录。</li>
+  <li><strong>重复</strong>：每个配置至少 3 次取中位数。</li>
+</ul>
+
+<h3>11.2 预期数字 · 跟 vLLM 对比</h3>
+
+<table>
+  <thead><tr><th>指标</th><th>mini-vLLM (你)</th><th>vLLM 0.6.x</th><th>差距倍数</th><th>主要差距来源</th></tr></thead>
+  <tbody>
+    <tr><td>单请求 throughput</td><td>~50-100 tok/s</td><td>~120-180 tok/s</td><td>1.5-2×</td><td>没 CUDA graph / Python overhead</td></tr>
+    <tr><td>32 并发 throughput</td><td>~500-1000 tok/s</td><td>~2000-3500 tok/s</td><td>3-4×</td><td>kernel 优化 / Triton prepare_inputs / 多 worker</td></tr>
+    <tr><td>TTFT p50 (1K prompt)</td><td>~150 ms</td><td>~80 ms</td><td>1.8×</td><td>prefill kernel / chunked prefill 调度</td></tr>
+    <tr><td>TPOT p95</td><td>~30-50 ms</td><td>~15-25 ms</td><td>2×</td><td>decode kernel / batch 组织</td></tr>
+    <tr><td>显存利用率</td><td>~85%</td><td>~92%</td><td>—</td><td>没 prefix caching / 没 swap</td></tr>
+  </tbody>
+</table>
+
+<h3>11.3 差距来源 · 4 个真正可分析的</h3>
+
+<ol>
+  <li><strong>CUDA graph 缺失 (~30% 损失)</strong>。
+    vLLM 默认在 decode 阶段用 CUDA graph capture，把 launch overhead 从 ~50us/op 压到 ~5us。
+    decode 一步要 launch 几十个 kernel，graph capture 直接省一半。
+    <em>mitigation</em>：v0.6 加 <code>torch.cuda.graph</code>。</li>
+  <li><strong>Triton prepare_inputs (~20% 损失)</strong>。
+    把 SchedulerOutput → flat GPU tensors 这一步，Python 跑 ~5ms/step。
+    vLLM 写了 Triton kernel，~0.5ms/step。32 并发时这是大头。
+    <em>mitigation</em>：先 profile 确认是瓶颈，再决定是否值得写。</li>
+  <li><strong>Kernel 选择差异 (~15% 损失)</strong>。
+    vLLM 在 H100 上用 FlashAttention 3, 在 A100/A10 上用 FA2 但有 fused QKV projection；
+    你只用了 stock FA2。
+    <em>mitigation</em>：v0.6 适配 FA3 + 自己写 fused projection。</li>
+  <li><strong>多 worker GIL 影响 (~10% 损失)</strong>。
+    tokenization 和 detokenization 在主线程跑会跟 engine step 抢 GIL。
+    vLLM 把 tokenizer worker 独立进程。
+    <em>mitigation</em>：v0.6 加 tokenizer subprocess。</li>
+</ol>
+
+<p>把上面 4 点写进 README 的 "Performance Gap Analysis" 一节。<strong>能讲清楚 4 个差距 = 你比 90% 候选人懂 serving</strong>。</p>
+
+<div class="callout tip">
+  <div class="label">💡 差距是优势，不是缺点</div>
+  "我比 vLLM 慢 3×" 不是 disclaimer，是 framework。
+  慢 3× + 知道为什么慢 + 知道怎么补 = senior infra engineer。
+  慢 3× + 不知道为什么 = junior。差别在分析，不在性能本身。
+</div>
+
+<h2><span class="num">12</span>README 模板</h2>
+
+<p>README 是你的项目<strong>对外的脸</strong>。下面这份模板照着写，能在 1-2 小时内出第一版。</p>
+
+<pre><code># mini-vLLM
+
+A 500-line educational LLM serving engine, built from scratch in 3 weeks.
+Implements paged KV cache and continuous batching à la vLLM.
+
+**Not a production engine.** Built to demonstrate I can build one.
+
+![demo gif](docs/demo.gif)
+
+## Why this exists
+
+vLLM is ~50K lines and hard to learn from. This is a minimal implementation
+of the same three core ideas — PagedAttention, continuous batching, OpenAI API —
+in &lt;500 lines, designed to be read in one sitting.
+
+## Architecture
+
+[insert architecture SVG/PNG here, same as §03 in tutorial]
+
+- `block_manager.py` — fixed-size KV blocks, allocate/free/append
+- `scheduler.py` — FCFS continuous batching, recompute preempt
+- `runner.py` — model forward + sampling
+- `engine.py` — main loop wiring above
+- `server.py` — OpenAI-compatible FastAPI server
+
+## Quickstart
+
+```bash
+pip install -r requirements.txt
+python -m mini_vllm.server  # localhost:8000
+```
+
+```python
+import openai
+client = openai.OpenAI(base_url="http://localhost:8000/v1", api_key="x")
+stream = client.chat.completions.create(...)
+```
+
+## Benchmarks (A10 24GB, Llama 3.1 8B, ShareGPT 1K)
+
+| Metric | mini-vLLM | vLLM 0.6 | Gap |
+|---|---|---|---|
+| Throughput @ 32 concurrent | 900 tok/s | 3000 tok/s | 3.3× |
+| TTFT p50 (1K prompt) | 150 ms | 80 ms | 1.9× |
+| TPOT p95 | 35 ms | 20 ms | 1.8× |
+
+## Performance gap analysis
+
+1. **No CUDA graph (~30%)** — see [issue #1]
+2. **Python prepare_inputs (~20%)** — see [issue #2]
+3. **Stock FA2, no fused QKV (~15%)** — see [issue #3]
+4. **Single-process tokenizer (~10%)** — see [issue #4]
+
+## Design decisions
+
+See [`design.md`](./design.md) — block_size choice, KV pool sizing,
+token budget, preempt policy, attention backend.
+
+## Limitations (intentional)
+
+- No multi-GPU / TP / PP
+- No quantization (fp16 only)
+- No LoRA
+- No prefix caching
+- No speculative decoding
+- Llama 3.1 8B only
+
+## What I learned
+
+See blog post: ["I wrote a mini-vLLM in 3 weeks"](https://...)
+
+## Credits
+
+Inspired by [vLLM](https://github.com/vllm-project/vllm).
+Built as part of [Infra Learning Path](https://weishuz.com/infra-learning-path/).</code></pre>
+
+<p>填空就是了。重点是<strong>不要藏短板</strong>——把不做的写清楚，反而让做了的部分显得有重量。</p>
+
+<h2><span class="num">13</span>blog 第 2 篇 · 写作模板</h2>
+
+<p>blog 是 README 之外的<strong>叙事</strong>。READE 答"是什么"，blog 答"为什么 + 怎么做的 + 你能学到什么"。</p>
+
+<h3>结构 · 5 个段落</h3>
+
+<ol>
+  <li><strong>钩子 (200 字)</strong>。
+    举例："我花了 3 周写一个 500 行 Python 的 LLM serving engine，比 vLLM 慢 3 倍，但学到了 10 倍。下面是 3 个发现。"
+    <em>钩子的目的是让人想读下去，不是让人佩服你</em>。<br>
+    技巧：开头给一个具体数字 + 一个反直觉 claim。</li>
+  <li><strong>对照 (600 字)</strong>。
+    vLLM 在内存 / 调度 / kernel 三层各做了什么，你做了什么。
+    画一张表（你的 vs vLLM）。<em>这一节让读者知道你不是 vibes，而是真懂</em>。<br>
+    技巧：写实际的代码 diff 或对比代码片段——比文字描述强 5×。</li>
+  <li><strong>差距分析 (800 字)</strong>。
+    把 §11.3 的 4 个差距源展开成 4 段，每段：现象 → profiler 看到的图 → 原因 → 怎么补。
+    <em>这一节是全文 hardest signal</em>，能写完 = 你真做过。<br>
+    技巧：贴 nsight / py-spy / nvprof 截图，比文字可信度高 10×。</li>
+  <li><strong>意外发现 (500 字)</strong>。
+    写的过程中发现自己 M2-M4 漏掉的至少 3 个细节。
+    举例："我以为 vLLM 的 schedule() 一直返回 100% 利用率的 batch，写完才发现它经常吐 partial batch 来避免长尾。"
+    <em>这一节最 humble，但最让面试官印象深</em>。<br>
+    技巧：用第一人称 + 具体 commit hash，不用"我们"或"大家都知道"。</li>
+  <li><strong>结论 (200 字)</strong>。
+    "用到再学"在这个项目里的实操：哪些事是<em>必须用到才学得会</em>的，哪些事是<em>读论文就够</em>的。
+    <em>这一节给读者带走点东西，决定他/她会不会分享这篇</em>。<br>
+    技巧：结尾给读者一个具体下一步（"如果你想自己写一个，从这个 repo fork 开始"）。</li>
+</ol>
+
+<div class="callout tip">
+  <div class="label">💡 投递 timing</div>
+  blog 上线后立刻发：
+  <ul>
+    <li>Twitter / X：tag <code>@vllm_project</code>, <code>@code_star</code>, <code>@lqiao</code> (Together CEO)</li>
+    <li>r/LocalLLaMA reddit (周日晚 PT 上 hot)</li>
+    <li>vLLM Slack #showcase channel</li>
+    <li>Hacker News (周二早 PT 最稳)</li>
+  </ul>
+  reach 比你想的高——这类"我重新发明轮子"内容是 infra 圈最爱的格式。
+  你的下一个工作面试很可能就来自这篇。
+</div>
+
+<h2><span class="num">14</span>常见卡点 · 急救包</h2>
+
+<p>下面是历届做这个项目最常踩的 6 个坑，按出现频率排序。卡住时先查这里。</p>
+
+<h3>14.1 "模型 load 不了 / 巨慢"</h3>
+
+<p><strong>症状</strong>：<code>from_pretrained</code> 跑 10 分钟还没出 progress bar；或报 401。</p>
+
+<p><strong>诊断</strong>：</p>
+
+<ul>
+  <li>Llama 3.1 模型需要 HF 申请 access。第一次 load 要 <code>huggingface-cli login</code>。</li>
+  <li>HF 镜像问题：用 <code>HF_ENDPOINT=https://hf-mirror.com</code> 加速。</li>
+  <li>磁盘空间：8B fp16 = 16GB 下载。<code>df -h ~/.cache/huggingface</code> 看看。</li>
+  <li>先<strong>本地 cache 验证</strong>：<code>AutoTokenizer.from_pretrained(MODEL_NAME)</code> 单独跑，确认 tokenize 文件下完了。</li>
+</ul>
+
+<h3>14.2 "fp16 输出乱码"</h3>
+
+<p><strong>症状</strong>：模型能跑，但输出全是 <code>!!!!!</code> 或 <code>### ### ###</code> 或乱码 token。</p>
+
+<p><strong>诊断顺序</strong>：</p>
+
+<ol>
+  <li><strong>chat template 套了吗？</strong> 90% 的乱码是这个。打印 <code>tokenizer.decode(prompt_ids[0])</code> 看 prompt 是不是带了 <code>&lt;|begin_of_text|&gt;</code>、<code>&lt;|start_header_id|&gt;</code> 这些标记。</li>
+  <li><strong>试 bf16</strong>。Llama 官方权重对 bf16 数值更稳。如果你在 A10 上 (支持 bf16) 直接换。</li>
+  <li><strong>attention_mask 对吗？</strong> prefill 时要 <code>[[1, 1, 1, ..., 1]]</code>，decode 时要 <code>[[1, ..., 1]]</code> 长度 = 累积已 cache + 当前 token。</li>
+  <li><strong>position_ids 对吗？</strong> decode 时是 <code>[[cur_pos]]</code> 不是 <code>[[0]]</code>。</li>
+</ol>
+
+<h3>14.3 "KV cache 越来越慢"</h3>
+
+<p><strong>症状</strong>：第 10 个 token 100ms, 第 100 个 token 500ms, 第 500 个 token 几秒。</p>
+
+<p><strong>诊断</strong>：99% 是你在每 step 做 <code>torch.cat</code> 拼 KV，O(n²) 复杂度。</p>
+
+<p><strong>修法</strong>：预分配最大长度的 KV tensor，每 step <strong>原地写一行</strong> (<code>kv[:, :, cur_pos:cur_pos+1, :] = new_kv</code>)。
+这是 v0.1 → v0.2 升级的核心动机：paged 天然是预分配。</p>
+
+<h3>14.4 "throughput 不增长"</h3>
+
+<p><strong>症状</strong>：v0.3 加了 scheduler，benchmark 32 并发跟单请求一样慢。</p>
+
+<p><strong>诊断</strong>：</p>
+
+<ul>
+  <li>看 <code>sched_out.scheduled_reqs</code> 长度——是不是真的每 step 都 batch &gt; 1?</li>
+  <li>看 token_budget 是不是太小，把请求都拒了？</li>
+  <li>看 ModelRunner 的 forward——你是不是<strong>一次只跑一个 req</strong>，而不是 stack 起来 batch forward？</li>
+</ul>
+
+<p>最常见错误：scheduler 选了 16 个 req，但 runner 用了 <code>for req in reqs: forward(req)</code>。
+正确做法是把 16 个 req 的 input <code>torch.cat</code> 成一个 batch forward。</p>
+
+<h3>14.5 "OOM 在第二个请求"</h3>
+
+<p><strong>症状</strong>：第一个 req 跑完，第二个 req 来了立刻 OOM。</p>
+
+<p><strong>诊断</strong>：KV 没释放。检查：</p>
+
+<ul>
+  <li><code>scheduler.mark_finished(req)</code> 有没有调 <code>block_manager.free(req.request_id)</code>?</li>
+  <li><code>block_manager.free</code> 有没有把 block 放回 <code>free_blocks</code>?</li>
+  <li>有没有可能两个 req 拿到了同一个 block_id (race condition)?</li>
+</ul>
+
+<p>调试技巧：每 step 末尾打印 <code>block_manager.stats()</code>。util 应该波动而不是单调上升。</p>
+
+<h3>14.6 "FastAPI streaming 客户端断了 engine 还在跑"</h3>
+
+<p><strong>症状</strong>：用户 curl ctrl-C，engine 继续生成到 max_tokens，浪费算力。</p>
+
+<p><strong>修法</strong>：在 <code>stream_sse</code> 的 finally 里 abort engine 的 request:</p>
+
+<pre><code>try:
+    ...
+finally:
+    output_queues.pop(req_id, None)
+    engine.abort_request(req_id)  # 你需要在 Engine 实现这个</code></pre>
+
+<p><code>abort_request</code> 内部：找到对应 Request，标记 FINISHED，让 scheduler 下次 step 时 free 掉。</p>
+
+<h2><span class="num">15</span>后续延伸 · v0.6 及以后</h2>
+
+<p>v0.5 交付后，下面这些方向哪个对你的<strong>下一份工作</strong>价值最高？挑 1-2 个继续做。</p>
+
+<table>
+  <thead><tr><th>方向</th><th>难度</th><th>预计时间</th><th>简历价值</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>多 GPU TP</strong></td>
+      <td>★★★★</td>
+      <td>2 周</td>
+      <td>★★★★★</td>
+      <td>Tensor Parallel 切模型；用 PyTorch <code>dist</code> 或 nccl。打通后能跑 70B Llama。</td>
+    </tr>
+    <tr>
+      <td><strong>LoRA 多租户</strong></td>
+      <td>★★★</td>
+      <td>1 周</td>
+      <td>★★★</td>
+      <td>同一 base + 多个 LoRA adapter 切换。S-LoRA 论文是参考。</td>
+    </tr>
+    <tr>
+      <td><strong>Speculative decoding</strong></td>
+      <td>★★★</td>
+      <td>1.5 周</td>
+      <td>★★★★</td>
+      <td>用小模型预测 + 大模型验证，2-3× decode 加速。论文：Medusa, Lookahead。</td>
+    </tr>
+    <tr>
+      <td><strong>INT8/INT4 量化</strong></td>
+      <td>★★★</td>
+      <td>1 周</td>
+      <td>★★★</td>
+      <td>用 bitsandbytes 或 AWQ。8B INT4 显存 ~5GB，能跑长 context。</td>
+    </tr>
+    <tr>
+      <td><strong>Prefix caching</strong></td>
+      <td>★★</td>
+      <td>0.5 周</td>
+      <td>★★★</td>
+      <td>BlockManager 加 ref_count 和 hash dedup。多用户共享 system prompt 时 2-3× 吞吐。</td>
+    </tr>
+    <tr>
+      <td><strong>CUDA graph</strong></td>
+      <td>★★</td>
+      <td>0.5 周</td>
+      <td>★★★</td>
+      <td>decode 阶段 capture graph, 减 50% launch overhead。直接补 §11.3 的 #1 差距。</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout tip">
+  <div class="label">💡 优先级</div>
+  如果目标是 infra 工作 offer，M5 之后不要只在 toy engine 里加功能。
+  先去读 <a href="09-frontier-serving.html">M6 前沿 serving 系统</a>，学会用 TTFT、ITL、KV transfer、goodput 判断
+  <strong>多 GPU TP、speculative decoding、量化、prefix caching</strong> 分别在什么 workload 下真的值得做。
+</div>
+
+<h2><span class="num">16</span>仓库交付物 · checklist</h2>
+
+<p>v0.5 收尾时对照这张表。少一项扣 README 一颗星。</p>
+
+<ul>
+  <li><code>README.md</code>：架构图 + Quickstart + benchmark 表 + 差距分析 + 限制列表 + Credits。</li>
+  <li><code>design.md</code>：§05 的 6 个设计决策，每个 200-500 字。</li>
+  <li><code>NOTES.md</code>：跟 vLLM 的对照笔记，至少 10 条具体 diff。</li>
+  <li><code>benchmarks/</code>：benchmark 脚本 + 数据 CSV + 画图代码 + 输出图片。</li>
+  <li><code>tests/</code>：至少覆盖 BlockManager 和 Scheduler 的关键路径 (allocate/free/preempt/edge case)。</li>
+  <li><code>docs/demo.gif</code>：30 秒视频，从 <code>python -m mini_vllm.server</code> 到收到 streaming token。</li>
+  <li>Blog 第 2 篇已发布，README 里链接到位。</li>
+  <li>GitHub repo 公开，topics 加 <code>llm-inference</code> <code>vllm</code> <code>pagedattention</code>。</li>
+</ul>
+
+<h2><span class="num">17</span>本页自检</h2>
+
+<div class="selfcheck">
+  <h4>Month 5 结束时这些应该全部 ✓</h4>
+  <ul>
+    <li><input type="checkbox" id="p1"/><label for="p1">mini-vllm 仓库公开，能跑通 <code>python -m mini_vllm.server</code>。</label></li>
+    <li><input type="checkbox" id="p2"/><label for="p2">v0.1 → v0.5 5 个版本每个都能 git checkout 出来跑通。</label></li>
+    <li><input type="checkbox" id="p3"/><label for="p3">README 有架构图、Quickstart、benchmark 表、差距分析、限制列表。</label></li>
+    <li><input type="checkbox" id="p4"/><label for="p4">benchmark 跑过对照 vLLM，差距分析写了至少 4 个原因，每个能讲 mitigation。</label></li>
+    <li><input type="checkbox" id="p5"/><label for="p5">design.md 里 6 个设计决策每个有具体数字算法/trade-off 表。</label></li>
+    <li><input type="checkbox" id="p6"/><label for="p6">NOTES.md 里跟 vLLM 的对照至少 10 条具体 diff。</label></li>
+    <li><input type="checkbox" id="p7"/><label for="p7">写的过程中发现了 M2-M4 漏掉的至少 3 个细节，记在 NOTES.md。</label></li>
+    <li><input type="checkbox" id="p8"/><label for="p8">blog 第 2 篇已发布，至少 1500 字。</label></li>
+  </ul>
+</div>
+
+<p class="muted small">勾选状态会保存在你的浏览器 localStorage 里，下次打开继续。</p>
+
+<div class="pagenav">
+  <a class="prev" href="05-kernels.html"><div class="dir">prev</div><div class="ttl">M4 · Kernel</div></a>
+  <a class="next" href="09-frontier-serving.html"><div class="dir">next</div><div class="ttl">M6 · 前沿 serving</div></a>
+</div>
+
+</main>
+</div>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

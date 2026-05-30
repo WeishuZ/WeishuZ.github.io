@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 8 章 · 网络即计算机 — 云计算·从机器向上</title>
+<link rel="stylesheet" href="../styles/design.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+</head>
+<body>
+<div class="progress-rail"><div class="progress-fill"></div></div>
+<button class="menu-toggle" aria-label="目录">☰</button>
+<div class="scrim"></div>
+<div class="book">
+  <aside class="sidebar" data-chapter="8">
+    <a class="brand" href="../index.html" style="text-decoration:none">
+      <svg class="mark" viewBox="0 0 40 40" fill="none">
+        <rect x="2" y="2" width="36" height="36" rx="9" fill="var(--accent)"/>
+        <path d="M12 24c-2.5 0-4.5-2-4.5-4.5S9.5 15 12 15c.4-2.6 2.7-4.6 5.5-4.6 2.4 0 4.4 1.5 5.2 3.6.5-.2 1-.3 1.6-.3 2.5 0 4.5 2 4.5 4.5S26.3 24 23.8 24H12z" fill="#fff"/>
+      </svg>
+      <span>云计算 · 从机器向上<small>Interactive Textbook</small></span>
+    </a>
+    <nav class="toc-nav"></nav>
+    <div class="side-tools">
+      <button class="tool-btn" onclick="CB.toggleTheme()"><span class="theme-ic">☾</span> 主题</button>
+      <a class="tool-btn" href="../index.html">☰ 全书目录</a>
+    </div>
+  </aside>
+  <main class="page">
+   <article class="col">
+    <div class="ch-eyebrow">Part III · 汇成一朵云 · 第 8 章</div>
+    <div class="ch-number">08</div>
+    <h1 class="ch-title">网络即计算机</h1>
+    <p class="ch-standfirst">云不是很多机器摆在一起，而是很多机器被网络编成一个可编程整体。一次请求能否稳定抵达，取决于 DNS、路由、负载均衡和虚拟网络的接力。</p>
+    <div class="ch-meta">
+      <span><b>难度</b> 云核心</span><span class="dot"></span>
+      <span><b>用时</b> 约 55 分钟</span><span class="dot"></span>
+      <span><b>交互</b> 请求路由流程 · 延迟预算实验</span><span class="dot"></span>
+      <span><b>路线</b> 螺旋式：先抓大图，再深入机制</span>
+    </div>
+
+    <h2 id="s0" data-nav="0 本章地图"><span class="sec-no">0</span>先把地图摊开</h2>
+    <p class="dropcap">云不是很多机器摆在一起，而是很多机器被网络编成一个可编程整体。一次请求能否稳定抵达，取决于 DNS、路由、负载均衡和虚拟网络的接力。 本章不会把概念排成术语表，而是沿着一条真实系统路径走：先看它解决什么痛点，再看 OS/云平台怎样实现，最后回到工程取舍。</p>
+    <div class="concept-grid">
+      <div class="concept-card"><b>DNS</b><span>把人类可读名字解析成机器可路由地址。</span></div>
+<div class="concept-card"><b>TCP/TLS</b><span>在不可靠网络上建立可靠字节流和加密通道。</span></div>
+<div class="concept-card"><b>负载均衡</b><span>把请求分发到多个后端，隐藏副本和故障。</span></div>
+<div class="concept-card"><b>Overlay</b><span>在物理网络之上构造虚拟网络。</span></div>
+    </div>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">网络即计算机 · 核心流程</span>
+          <span class="wtag">分步动画</span>
+          <span class="whint">点击节点或用键盘 ← →</span>
+        </div>
+        <div class="widget-body">
+          <div id="core-flow"></div>
+          <div id="core-flow-ctl" style="margin-top:1rem"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 8.1</span><b>核心机制路径。</b>把这一章最容易散掉的流程压成可播放的五步。</figcaption>
+    </figure>
+
+
+    <h2 id="s1" data-nav="8.1 网络把位置变成接口"><span class="sec-no">8.1</span>网络把位置变成接口</h2>
+    <p>用户不该知道你的服务在哪台机器。域名、VIP、Service 名字都是位置隐藏层。云网络的核心是让服务可以移动、复制、失败，而调用方仍使用稳定入口。</p>
+
+    <h2 id="s2" data-nav="8.2 一次请求的网络栈"><span class="sec-no">8.2</span>一次请求的网络栈</h2>
+    <p>DNS 找入口，TCP 建连接，TLS 建信任，HTTP 表达语义，负载均衡挑后端。每层都解决不同问题，也都可能贡献延迟。</p>
+
+    <h2 id="s3" data-nav="8.3 负载均衡不只是 round-robin"><span class="sec-no">8.3</span>负载均衡不只是 round-robin</h2>
+    <p>真实系统要考虑健康检查、连接复用、会话保持、权重、熔断、地理位置。LB 是流量控制面，也是故障隔离器。</p>
+
+    <h2 id="s4" data-nav="8.4 虚拟网络让租户以为自己有一张私网"><span class="sec-no">8.4</span>虚拟网络让租户以为自己有一张私网</h2>
+    <p>VPC、子网、安全组、overlay tunnel 把共享物理网络切成很多逻辑网络。和虚拟内存一样，这是“看见的地址空间”和真实资源之间的映射。</p>
+
+    <h2 id="s5" data-nav="8.5 尾延迟来自每一跳的乘法"><span class="sec-no">8.5</span>尾延迟来自每一跳的乘法</h2>
+    <p>一次请求可能经过浏览器、边缘、LB、service mesh、应用、数据库。平均每跳都不慢，不代表整体 P99 不炸。云网络工程要像记账一样管理延迟预算。</p>
+
+    <figure class="fig bleed">
+      <div class="fig-frame widget">
+        <div class="widget-head">
+          <span class="wtitle">网络即计算机 · 取舍实验</span>
+          <span class="wtag">可玩模拟器</span>
+          <span class="whint">切换策略，看指标怎么变</span>
+        </div>
+        <div class="widget-body">
+          <div id="tradeoff-lab"></div>
+        </div>
+      </div>
+      <figcaption class="fig-cap"><span class="fig-no">图 8.2</span><b>工程取舍。</b>云和 OS 的概念真正进入工程时，几乎都不是“选最好”，而是在约束之间找一个诚实的点。</figcaption>
+    </figure>
+
+    <h2 id="s-bridge" data-nav="云与 OS 的桥"><span class="sec-no">↔</span>云与 OS 的桥</h2>
+    <p>这一章不是孤立知识点。下面这张表把它和前后章节接起来：你会看到，同一个机制在单机、云平台和 AI 基建里会换名字，但问题结构没变。</p>
+    <table class="bridge-table">
+      <thead><tr><th>本章机制</th><th>云上形态</th><th>为什么重要</th></tr></thead>
+      <tbody><tr><td><b>DNS/LB</b></td><td>灰度发布、流量切分</td><td>发布系统本质是在改变请求去向。</td></tr>
+<tr><td><b>VPC/Overlay</b></td><td>多租户网络隔离</td><td>像虚拟内存一样，把逻辑网络映射到共享物理网络。</td></tr>
+<tr><td><b>延迟预算</b></td><td>SLO、P99、重试策略</td><td>每一跳的小波动都会叠成用户看到的尾延迟。</td></tr></tbody>
+    </table>
+
+    <details class="deep">
+      <summary><span class="tag">深潜</span> 读完本章后，怎么确认自己真的懂了？<span class="chev">›</span></summary>
+      <div class="deep-body">
+        <p>不要只背定义。你应该能把一个线上现象翻译回机制：慢在哪里、谁在排队、哪个抽象漏了、哪个资源被过度承诺。下面三个检查点可以当成小作业。</p>
+        <div class="checkpoint-grid" id="checkpoint-cards"></div>
+      </div>
+    </details>
+
+    <div class="recap">
+      <h3>本章收束 · 你现在握住了什么</h3>
+      <ul><li>网络把服务位置隐藏成稳定接口。</li>
+<li>一次请求经过 DNS、连接、加密、负载均衡、虚拟网络和应用进程。</li>
+<li>虚拟网络是共享物理网络上的逻辑地址空间。</li>
+<li>云上可靠性和尾延迟都必须按路径逐跳管理。</li></ul>
+      <p class="muted" style="margin-bottom:0">请求终于找到服务，但数据要放在哪里？下一章进入规模化存储：块、对象、复制与一致性。</p>
+    </div>
+
+    <nav class="ch-foot">
+      <a href="../ch07-containers/index.html">
+        <span class="dir">‹ 上一章</span>
+        <span class="t">07 · 容器：轻量的幻觉</span>
+      </a>
+      <a class="next" href="../ch09-storage-scale/index.html">
+        <span class="dir">下一章 ›</span>
+        <span class="t">09 · 规模化存储</span>
+      </a>
+    </nav>
+   </article>
+  </main>
+</div>
+<script>
+window.CB_GLOSS = {
+  "dns": {
+    "t": "DNS",
+    "d": "把域名解析成地址的分布式命名系统。",
+    "l": "#"
+  },
+  "lb": {
+    "t": "负载均衡 · Load Balancing",
+    "d": "把流量分发到多个健康后端。",
+    "l": "#"
+  },
+  "vpc": {
+    "t": "VPC",
+    "d": "云中为租户构造的逻辑私有网络。",
+    "l": "#"
+  },
+  "tail": {
+    "t": "尾延迟 · Tail Latency",
+    "d": "P95/P99 等少数慢请求的延迟。",
+    "l": "#"
+  }
+};
+window.CB_CHAPTER = {
+  "flow": {
+    "caption": "网络路径是一串协议层和控制点。每一层都把上一层的简单假象落到更复杂的真实世界。",
+    "nodes": [
+      {
+        "icon": "🧭",
+        "label": "DNS",
+        "sub": "名字→入口"
+      },
+      {
+        "icon": "🤝",
+        "label": "TCP/TLS",
+        "sub": "连接与信任"
+      },
+      {
+        "icon": "⚖",
+        "label": "负载均衡",
+        "sub": "挑后端"
+      },
+      {
+        "icon": "🕸",
+        "label": "虚拟网络",
+        "sub": "租户隔离"
+      },
+      {
+        "icon": "🎯",
+        "label": "服务进程",
+        "sub": "处理请求"
+      }
+    ],
+    "steps": [
+      {
+        "title": "解析入口",
+        "body": "客户端先把域名解析成入口地址。",
+        "note": "DNS 也是可用性系统，不是静态电话本。",
+        "node": 0
+      },
+      {
+        "title": "建立连接",
+        "body": "TCP 提供可靠流，TLS 提供加密和身份验证。",
+        "note": "握手次数会直接进入冷路径延迟。",
+        "node": 1
+      },
+      {
+        "title": "选择后端",
+        "body": "负载均衡器根据健康、权重、连接数或延迟选择目标。",
+        "note": "LB 隐藏了副本，也承担故障切流。",
+        "node": 2
+      },
+      {
+        "title": "穿过虚拟网络",
+        "body": "包可能被封装进 overlay，在物理网络上转发到目标宿主。",
+        "note": "逻辑地址和物理路径经常不是一回事。",
+        "node": 3
+      },
+      {
+        "title": "抵达进程",
+        "body": "包进入容器/VM 的网络命名空间，被应用读走。",
+        "note": "第 1 章那条请求之路到这里闭环。",
+        "node": 4
+      }
+    ]
+  },
+  "lab": {
+    "modes": [
+      {
+        "name": "同机房调用",
+        "note": "低 RTT，适合同步微服务调用，但仍要防止重试风暴。",
+        "metrics": [
+          {
+            "label": "基础延迟",
+            "value": 18,
+            "warn": false
+          },
+          {
+            "label": "带宽",
+            "value": 88,
+            "warn": false
+          },
+          {
+            "label": "故障相关性",
+            "value": 72,
+            "warn": true
+          }
+        ],
+        "takeaway": "近意味着快，也意味着一起坏的概率更高。"
+      },
+      {
+        "name": "跨可用区",
+        "note": "多一层容灾，延迟和费用上升。",
+        "metrics": [
+          {
+            "label": "基础延迟",
+            "value": 46,
+            "warn": false
+          },
+          {
+            "label": "容灾",
+            "value": 78,
+            "warn": false
+          },
+          {
+            "label": "跨区费用",
+            "value": 62,
+            "warn": true
+          }
+        ],
+        "takeaway": "高可用通常不是免费开关，而是延迟和账单的选择。"
+      },
+      {
+        "name": "跨地区",
+        "note": "面向全球用户或灾备，但一致性和尾延迟明显变难。",
+        "metrics": [
+          {
+            "label": "基础延迟",
+            "value": 88,
+            "warn": true
+          },
+          {
+            "label": "容灾",
+            "value": 94,
+            "warn": false
+          },
+          {
+            "label": "一致性难度",
+            "value": 90,
+            "warn": true
+          }
+        ],
+        "takeaway": "全球系统首先是物理距离系统。光速不会因为云而消失。"
+      }
+    ]
+  },
+  "checkpoints": [
+    {
+      "k": "TRACE",
+      "t": "用 traceroute/curl 分层看请求",
+      "d": "分清 DNS、连接、TLS、TTFB。"
+    },
+    {
+      "k": "DRAW",
+      "t": "画 VPC 到 Pod 的路径",
+      "d": "标出 LB、node、container namespace。"
+    },
+    {
+      "k": "BUDGET",
+      "t": "给 API 拆 200ms 预算",
+      "d": "把每一跳写成可监控指标。"
+    }
+  ]
+};
+</script>
+<script src="../lib/components.js"></script>
+<script src="../lib/lesson-widgets.js"></script>
+</body>
+</html>

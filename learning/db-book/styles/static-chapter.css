@@ -1,0 +1,180 @@
+/* Static chapter renderer: dense prose + reliable explanatory diagrams. */
+
+.static-diagram {
+  margin: 2.2rem 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  max-width: 100%;
+}
+.static-diagram .d-head {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .85rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.static-diagram .d-title { font-weight: 750; }
+.static-diagram .d-tag {
+  font-size: .6rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--warm);
+  background: var(--warm-wash);
+  border-radius: 999px;
+  padding: .14rem .5rem;
+  font-weight: 750;
+}
+.static-diagram .d-body { padding: 1.1rem; }
+.static-diagram .d-note {
+  color: var(--ink-faint);
+  font-size: .82rem;
+  line-height: 1.55;
+  padding: 0 1.1rem 1rem;
+}
+
+.diag-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: .75rem;
+  align-items: stretch;
+}
+.flow-node {
+  position: relative;
+  min-height: 7rem;
+  padding: .9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.flow-node b {
+  display: block;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  margin-bottom: .35rem;
+}
+.flow-node span { display: block; font-weight: 750; line-height: 1.35; }
+.flow-node p { margin: .45rem 0 0; font-size: .82rem; color: var(--ink-faint); line-height: 1.5; }
+
+.diag-stack { display: grid; gap: .45rem; }
+.stack-row {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: .8rem;
+  padding: .7rem .85rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.stack-row b { color: var(--accent); }
+.stack-row span { color: var(--ink-soft); }
+
+.diag-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: .8rem;
+}
+.split-card {
+  min-height: 10rem;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.split-card h4 { margin: 0 0 .5rem; font-size: 1rem; }
+.split-card p { margin: 0; color: var(--ink-soft); font-size: .88rem; line-height: 1.6; }
+
+.diag-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.diag-table th,
+.diag-table td {
+  padding: .65rem .75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.diag-table th {
+  color: var(--accent-ink);
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.diag-table td { color: var(--ink-soft); }
+.diag-table tr:last-child td { border-bottom: none; }
+
+.diag-timeline {
+  display: grid;
+  gap: .75rem;
+  border-left: 2px solid var(--accent);
+  margin-left: .7rem;
+  padding-left: 1rem;
+}
+.time-item {
+  position: relative;
+  padding: .75rem .9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.time-item::before {
+  content: "";
+  position: absolute;
+  left: -1.44rem;
+  top: 1.05rem;
+  width: .7rem;
+  height: .7rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-wash);
+}
+.time-item b { color: var(--accent); font-family: var(--font-mono); }
+.time-item span { display: block; font-weight: 750; margin: .18rem 0; }
+.time-item p { margin: 0; color: var(--ink-faint); font-size: .84rem; line-height: 1.55; }
+
+.diag-matrix {
+  display: grid;
+  grid-template-columns: 9rem repeat(var(--cols, 3), minmax(7rem, 1fr));
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.matrix-cell {
+  padding: .72rem .8rem;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  min-width: 7rem;
+  background: var(--surface);
+}
+.matrix-cell.head {
+  background: var(--surface-2);
+  color: var(--accent-ink);
+  font-weight: 750;
+}
+.matrix-cell.good { background: var(--good-wash); }
+.matrix-cell.warn { background: var(--warm-wash); }
+.matrix-cell:last-child { border-right: none; }
+
+.source-note {
+  margin-top: 3rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-size: .82rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .stack-row { grid-template-columns: 1fr; gap: .25rem; }
+  .static-diagram .d-body { padding: .85rem; overflow-x: auto; max-width: 100%; }
+  .diag-flow { grid-template-columns: 1fr; }
+  .diag-matrix {
+    grid-template-columns: 7rem repeat(var(--cols, 3), minmax(6.25rem, 1fr));
+    width: max-content;
+    min-width: 100%;
+  }
+  .matrix-cell { min-width: 6.25rem; }
+}
