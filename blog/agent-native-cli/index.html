@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f4f1e9">
+
+    <title>The Shell Is a Protocol Now — Weishu Zhang</title>
+    <meta name="description" content="Why an agent-native CLI is a stable execution and governance boundary for enterprise AI workflows.">
+
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="The Shell Is a Protocol Now">
+    <meta property="og:description" content="Designing agent-native CLIs as executable contracts for enterprise workflows.">
+    <meta property="og:image" content="https://weishuz.com/blog/agent-native-cli/assets/agent-native-cli.jpg">
+    <meta property="og:url" content="https://weishuz.com/blog/agent-native-cli/">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700|jetbrains-mono:400,500&display=swap">
+
+    <style>
+        :root {
+            --bg: #f4f1e9;
+            --surface: #fbfaf6;
+            --ink: #17191a;
+            --ink-soft: #3d4243;
+            --muted: #707674;
+            --line: #d8d4c9;
+            --accent: #176d69;
+            --accent-soft: #dce9e5;
+            --code: #202527;
+            --code-ink: #d8e5e2;
+            --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--sans);
+            font-size: 17px;
+            line-height: 1.72;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration-thickness: 1px;
+            text-underline-offset: 3px;
+        }
+
+        a:hover { color: var(--ink); }
+
+        .top-nav {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+            background: color-mix(in srgb, var(--bg) 90%, transparent);
+            backdrop-filter: blur(14px);
+        }
+
+        .top-nav-inner {
+            width: min(1120px, calc(100% - 40px));
+            min-height: 58px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+        }
+
+        .top-nav a {
+            color: var(--ink-soft);
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        .top-nav a:hover { color: var(--accent); }
+        .site-name { color: var(--ink) !important; }
+        .nav-links { display: flex; gap: 20px; }
+
+        .hero {
+            width: min(1120px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 76px 0 42px;
+            display: grid;
+            grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+            align-items: center;
+            gap: 58px;
+        }
+
+        .eyebrow {
+            margin: 0 0 18px;
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0 0 20px;
+            max-width: 690px;
+            font-size: clamp(42px, 5.6vw, 70px);
+            line-height: 1.02;
+            letter-spacing: -.05em;
+        }
+
+        .dek {
+            margin: 0 0 24px;
+            max-width: 650px;
+            color: var(--ink-soft);
+            font-size: 20px;
+            line-height: 1.55;
+        }
+
+        .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 18px;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+
+        .hero-figure { margin: 0; }
+        .hero-figure img {
+            display: block;
+            width: 100%;
+            height: auto;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+        }
+
+        .layout {
+            width: min(980px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 44px 0 90px;
+            display: grid;
+            grid-template-columns: 180px minmax(0, 700px);
+            gap: 70px;
+            justify-content: center;
+            border-top: 1px solid var(--line);
+        }
+
+        .toc {
+            position: sticky;
+            top: 88px;
+            align-self: start;
+            display: grid;
+            gap: 9px;
+        }
+
+        .toc strong {
+            margin-bottom: 5px;
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .toc a {
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 11px;
+            line-height: 1.4;
+            text-decoration: none;
+        }
+
+        .toc a:hover { color: var(--accent); }
+        article { min-width: 0; }
+        article > p:first-child { font-size: 21px; line-height: 1.62; }
+        p { margin: 0 0 1.25rem; }
+
+        h2 {
+            margin: 3.8rem 0 1rem;
+            font-size: 30px;
+            line-height: 1.22;
+            letter-spacing: -.025em;
+        }
+
+        h3 {
+            margin: 2.25rem 0 .75rem;
+            font-size: 20px;
+            line-height: 1.35;
+        }
+
+        ul, ol { margin: 0 0 1.4rem; padding-left: 1.35rem; }
+        li { margin-bottom: .48rem; }
+        strong { font-weight: 650; }
+
+        blockquote {
+            margin: 2.4rem 0;
+            padding: 4px 0 4px 24px;
+            border-left: 3px solid var(--accent);
+            color: var(--ink);
+            font-size: 22px;
+            line-height: 1.5;
+            letter-spacing: -.015em;
+        }
+
+        blockquote p:last-child { margin-bottom: 0; }
+
+        pre {
+            margin: 1.6rem 0 2rem;
+            padding: 22px 24px;
+            overflow-x: auto;
+            border-radius: 7px;
+            background: var(--code);
+            color: var(--code-ink);
+            font-family: var(--mono);
+            font-size: 14px;
+            line-height: 1.65;
+        }
+
+        code { font-family: var(--mono); }
+
+        :not(pre) > code {
+            padding: 2px 5px;
+            border-radius: 3px;
+            background: var(--accent-soft);
+            color: #195b58;
+            font-size: .86em;
+        }
+
+        .principles {
+            width: 100%;
+            margin: 1.6rem 0 2rem;
+            border-collapse: collapse;
+            font-size: 15px;
+        }
+
+        .principles th,
+        .principles td {
+            padding: 13px 12px;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .principles th {
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+        }
+
+        .principles td:first-child {
+            width: 35%;
+            color: var(--ink);
+            font-weight: 600;
+        }
+
+        .callout {
+            margin: 2.5rem 0;
+            padding: 22px 24px;
+            border: 1px solid #bad0ca;
+            border-radius: 7px;
+            background: color-mix(in srgb, var(--accent-soft) 56%, var(--surface));
+        }
+
+        .callout p:last-child { margin-bottom: 0; }
+
+        .references {
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--line);
+            color: var(--ink-soft);
+            font-size: 15px;
+        }
+
+        .references h2 { margin-top: 0; font-size: 23px; }
+
+        .article-footer {
+            width: min(700px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 30px 0 55px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+
+        .article-footer a { color: var(--ink-soft); text-decoration: none; }
+
+        @media (max-width: 860px) {
+            .hero { grid-template-columns: 1fr; padding-top: 52px; gap: 34px; }
+            .hero-figure { max-width: 680px; }
+            .layout { grid-template-columns: 1fr; gap: 0; }
+            .toc { display: none; }
+        }
+
+        @media (max-width: 580px) {
+            body { font-size: 16px; }
+            .top-nav-inner, .hero, .layout { width: min(100% - 28px, 1120px); }
+            .nav-links { gap: 12px; }
+            .nav-links a:first-child { display: none; }
+            .hero { padding-top: 40px; }
+            h1 { font-size: 43px; }
+            .dek { font-size: 18px; }
+            article > p:first-child { font-size: 19px; }
+            h2 { font-size: 26px; }
+            .principles { font-size: 13px; }
+            .principles th, .principles td { padding: 10px 7px; }
+            blockquote { font-size: 20px; }
+            .article-footer { width: min(100% - 28px, 700px); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="site-name">Weishu Zhang</a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/blog/">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank" rel="noopener">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div>
+            <p class="eyebrow">Enterprise agents · systems design</p>
+            <h1>The Shell Is a Protocol Now</h1>
+            <p class="dek">Why an agent-native CLI is one of the most stable execution and governance boundaries for real enterprise workflows.</p>
+            <div class="meta">
+                <span>July 16, 2026</span>
+                <span>10 min read</span>
+                <span>Weishu Zhang</span>
+            </div>
+        </div>
+        <figure class="hero-figure">
+            <img src="assets/agent-native-cli.jpg" alt="An abstract AI agent passing commands through a validated CLI boundary to enterprise systems" width="1600" height="896">
+        </figure>
+    </header>
+
+    <main class="layout">
+        <aside class="toc" aria-label="Article contents">
+            <strong>In this article</strong>
+            <a href="#fail-fast">Fail fast</a>
+            <a href="#runtime">Build a runtime</a>
+            <a href="#reuse">Reuse integrations</a>
+            <a href="#controls">Control operations</a>
+            <a href="#machine-readable">Machine-readable</a>
+            <a href="#exploration">Bounded exploration</a>
+        </aside>
+
+        <article>
+            <p>In deploying AI agents into real enterprise workflows, I have become convinced of one thing: <strong>an agent-native CLI is one of the most efficient, stable, and governable interfaces we can give an agent.</strong></p>
+
+            <p>Agents do not lack the ability to call tools. The harder problem is allowing a probabilistic caller to operate deterministic enterprise systems safely. A production workflow has naming rules, permissions, retries, costs, concurrency limits, and irreversible actions. None of those should depend on the model remembering a paragraph of instructions.</p>
+
+            <p>The strongest pattern I have found is to separate guidance from execution. Skills explain when and how a capability should be used. A CLI runtime owns the actual contract: valid inputs, stable commands, observable state, and enforced boundaries.</p>
+
+            <blockquote>
+                <p>Skills are the agent's guide. The CLI runtime is the execution and governance boundary.</p>
+            </blockquote>
+
+            <h2 id="fail-fast">1. Fail fast instead of guessing</h2>
+
+            <p>Enterprise knowledge bases need naming conventions, directory structures, and document schemas. If a document is placed in the wrong location or its filename violates the convention, the command should fail clearly and ask a human to correct the source.</p>
+
+            <p>The alternative is to let an agent fuzzy-scan the entire knowledge base and guess which file the organization intended. That feels intelligent, but it quietly converts a data-governance problem into a probabilistic retrieval problem. The result may work nine times and fail on the tenth without anyone noticing.</p>
+
+            <p>Strict failure is useful because it makes ambiguity visible. It forces developers—and eventually the whole organization—to improve the workflow itself. The same principle applies to IDs, configuration, file formats, and command names: validate locally, reject malformed inputs, and do not guess.</p>
+
+            <h2 id="runtime">2. Build a runtime, not a collection of scripts</h2>
+
+            <p>Most enterprise repositories accumulate dozens of useful scripts. One synchronizes knowledge-base content to qTest. Another searches Jira. Another publishes test cases or submits a job to a compute cluster. Each was built for a real need, but together they create a discovery problem.</p>
+
+            <p>People must remember dozens of tools, parameters, configuration files, and authentication methods. Even the developer who wrote a script can forget its exact flags a few months later. Agents face the same indexing problem, amplified by stale examples and overlapping tool descriptions.</p>
+
+            <p>A unified runtime turns scattered capabilities into a predictable command tree:</p>
+
+            <pre><code>company kb sync
+company jira search
+company qtest publish
+company jobs submit</code></pre>
+
+            <p>This layer does more than wrap scripts. It creates a product model for internal operations. Humans and agents can start at <code>company --help</code>, narrow to the relevant domain, inspect the command, and execute it without loading the entire tool catalog into context.</p>
+
+            <h2 id="reuse">3. Stop rebuilding the same integrations</h2>
+
+            <p>I have found knowledge-base and Jira helper functions duplicated across more than ten tools and skills. Each copy brings its own interpretation of authentication, pagination, retries, rate limits, and errors. The codebase becomes larger while behavior becomes less consistent.</p>
+
+            <p>Duplicated integrations are also a routing problem. When several skills expose nearly identical Jira or knowledge-base tools, an agent can select the wrong implementation even when it understands the task.</p>
+
+            <p>A dedicated, tested, reusable runtime module is usually more reliable than rebuilding the integration for every new workflow. Authentication, input validation, pagination, retry policy, and structured errors should be maintained once. Skills can then stay small and focused on orchestration.</p>
+
+            <h2 id="controls">4. Put controls for expensive operations in code</h2>
+
+            <p>Writing to a knowledge base, deleting data, or submitting a compute job cannot be protected by a sentence in a Skill saying, “Be careful.” Semantic instructions are guidance, not a reliable safety boundary.</p>
+
+            <p>Consider a job submission where a network interruption prevents the response from reaching the agent even though the job started successfully. The agent sees an unknown state and retries. Without idempotency and status tracking, it may launch several expensive jobs before anyone realizes what happened.</p>
+
+            <p>Controls for consequential operations belong in the runtime:</p>
+
+            <ul>
+                <li><strong>Idempotency keys</strong> so retries converge on one operation.</li>
+                <li><strong>Concurrency limits</strong> and atomic state changes.</li>
+                <li><strong>Dry runs</strong> that preview structured changes.</li>
+                <li><strong>Explicit confirmation</strong> for mutations and destructive actions.</li>
+                <li><strong>Observable job state</strong> with start, status, and cancel commands.</li>
+                <li><strong>Audit logs</strong> that record who requested what and what changed.</li>
+                <li><strong>Defined retry behavior</strong> rather than improvised repetition.</li>
+            </ul>
+
+            <p>Arcjet treats confirmation as a protocol rather than an interactive prompt: a mutation first returns a structured description of the proposed changes, and execution requires a second explicit command. This is a useful model because the human approval step is visible, deterministic, and compatible with headless environments.</p>
+
+            <h2 id="machine-readable">5. Make the interface machine-readable and token-efficient</h2>
+
+            <p>Agents should not need to read a large metadata catalog and guess which skill to activate. A stable command hierarchy and progressive disclosure give them a deterministic discovery path:</p>
+
+            <pre><code>company --help
+company schema
+company kb --help
+company kb sync --help</code></pre>
+
+            <p>The output matters just as much as the command tree. Human-oriented spinners, progress tables, colors, and prose waste context and break parsers. Agent mode should be non-interactive and quiet, with structured output, explicit exit codes, clean separation between data and diagnostics, pagination, and field selection.</p>
+
+            <p>The emerging <a href="https://clispec.dev/" target="_blank" rel="noopener">CLI Spec</a> captures the core design in six principles:</p>
+
+            <table class="principles">
+                <thead>
+                    <tr><th>Principle</th><th>Operational meaning</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Structured output</td><td>Human-readable in a terminal; JSON when requested or piped.</td></tr>
+                    <tr><td>Schema introspection</td><td>Commands, inputs, output fields, error types, and mutations are discoverable at runtime.</td></tr>
+                    <tr><td>stdout / stderr</td><td>Data stays clean on stdout; progress and diagnostics go to stderr.</td></tr>
+                    <tr><td>Non-interactive</td><td>Commands never wait for input without a TTY and fail safely when confirmation is missing.</td></tr>
+                    <tr><td>Idempotent operations</td><td>Repeating a command converges to the same state rather than creating duplicate work.</td></tr>
+                    <tr><td>Bounded output</td><td>Agents can limit, paginate, and select fields without flooding their context window.</td></tr>
+                </tbody>
+            </table>
+
+            <p>Speakeasy describes a complementary pattern: focused Skills teach agents how to use the CLI, while agent-specific flags remove interactive prompts and reduce output noise. This division keeps execution deterministic without forcing every human user into an automation-first interface.</p>
+
+            <h2 id="exploration">6. Let agents explore—inside precise boundaries</h2>
+
+            <p>Agents are already capable of operating Git. For most enterprise workflows, the command surface is considerably less complex than Git. A CLI also works naturally across local development, CI, containers, remote machines, and long-running jobs.</p>
+
+            <p>But this does not mean we should give an agent a vague objective, surround it with loosely described tools, and hope it does not make a mistake.</p>
+
+            <div class="callout">
+                <p><strong>Agent applications should begin with clear requirements, not vague boundaries followed by a prayer.</strong></p>
+                <p>Agents are smart enough when the requirements are precise enough.</p>
+            </div>
+
+            <p>Natural language is excellent for expressing intent, but it is weak at enforcing validation, permissions, retries, concurrency, output limits, and destructive-action policies. Those constraints should not remain implicit.</p>
+
+            <p>An agent-native CLI turns requirements into an executable contract:</p>
+
+            <ul>
+                <li>What operations exist.</li>
+                <li>Which inputs and resource types are valid.</li>
+                <li>Which commands read state and which mutate it.</li>
+                <li>What requires human confirmation.</li>
+                <li>What can be retried safely.</li>
+                <li>What success, conflict, and failure look like.</li>
+                <li>How much data may be returned.</li>
+            </ul>
+
+            <p>Once these requirements and boundary conditions are encoded in the interface, we can stop micromanaging every intermediate step. The agent can inspect the schema, discover the appropriate command, compose pipelines, recover from known errors, and explore alternative paths—without being able to redefine the rules of the system.</p>
+
+            <blockquote>
+                <p>Define the contract precisely. Enforce the boundaries in code. Then let the agent explore freely.</p>
+            </blockquote>
+
+            <p>This is why I see the CLI as more than a convenient wrapper. It is the protocol between a probabilistic decision-maker and production systems. Commands and flags become an API contract. JSON output becomes a schema. Exit codes become control flow. Confirmation, idempotency, and validation become defense in depth.</p>
+
+            <p>The shell is no longer just a terminal. <strong>It is becoming a protocol for agents.</strong></p>
+
+            <section class="references">
+                <h2>Further reading</h2>
+                <ul>
+                    <li><a href="https://blog.arcjet.com/designing-a-cli-for-ai-agents/" target="_blank" rel="noopener">Arcjet — Designing a CLI for AI agents</a></li>
+                    <li><a href="https://www.speakeasy.com/blog/engineering-agent-friendly-cli" target="_blank" rel="noopener">Speakeasy — Making your CLI agent-friendly</a></li>
+                    <li><a href="https://clispec.dev/" target="_blank" rel="noopener">The CLI Spec — Six principles for humans, scripts, and agents</a></li>
+                </ul>
+            </section>
+        </article>
+    </main>
+
+    <footer class="article-footer">
+        <a href="/blog/">← Back to Blog</a>
+        <span>Enterprise agents · CLI design</span>
+    </footer>
+</body>
+</html>
