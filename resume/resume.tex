@@ -145,8 +145,8 @@
       } \\
 
       \textbf{Infrastructure}{:
-        Docker, Kubernetes, pytest, distributed jobs,
-        workflow orchestration, observability, CI/CD
+        Docker, Kubernetes, gVisor, OCI, OpenTelemetry, pytest,
+        distributed jobs, CI/CD
       }
     }
   }
@@ -171,52 +171,51 @@
     \resumeItemListStart
 
       \resumeItem{
-        Built an ontology-driven \textbf{runtime agent infrastructure} that
-        models enterprise entities, relationships, permissions, and actions as
-        a shared semantic layer, enabling agents to discover governed context
-        and execute workflows consistently across internal systems.
+        Designed and implemented \textbf{RRI}, an ontology-driven Python
+        workflow CLI and agent-ready execution layer for SQA regression review,
+        unifying governed entities and actions across Confluence review pages,
+        Jira metadata, qTest synchronization, email, and compute jobs.
       }
       \resumeItem{
         Developed a \textbf{Test Plan Runtime Agent} and workspace harness for
-        stateful workflows: synthesized EPDS and Jira documentation to create
-        or enhance TPS artifacts, proposed test-task improvements and execution
-        plans for human approval, then asynchronously managed task state and
-        reconciled results back into the TPS.
+        stateful workflows that synthesized EPDS and Jira documentation to
+        create or enhance TPS artifacts, proposed test-task changes for human
+        approval, then tracked asynchronous execution and reconciled results
+        back into the TPS.
       }
       \resumeItem{
-        Designed \textbf{token-efficient, reliable, and reusable} agent
-        primitives using scoped context retrieval, typed tool contracts,
-        approval gates, idempotent writes, resumable execution, distributed job
-        claiming, and failure recovery; reduced repetitive QA data entry by
-        over \textbf{80\%} and automated approximately \textbf{90\%} of the
-        review workflow.
+        Implemented deterministic workflow primitives with Confluence-backed
+        approval state, SQLite-backed runtime state, reusable enterprise
+        adapters, idempotent writes, job claiming, page-version conflict
+        protection, and local sandbox replay for safe recovery.
       }
     \resumeItemListEnd
   \resumeSubheading
     {Open Ludus}{Remote}
-    {Co-Founder \& Software Engineer, Agent Systems}
+    {Co-Founder \& Software Engineer, Cloud Agent Infrastructure}
     {2026 -- Present}
 
     \resumeItemListStart
 
       \resumeItem{
-        Built an \textbf{AI-native full-stack work surface} in TypeScript and
-        Python where agents generate declarative interfaces, users review and
-        edit live application state, and approved actions are committed to
-        external systems.
+        Designed a \textbf{Kubernetes-native agent sandbox control plane} using
+        CRDs and controllers to reconcile isolated, stateful workspaces from
+        reusable runtime templates, with warm-pool provisioning, suspend/resume,
+        and TTL-based garbage collection.
       }
 
       \resumeItem{
-        Designed a streaming frontend runtime that compiles structured agent
-        output into interactive forms, approval queues, progress views, and
-        intervention controls within ongoing chat sessions.
+        Hardened untrusted-code execution with \textbf{gVisor/Kata
+        RuntimeClasses}, namespace-scoped service accounts and RBAC,
+        default-deny NetworkPolicies, restricted pod security contexts, and
+        CPU, memory, and ephemeral-storage quotas.
       }
 
       \resumeItem{
-        Integrated LangGraph and MCP-based agents with typed frontend events,
-        persistent workflow state, human approval gates, and idempotent commit
-        adapters for reliable long-running operations across CRM and
-        productivity tools.
+        Standardized reproducible agent environments using immutable OCI images,
+        validated configuration and short-lived secret projection, repository
+        bootstrap, and PVC-backed workspaces; instrumented provisioning and
+        execution with OpenTelemetry traces and lifecycle metrics.
       }
 
     \resumeItemListEnd
