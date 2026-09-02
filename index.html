@@ -631,6 +631,31 @@ footer {
 
       <article class="item">
         <div class="item-head">
+          <h3>Ludus</h3>
+          <div class="item-links">
+            <a href="https://ludus.my/" target="_blank" rel="noopener">site</a>
+          </div>
+        </div>
+        <div class="item-kicker">Cloud agent infrastructure</div>
+        <p>
+          A Kubernetes-native control plane for isolated, stateful agent workspaces: provision from runtime templates, suspend and resume, then garbage-collect on TTL.
+        </p>
+        <ul class="bullets">
+          <li>Designed the sandbox control plane with CRDs and controllers, warm-pool provisioning, and lifecycle reconciliation.</li>
+          <li>Hardened untrusted-code execution with gVisor/Kata RuntimeClasses, namespace-scoped RBAC, default-deny NetworkPolicies, and resource quotas.</li>
+          <li>Standardized reproducible agent environments with immutable OCI images, short-lived secret projection, PVC-backed workspaces, and OpenTelemetry traces.</li>
+        </ul>
+        <div class="tags">
+          <span class="tag">Kubernetes</span>
+          <span class="tag">CRDs</span>
+          <span class="tag">gVisor</span>
+          <span class="tag">OCI</span>
+          <span class="tag">OpenTelemetry</span>
+        </div>
+      </article>
+
+      <article class="item">
+        <div class="item-head">
           <h3>mini-vLLM</h3>
           <div class="item-links">
             <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">code</a>
@@ -832,6 +857,13 @@ footer {
           <div>
             <strong>Software Engineering in Test Intern, ASML</strong>
             <p>Designed runtime agent infrastructure for the Tachyon SQA process: daily regression tracking, a test-plan lifecycle with QA approval gates, asynchronous agent job execution with result / inspection writeback, and a human-governed self-evolution loop (session → temporary shared memory → human audit → persist into the harness). Built on Temporal-style durable workflows.</p>
+          </div>
+        </li>
+        <li>
+          <span>2026 - present</span>
+          <div>
+            <strong>Co-Founder &amp; Software Engineer, <a href="https://ludus.my/" target="_blank" rel="noopener">Ludus</a></strong>
+            <p>Cloud agent infrastructure: Kubernetes-native sandbox control plane, isolated workspaces, and untrusted-code execution.</p>
           </div>
         </li>
         <li>
