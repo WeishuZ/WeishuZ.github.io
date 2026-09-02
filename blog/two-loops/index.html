@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f4f1e9">
+
+    <title>Two Simple Loops — Weishu Zhang</title>
+    <meta name="description" content="Two human-governed loops for enterprise agents: a skill self-update loop, and a stage loop with checkpoints so mistakes do not travel downstream.">
+
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="Two Simple Loops">
+    <meta property="og:description" content="Where the human checkpoint has to be, so review stays concentrated and errors do not propagate.">
+    <meta property="og:url" content="https://weishuz.com/blog/two-loops/">
+    <meta name="twitter:card" content="summary">
+
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700|jetbrains-mono:400,500&display=swap">
+
+    <style>
+        :root {
+            --bg: #f4f1e9;
+            --surface: #fbfaf6;
+            --ink: #17191a;
+            --ink-soft: #3d4243;
+            --muted: #707674;
+            --line: #d8d4c9;
+            --accent: #176d69;
+            --accent-soft: #dce9e5;
+            --code: #202527;
+            --code-ink: #d8e5e2;
+            --agent: #c48a3a;
+            --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--sans);
+            font-size: 17px;
+            line-height: 1.72;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration-thickness: 1px;
+            text-underline-offset: 3px;
+        }
+        a:hover { color: var(--ink); }
+
+        .top-nav {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+            background: color-mix(in srgb, var(--bg) 90%, transparent);
+            backdrop-filter: blur(14px);
+        }
+        .top-nav-inner {
+            width: min(1120px, calc(100% - 40px));
+            min-height: 58px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+        }
+        .top-nav a {
+            color: var(--ink-soft);
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .top-nav a:hover { color: var(--accent); }
+        .site-name { color: var(--ink) !important; }
+        .nav-links { display: flex; gap: 20px; }
+
+        .hero {
+            width: min(980px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 72px 0 36px;
+        }
+        .eyebrow {
+            margin: 0 0 18px;
+            color: var(--accent);
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        h1 {
+            margin: 0 0 18px;
+            max-width: 780px;
+            font-size: clamp(40px, 5.4vw, 64px);
+            line-height: 1.04;
+            letter-spacing: -.05em;
+        }
+        .dek {
+            margin: 0 0 22px;
+            max-width: 680px;
+            color: var(--ink-soft);
+            font-size: 20px;
+            line-height: 1.55;
+        }
+        .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 18px;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+
+        .layout {
+            width: min(980px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 44px 0 90px;
+            display: grid;
+            grid-template-columns: 180px minmax(0, 700px);
+            gap: 70px;
+            justify-content: center;
+            border-top: 1px solid var(--line);
+        }
+        .toc {
+            position: sticky;
+            top: 88px;
+            align-self: start;
+            display: grid;
+            gap: 9px;
+        }
+        .toc strong {
+            margin-bottom: 5px;
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        .toc a {
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 11px;
+            line-height: 1.4;
+            text-decoration: none;
+        }
+        .toc a:hover { color: var(--accent); }
+
+        article { min-width: 0; }
+        article > p:first-child { font-size: 21px; line-height: 1.62; }
+        p { margin: 0 0 1.25rem; }
+        h2 {
+            margin: 3.6rem 0 1rem;
+            font-size: 30px;
+            line-height: 1.22;
+            letter-spacing: -.025em;
+        }
+        h3 {
+            margin: 2.1rem 0 .7rem;
+            font-size: 20px;
+            line-height: 1.35;
+        }
+        ul, ol { margin: 0 0 1.4rem; padding-left: 1.35rem; }
+        li { margin-bottom: .48rem; }
+
+        blockquote {
+            margin: 2.2rem 0;
+            padding: 4px 0 4px 24px;
+            border-left: 3px solid var(--accent);
+            font-size: 22px;
+            line-height: 1.5;
+            letter-spacing: -.015em;
+        }
+        blockquote p:last-child { margin-bottom: 0; }
+
+        .callout {
+            margin: 2.4rem 0;
+            padding: 22px 24px;
+            border: 1px solid #bad0ca;
+            border-radius: 7px;
+            background: color-mix(in srgb, var(--accent-soft) 56%, var(--surface));
+        }
+        .callout p:last-child { margin-bottom: 0; }
+
+        .diagrams {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            margin: 1.6rem 0 2rem;
+        }
+        .diagram {
+            margin: 0;
+            padding: 16px 12px 10px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: var(--surface);
+        }
+        .diagram svg { display: block; width: 100%; height: auto; }
+        .diagram figcaption {
+            margin: 10px 0 2px;
+            text-align: center;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+        .d-node { fill: #ece9df; stroke: #c9c4b6; stroke-width: 1.4; }
+        .d-label { fill: var(--ink); font-family: var(--sans); font-size: 13px; font-weight: 500; }
+        .d-edge { font-family: var(--sans); font-size: 11px; }
+        .d-agent { stroke: var(--agent); fill: none; stroke-width: 2; }
+        .d-human { stroke: #b33a2e; fill: none; stroke-width: 2.1; }
+        .d-agent-fill { fill: var(--agent); }
+        .d-human-fill { fill: #b33a2e; }
+
+        .principles {
+            width: 100%;
+            margin: 1.4rem 0 2rem;
+            border-collapse: collapse;
+            font-size: 15px;
+        }
+        .principles th, .principles td {
+            padding: 13px 12px;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            vertical-align: top;
+        }
+        .principles th {
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+        }
+        .principles td:first-child { width: 34%; font-weight: 600; }
+
+        .article-footer {
+            width: min(700px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 30px 0 55px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+        .article-footer a { color: var(--ink-soft); text-decoration: none; }
+
+        @media (max-width: 860px) {
+            .layout { grid-template-columns: 1fr; gap: 0; }
+            .toc { display: none; }
+        }
+        @media (max-width: 580px) {
+            body { font-size: 16px; }
+            .top-nav-inner, .hero, .layout { width: min(100% - 28px, 1120px); }
+            h1 { font-size: 40px; }
+            .dek { font-size: 18px; }
+            article > p:first-child { font-size: 19px; }
+            h2 { font-size: 26px; }
+            .article-footer { width: min(100% - 28px, 700px); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="top-nav-inner">
+            <a href="/" class="site-name">Weishu Zhang</a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="/blog/">Blog</a>
+                <a href="https://github.com/WeishuZ" target="_blank" rel="noopener">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <p class="eyebrow">Enterprise agents · SQA runtime</p>
+        <h1>Two Simple Loops</h1>
+        <p class="dek">Wrapping up an internship at ASML. Two designs that worked in practice: a skill self-update loop, and a stage loop with human checkpoints. Nothing fancy. The interesting part is where the human sits.</p>
+        <div class="meta">
+            <span>September 2, 2026</span>
+            <span>12 min read</span>
+            <span>Weishu Zhang</span>
+        </div>
+    </header>
+
+    <main class="layout">
+        <aside class="toc" aria-label="Article contents">
+            <strong>In this article</strong>
+            <a href="#problem">Knowledge is for humans</a>
+            <a href="#skill-loop">Skill self-update</a>
+            <a href="#stage-loop">Stage loop</a>
+            <a href="#checkpoint">Where the checkpoint is</a>
+            <a href="#what-this-is-not">What this is not</a>
+        </aside>
+
+        <article>
+            <p>I spent this summer on agent runtime for an SQA process: daily regression tracking, and a test-plan lifecycle that used to be handwritten end to end. The work was not “give the model more tools.” It was deciding which state the agent is allowed to write, which state a human has to sign, and which state is allowed to become a rule.</p>
+
+            <p>Two loops covered most of it. They look small on a whiteboard. They were enough to change who did the repetitive work, and how long a test plan took.</p>
+
+            <blockquote>
+                <p>People and agents do not think the same way. The first design question is where the human checkpoint has to be.</p>
+            </blockquote>
+
+            <h2 id="problem">Enterprise knowledge is for humans</h2>
+
+            <p>A lot of real workflows live in people’s heads. Edge cases have no SOP. Review pages, job setup, inspection thresholds, and “what we did last time this failed” are scattered across docs, tickets, and memory. You cannot make that knowledge agent-friendly overnight, and you should not pretend a prompt dump is a knowledge base.</p>
+
+            <p>If you let an agent treat every session as gospel, it will encode accidents: a one-off workaround, a wrong threshold, a comment that was only true for one machine. If you wait until every case is documented, you never ship. The useful move is a staging layer.</p>
+
+            <p>The agent is allowed to notice reusable experience while a human is using the harness. It is not allowed to promote that experience into the harness by itself.</p>
+
+            <h2 id="skill-loop">The skill self-update loop</h2>
+
+            <p>The first loop is about memory that wants to become a skill, but is not one yet.</p>
+
+            <figure class="diagram">
+                <svg viewBox="0 0 430 250" role="img" aria-label="Agent loop discovers reusable skills into shared memory, humans review into canonical knowledge, then the agent updates the harness">
+                    <defs>
+                        <marker id="a2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-agent-fill" d="M0 0 8 4 0 8z"/></marker>
+                        <marker id="h2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-human-fill" d="M0 0 8 4 0 8z"/></marker>
+                    </defs>
+                    <circle class="d-node" cx="78" cy="62" r="42"/>
+                    <text class="d-label" x="78" y="58" text-anchor="middle">Agent</text>
+                    <text class="d-label" x="78" y="76" text-anchor="middle">loop</text>
+                    <rect class="d-node" x="276" y="44" width="132" height="36" rx="8"/>
+                    <text class="d-label" x="342" y="67" text-anchor="middle">Shared memory</text>
+                    <rect class="d-node" x="276" y="168" width="132" height="44" rx="8"/>
+                    <text class="d-label" x="342" y="186" text-anchor="middle">Canonical</text>
+                    <text class="d-label" x="342" y="204" text-anchor="middle">Knowledge</text>
+                    <rect class="d-node" x="24" y="174" width="120" height="36" rx="8"/>
+                    <text class="d-label" x="84" y="197" text-anchor="middle">Skill/Harness</text>
+                    <path class="d-agent" marker-end="url(#a2)" d="M120 62 H274"/>
+                    <text class="d-edge d-agent-fill" x="198" y="52" text-anchor="middle">Discover reusable skills</text>
+                    <path class="d-human" marker-end="url(#h2)" d="M342 80 V166"/>
+                    <text class="d-edge d-human-fill" x="350" y="118">Human Review</text>
+                    <text class="d-edge d-human-fill" x="350" y="132">Correct</text>
+                    <path class="d-agent" marker-end="url(#a2)" d="M276 190 H146"/>
+                    <text class="d-edge d-agent-fill" x="210" y="182" text-anchor="middle">Agent Update</text>
+                    <path class="d-agent" marker-end="url(#a2)" d="M84 174 V106"/>
+                    <text class="d-edge d-agent-fill" x="76" y="144" text-anchor="end">Retrieve</text>
+                </svg>
+                <figcaption>Human-governed skill evolution</figcaption>
+            </figure>
+
+            <p>At runtime the agent extracts reusable fragments from the session — a way to name a job, a check that kept failing, a coverage pattern that applied again — and writes them into a temporary shared-memory layer. That layer is not the harness. It is a inbox.</p>
+
+            <p>A human periodically audits the inbox: keep, edit, reject. Only after that review does the agent persist the change into harness internals: a skill, a template, a default, a check. Retrieval then uses the canonical copy, not the session residue.</p>
+
+            <table class="principles">
+                <thead>
+                    <tr><th>Layer</th><th>Who writes it, and what it is allowed to do</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Session</td><td>Ephemeral. The agent may work here. Nothing here is a rule.</td></tr>
+                    <tr><td>Shared memory</td><td>Agent proposes reusable experience. Humans read this on a schedule. Still not executable policy.</td></tr>
+                    <tr><td>Canonical knowledge</td><td>Human-edited. This is the only memory allowed to become a skill.</td></tr>
+                    <tr><td>Skill / harness</td><td>Agent writes only after approval. This is what later sessions retrieve.</td></tr>
+                </tbody>
+            </table>
+
+            <p>Two failure modes this avoids:</p>
+            <ul>
+                <li><strong>Unchecked self-rewrite.</strong> The agent never patches its own skills from a hot session. Promotion is a human gate.</li>
+                <li><strong>Up-front completeness.</strong> You do not need a finished ontology before the first useful run. Coverage grows as people actually use the harness.</li>
+            </ul>
+
+            <div class="callout">
+                <p>Don’t let it rewrite itself unchecked, and don’t expect to cover every case up front.</p>
+            </div>
+
+            <h2 id="stage-loop">The stage loop with human checkpoints</h2>
+
+            <p>The second loop is about long tasks. Long tasks fail by letting errors propagate. A bad assumption in the plan becomes a wrong job, which becomes a wrong inspection, which becomes a week of noise.</p>
+
+            <p>So the work is split into a few stages that matter. For a test plan that was roughly: plan → execute → verify. Not twelve micro-steps. A small number of surfaces a human can actually review.</p>
+
+            <figure class="diagram">
+                <svg viewBox="0 0 440 270" role="img" aria-label="Human-gated stage loop: next stage to LLM and Tool, then stage outcome, then human approval back to the next stage">
+                    <defs>
+                        <marker id="a1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-agent-fill" d="M0 0 8 4 0 8z"/></marker>
+                        <marker id="h1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-human-fill" d="M0 0 8 4 0 8z"/></marker>
+                    </defs>
+                    <rect class="d-node" x="168" y="18" width="130" height="36" rx="8"/>
+                    <text class="d-label" x="233" y="41" text-anchor="middle">next stage</text>
+                    <rect class="d-node" x="168" y="112" width="130" height="36" rx="8"/>
+                    <text class="d-label" x="233" y="135" text-anchor="middle">LLM</text>
+                    <rect class="d-node" x="332" y="112" width="88" height="36" rx="8"/>
+                    <text class="d-label" x="376" y="135" text-anchor="middle">Tool</text>
+                    <rect class="d-node" x="168" y="206" width="130" height="36" rx="8"/>
+                    <text class="d-label" x="233" y="229" text-anchor="middle">stage outcome</text>
+                    <path class="d-agent" marker-end="url(#a1)" d="M233 54 V110"/>
+                    <path class="d-agent" marker-end="url(#a1)" d="M298 126 H330"/>
+                    <path class="d-agent" marker-end="url(#a1)" d="M350 112 C350 88 280 88 280 112"/>
+                    <path class="d-agent" marker-end="url(#a1)" d="M233 148 V204"/>
+                    <path class="d-human" marker-end="url(#h1)" d="M168 224 H92 V36 H166"/>
+                    <text class="d-edge d-human-fill" x="8" y="136">Human Approval</text>
+                </svg>
+                <figcaption>Human-gated stage loop</figcaption>
+            </figure>
+
+            <p>Inside a stage the agent may loop with tools: read docs, draft artifacts, set up jobs, pull results. That inner loop is cheap to retry. Crossing a stage is not. The stage outcome is a document a human can reject.</p>
+
+            <h3>The plan stage writes the follow-up, not just the intent</h3>
+
+            <p>In the plan stage the agent does not write “run tests.” It writes the full follow-up while the human is still cheap to involve:</p>
+            <ul>
+                <li>how jobs will be set up</li>
+                <li>how results will be checked</li>
+                <li>thresholds and inspection criteria</li>
+                <li>what happens when a job fails</li>
+            </ul>
+
+            <p>That is the checkpoint. After approval, execution can be asynchronous. The agent runs jobs, then writes job results and inspection results back. QA no longer authors the entire plan by hand. They review a draft that already covers the common cases — in this process, more than twenty coverage types from the input cases — and they only add the few exceptional ones.</p>
+
+            <p>The human time for a full test plan went from on the order of two weeks of writing to as little as a few hours of review. Daily regression follow-up dropped a large fraction of the copy-paste work for the same reason: the harness owned the repetitive path, and people owned the gate.</p>
+
+            <h3>State has to survive the session</h3>
+
+            <p>A stage loop is useless if the plan lives in a chat transcript. An agent workspace plus shared file formats keep the draft, the approval, the job records, and the inspection results across sessions. The next invocation does not reconstruct the plan from vibes. It reads the artifact.</p>
+
+            <p>That is also why the inner loop can be an LLM plus tools, while the outer loop is closer to a durable workflow: wait for approval, claim a job, write results once, replay if the process dies.</p>
+
+            <h2 id="checkpoint">Where the checkpoint has to be</h2>
+
+            <p>The design question is not “how many humans in the loop.” It is which mistakes are expensive to catch late.</p>
+
+            <ul>
+                <li>If a skill is wrong, every later session inherits it. Promotion to the harness is a checkpoint.</li>
+                <li>If a plan is wrong, every job and inspection downstream is waste. Leaving the plan stage is a checkpoint.</li>
+                <li>If a single tool call is wrong, retry is cheap. That is not a checkpoint.</li>
+            </ul>
+
+            <p>Review stays concentrated: a short inbox of proposed skills, and a plan document that already contains execution and verification. It does not mean staring at every token the model emits.</p>
+
+            <blockquote>
+                <p>Keep review concentrated, so mistakes do not travel downstream.</p>
+            </blockquote>
+
+            <h2 id="what-this-is-not">What this is not</h2>
+
+            <p>This is not an argument that agents should not write code or run jobs. They should, after the expensive decisions are frozen. It is also not a claim that you need a particular workflow product. The primitives that mattered here were ordinary: durable state, an approval signal, idempotent writes, and a place to put memory that is not yet true.</p>
+
+            <p>Nothing fancy. The loops worked because they matched how the work already failed: silent accumulation of prompt residue, and errors that only showed up after the heavy jobs had run.</p>
+        </article>
+    </main>
+
+    <footer class="article-footer">
+        <a href="/blog/">← Blog</a>
+        <a href="/">Weishu Zhang</a>
+    </footer>
+</body>
+</html>

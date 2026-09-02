@@ -165,7 +165,8 @@
 
   \resumeSubheading
     {ASML}{San Jose, CA}
-    {Software Engineering in Test Intern}
+    {Software Engineering in Test Intern
+      $|$ \href{https://weishuz.com/blog/two-loops/}{\underline{Blog}}}
     {2026 -- Present}
 
     \resumeItemListStart
@@ -305,6 +306,27 @@
   \resumeProjectHeading
     {
       \textbf{
+        \href{https://github.com/WeishuZ/mini-vllm}{mini-vLLM}
+      }
+      $|$
+      \emph{Python, PagedAttention, KV cache, Scheduler}
+      \hfill
+      \href{https://github.com/WeishuZ/mini-vllm}{\underline{Code}}
+    }
+    {}
+
+    \resumeItemListStart
+      \resumeItem{
+        Built a GPU-free from-scratch model of vLLM's systems core:
+        paged KV cache, continuous batching, preemption, and prefix
+        caching, with reproducible benchmarks (7x more active sequences,
+        1.53x throughput, 54x lower p99 TTFT).
+      }
+    \resumeItemListEnd
+
+  \resumeProjectHeading
+    {
+      \textbf{
         \href{https://gradeview.eecs.berkeley.edu/}{GradeView}
       }
       $|$
@@ -324,14 +346,12 @@
     {}
 
     \resumeItemListStart
-
       \resumeItem{
-        Refactored a production learning-analytics platform used in Berkeley
-        courses into containerized React, Node.js, and Python services;
-        standardized PostgreSQL as the source of truth and added Redis cache
-        prewarming to improve reliability and read performance.
+        Refactored a production Berkeley course-analytics platform into
+        containerized React, Node.js, and Python services with PostgreSQL
+        as source of truth. Pages that previously took 10+ seconds now
+        load in tens of milliseconds after Redis cache prewarming.
       }
-
     \resumeItemListEnd
 
 \resumeSubHeadingListEnd
