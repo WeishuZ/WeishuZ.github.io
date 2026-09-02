@@ -11,8 +11,6 @@
 \usepackage{fancyhdr}
 \usepackage[english]{babel}
 \usepackage{tabularx}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta,calc,positioning}
 \usepackage{iftex}
 \ifPDFTeX
   \input{glyphtounicode}
@@ -27,8 +25,8 @@
 \addtolength{\oddsidemargin}{-0.5in}
 \addtolength{\evensidemargin}{-0.5in}
 \addtolength{\textwidth}{1in}
-\addtolength{\topmargin}{-.75in}
-\addtolength{\textheight}{1.35in}
+\addtolength{\topmargin}{-.7in}
+\addtolength{\textheight}{1.25in}
 
 \urlstyle{same}
 \raggedbottom
@@ -39,15 +37,15 @@
 \fi
 
 \titleformat{\section}{
-  \vspace{-9pt}\scshape\raggedright\large
-}{}{0em}{}[\color{black}\titlerule \vspace{-8pt}]
+  \vspace{-7pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-7pt}]
 
 \newcommand{\resumeItem}[1]{
   \item\small{{#1 \vspace{-3pt}}}
 }
 
 \newcommand{\resumeSubheading}[4]{
-  \vspace{-2pt}\item
+  \vspace{-3pt}\item
     \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
       \textbf{#1} & #2 \\
       \textit{\small#3} & \textit{\small #4} \\
@@ -70,49 +68,11 @@
 }
 
 \newcommand{\resumeItemListStart}{
-  \begin{itemize}[leftmargin=0.2in, topsep=0pt, itemsep=0pt]
+  \begin{itemize}[leftmargin=0.2in, topsep=1pt, itemsep=1pt]
 }
 
 \newcommand{\resumeItemListEnd}{
-  \end{itemize}\vspace{-4pt}
-}
-
-\definecolor{agentedge}{HTML}{C48A3A}
-\definecolor{humanedge}{HTML}{C45C5C}
-\definecolor{nodefill}{HTML}{E8F0FA}
-\definecolor{nodedraw}{HTML}{4A6FA5}
-
-\tikzset{
-  rbox/.style={
-    draw=nodedraw,
-    fill=nodefill,
-    rounded corners=2pt,
-    align=center,
-    font=\tiny\sffamily,
-    inner sep=2.4pt,
-    minimum height=0.34cm,
-  },
-  roval/.style={
-    rbox,
-    circle,
-    minimum size=0.98cm,
-    inner sep=0.6pt,
-  },
-  agentarr/.style={
-    -{Stealth[length=1.7mm]},
-    line width=0.75pt,
-    draw=agentedge,
-  },
-  humanarr/.style={
-    -{Stealth[length=1.7mm]},
-    line width=0.8pt,
-    draw=humanedge,
-  },
-  edgelabel/.style={
-    font=\tiny\sffamily,
-    inner sep=1pt,
-    align=center,
-  },
+  \end{itemize}\vspace{-7pt}
 }
 
 \begin{document}
@@ -153,9 +113,10 @@
     {May 2027}
 
     \resumeItemListStart
+      \resumeItem{\textbf{GPA: 4.0/4.0}}
       \resumeItem{
-        \textbf{GPA: 4.0/4.0}.
-        Coursework: Efficient Algorithms, Network Science, Artificial Intelligence
+        \textbf{Relevant Coursework:}
+        Efficient Algorithms, Network Science, Artificial Intelligence
       }
     \resumeItemListEnd
 
@@ -201,8 +162,6 @@
     {Incoming Software Development Engineer Intern}
     {Sep 2026 -- Nov 2026}
 
-  \vspace{5pt}
-
   \resumeSubheading
     {ASML}{San Jose, CA}
     {Software Engineering in Test Intern}
@@ -211,65 +170,25 @@
     \resumeItemListStart
 
       \resumeItem{
-        Designed the \textbf{runtime agent infrastructure} for Tachyon SQA:
-        daily regression tracking and a durable \textbf{test-plan lifecycle}
-        (draft $\rightarrow$ QA approval $\rightarrow$ async job execution
-        $\rightarrow$ result writeback).
+        Designed the \textbf{runtime agent infrastructure} for the Tachyon
+        SQA process: a daily regression tracking harness and a durable
+        \textbf{test-plan lifecycle} that drafts plans, captures job
+        execution details, waits for QA approval, executes jobs
+        asynchronously, and writes back job and inspection results.
       }
       \resumeItem{
-        Built a \textbf{human-governed self-evolution} loop: reusable session
-        memory is staged into shared memory, audited by humans, then persisted
-        into the harness.
+        Built a \textbf{human-governed self-evolution} loop: the agent
+        extracts reusable session memory into a temporary shared-memory
+        layer; humans periodically audit and edit it; after approval, the
+        agent persists changes into the harness internals.
       }
       \resumeItem{
-        Implemented \textbf{Temporal-style durable execution}: deterministic
-        workflows, activities, QA-approval signals, task-queue claiming,
-        idempotent writes, event-history replay, and sandbox recovery.
+        Implemented \textbf{Temporal-style durable-execution} primitives:
+        deterministic workflow orchestration, activities for side-effecting
+        adapters, signals for QA approval, task-queue job claiming,
+        idempotent writes, event-history replay, and local sandbox recovery.
       }
     \resumeItemListEnd
-
-    \vspace{1pt}
-    \hspace*{-0.12in}%
-    \begin{minipage}[t]{0.50\textwidth}
-      \centering
-      \resizebox{0.98\linewidth}{!}{%
-      \begin{tikzpicture}
-        \node[rbox] (next) at (1.05,1.70) {next stage};
-        \node[rbox] (llm)  at (1.05,0.86) {LLM};
-        \node[rbox] (tool) at (2.85,0.86) {Tool};
-        \node[rbox] (out)  at (1.05,0.02) {stage outcome};
-        \draw[agentarr] (next) -- (llm);
-        \draw[agentarr] ([yshift=2.4pt]llm.east) -- ([yshift=2.4pt]tool.west);
-        \draw[agentarr] ([yshift=-2.4pt]tool.west) -- ([yshift=-2.4pt]llm.east);
-        \draw[agentarr] (llm) -- (out);
-        \draw[humanarr] (out.west) -- ++(-0.62,0) |- (next.west);
-        \node[edgelabel, anchor=east, text=humanedge] at (0.00,0.86)
-          {Human Approval};
-      \end{tikzpicture}}\\[1pt]
-      {\tiny Human-gated stage loop}
-    \end{minipage}
-    \hfill
-    \begin{minipage}[t]{0.48\textwidth}
-      \centering
-      \resizebox{0.98\linewidth}{!}{%
-      \begin{tikzpicture}
-        \node[roval] (loop)   at (0.00,1.18) {Agent\\loop};
-        \node[rbox]  (shared) at (3.15,1.18) {Shared memory};
-        \node[rbox]  (canon)  at (3.15,0.00) {Canonical\\Knowledge};
-        \node[rbox]  (skill)  at (0.00,0.00) {Skill/Harness};
-        \draw[agentarr] (loop) --
-          node[edgelabel, above, yshift=1pt] {Discover skills} (shared);
-        \draw[humanarr] (shared) --
-          node[edgelabel, right, text=humanedge, xshift=1pt]
-            {Human Review\\Correct} (canon);
-        \draw[agentarr] (canon) --
-          node[edgelabel, below, yshift=-1pt] {Agent Update} (skill);
-        \draw[agentarr] (skill) --
-          node[edgelabel, left, xshift=-1pt] {Retrieve} (loop);
-      \end{tikzpicture}}\\[1pt]
-      {\tiny Human-governed skill evolution}
-    \end{minipage}
-    \vspace{1pt}
   \resumeSubheading
     {Open Ludus}{Remote}
     {Co-Founder \& Software Engineer, Cloud Agent Infrastructure}
@@ -348,9 +267,9 @@
 
 \resumeSubHeadingListEnd
 
-%----------OPEN SOURCE AND PROJECTS----------
+%----------OPEN SOURCE----------
 
-\section{Open Source \& Projects}
+\section{Open Source}
 
 \resumeSubHeadingListStart
 
@@ -371,12 +290,23 @@
     {}
 
     \resumeItemListStart
+
       \resumeItem{
-        Production fixes to \textbf{pytorch/pytorch} compiler and export
-        internals: eager-versus-compiled gaps, tracing failures, and export
-        regressions, with maintainer-reviewed tests.
+        Contributed production fixes to \textbf{pytorch/pytorch} across
+        compiler and export internals, resolving eager-versus-compiled
+        correctness gaps, tracing failures, and export regressions with
+        targeted tests and maintainer-reviewed patches.
       }
+
     \resumeItemListEnd
+
+\resumeSubHeadingListEnd
+
+%----------PROJECTS----------
+
+\section{Selected Projects}
+
+\resumeSubHeadingListStart
 
   \resumeProjectHeading
     {
@@ -400,11 +330,14 @@
     {}
 
     \resumeItemListStart
+
       \resumeItem{
-        Refactored Berkeley course analytics into containerized
-        React/Node/Python services, with PostgreSQL as source of truth and
-        Redis cache prewarming.
+        Refactored a production learning-analytics platform used in Berkeley
+        courses into containerized React, Node.js, and Python services;
+        standardized PostgreSQL as the source of truth and added Redis cache
+        prewarming to improve reliability and read performance.
       }
+
     \resumeItemListEnd
 
 \resumeSubHeadingListEnd

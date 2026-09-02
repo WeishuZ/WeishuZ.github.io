@@ -319,6 +319,58 @@ p {
   color: var(--muted);
 }
 
+.diagrams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 16px 0 4px;
+}
+
+.diagram {
+  margin: 0;
+  padding: 12px 10px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.diagram figcaption {
+  margin: 8px 0 2px;
+  text-align: center;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.d-node {
+  fill: var(--code-bg);
+  stroke: var(--line);
+  stroke-width: 1.4;
+}
+
+.d-label {
+  fill: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.d-edge {
+  font-family: var(--sans);
+  font-size: 11px;
+}
+
+.d-agent { stroke: #c48a3a; fill: none; stroke-width: 2; }
+.d-human { stroke: var(--accent); fill: none; stroke-width: 2.1; }
+.d-agent-fill { fill: #c48a3a; }
+.d-human-fill { fill: var(--accent); }
+
 .writing {
   margin: 0;
   padding: 0;
@@ -420,6 +472,10 @@ footer {
   .item-links {
     margin-top: 4px;
   }
+
+  .diagrams {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 </head>
@@ -508,6 +564,59 @@ footer {
           <li>Built a human-governed self-evolution loop: while a human uses the harness, the agent extracts reusable memory from the session into a temporary shared-memory layer; humans periodically audit and edit that layer; after approval, the agent persists the changes into the harness internals.</li>
           <li>Used Temporal-style durable-execution primitives: deterministic workflow orchestration, activities for side-effecting adapters, signals for QA approval, task-queue job claiming, retries/idempotent writes, event-history replay, and local sandbox recovery.</li>
         </ul>
+        <div class="diagrams">
+          <figure class="diagram">
+            <svg viewBox="0 0 440 270" role="img" aria-label="Human-gated stage loop: next stage to LLM and Tool, then stage outcome, then human approval back to the next stage">
+              <defs>
+                <marker id="a1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-agent-fill" d="M0 0 8 4 0 8z"/></marker>
+                <marker id="h1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-human-fill" d="M0 0 8 4 0 8z"/></marker>
+              </defs>
+              <rect class="d-node" x="168" y="18" width="130" height="36" rx="8"/>
+              <text class="d-label" x="233" y="41" text-anchor="middle">next stage</text>
+              <rect class="d-node" x="168" y="112" width="130" height="36" rx="8"/>
+              <text class="d-label" x="233" y="135" text-anchor="middle">LLM</text>
+              <rect class="d-node" x="332" y="112" width="88" height="36" rx="8"/>
+              <text class="d-label" x="376" y="135" text-anchor="middle">Tool</text>
+              <rect class="d-node" x="168" y="206" width="130" height="36" rx="8"/>
+              <text class="d-label" x="233" y="229" text-anchor="middle">stage outcome</text>
+              <path class="d-agent" marker-end="url(#a1)" d="M233 54 V110"/>
+              <path class="d-agent" marker-end="url(#a1)" d="M298 126 H330"/>
+              <path class="d-agent" marker-end="url(#a1)" d="M350 112 C350 88 280 88 280 112"/>
+              <path class="d-agent" marker-end="url(#a1)" d="M233 148 V204"/>
+              <path class="d-human" marker-end="url(#h1)" d="M168 224 H92 V36 H166"/>
+              <text class="d-edge d-human-fill" x="8" y="136">Human Approval</text>
+            </svg>
+            <figcaption>Human-gated stage loop</figcaption>
+          </figure>
+          <figure class="diagram">
+            <svg viewBox="0 0 430 250" role="img" aria-label="Human-governed skill evolution: agent loop discovers reusable skills into shared memory, humans review into canonical knowledge, then the agent updates the harness">
+              <defs>
+                <marker id="a2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-agent-fill" d="M0 0 8 4 0 8z"/></marker>
+                <marker id="h2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path class="d-human-fill" d="M0 0 8 4 0 8z"/></marker>
+              </defs>
+              <circle class="d-node" cx="78" cy="62" r="42"/>
+              <text class="d-label" x="78" y="58" text-anchor="middle">Agent</text>
+              <text class="d-label" x="78" y="76" text-anchor="middle">loop</text>
+              <rect class="d-node" x="276" y="44" width="132" height="36" rx="8"/>
+              <text class="d-label" x="342" y="67" text-anchor="middle">Shared memory</text>
+              <rect class="d-node" x="276" y="168" width="132" height="44" rx="8"/>
+              <text class="d-label" x="342" y="186" text-anchor="middle">Canonical</text>
+              <text class="d-label" x="342" y="204" text-anchor="middle">Knowledge</text>
+              <rect class="d-node" x="24" y="174" width="120" height="36" rx="8"/>
+              <text class="d-label" x="84" y="197" text-anchor="middle">Skill/Harness</text>
+              <path class="d-agent" marker-end="url(#a2)" d="M120 62 H274"/>
+              <text class="d-edge d-agent-fill" x="198" y="52" text-anchor="middle">Discover reusable skills</text>
+              <path class="d-human" marker-end="url(#h2)" d="M342 80 V166"/>
+              <text class="d-edge d-human-fill" x="350" y="118">Human Review</text>
+              <text class="d-edge d-human-fill" x="350" y="132">Correct</text>
+              <path class="d-agent" marker-end="url(#a2)" d="M276 190 H146"/>
+              <text class="d-edge d-agent-fill" x="210" y="182" text-anchor="middle">Agent Update</text>
+              <path class="d-agent" marker-end="url(#a2)" d="M84 174 V106"/>
+              <text class="d-edge d-agent-fill" x="76" y="144" text-anchor="end">Retrieve</text>
+            </svg>
+            <figcaption>Human-governed skill evolution</figcaption>
+          </figure>
+        </div>
         <div class="tags">
           <span class="tag">Durable execution</span>
           <span class="tag">Temporal</span>
