@@ -97,6 +97,7 @@
 
 \begin{center}
   \small
+  U.S. work authorized; available December 2026.
   Backend-leaning full-stack engineer building production agent systems
   and enterprise workflow runtimes.
 \end{center}
@@ -144,8 +145,8 @@
       } \\
 
       \textbf{Infrastructure}{:
-        Temporal, durable workflows, Docker, Kubernetes, gVisor, OCI,
-        OpenTelemetry, pytest, distributed jobs, CI/CD
+        Docker, Kubernetes, gVisor, OCI, OpenTelemetry, pytest,
+        distributed jobs, CI/CD
       }
     }
   }
@@ -158,7 +159,7 @@
 \resumeSubHeadingListStart
 
   \resumeSubheading
-    {Amazon AI Studio}{}
+    {Amazon}{}
     {Incoming Software Development Engineer Intern}
     {Sep 2026 -- Nov 2026}
 
@@ -170,23 +171,24 @@
     \resumeItemListStart
 
       \resumeItem{
-        Designed the \textbf{runtime agent infrastructure} for the Tachyon
-        SQA process: a daily regression tracking harness and a durable
-        \textbf{test-plan lifecycle} that drafts plans, captures job
-        execution details, waits for QA approval, executes jobs
-        asynchronously, and writes back job and inspection results.
+        Designed and implemented \textbf{Regression Report Integration (RRI)},
+        an ontology-driven Python
+        workflow CLI and agent-ready execution layer for SQA regression review,
+        unifying governed entities and actions across Confluence review pages,
+        Jira metadata, qTest synchronization, email, and compute jobs.
       }
       \resumeItem{
-        Built a \textbf{human-governed self-evolution} loop: the agent
-        extracts reusable session memory into a temporary shared-memory
-        layer; humans periodically audit and edit it; after approval, the
-        agent persists changes into the harness internals.
+        Developed a \textbf{Test Plan Runtime Agent} and workspace harness for
+        stateful workflows that synthesized EPDS and Jira documentation to
+        create or enhance TPS artifacts, proposed test-task changes for human
+        approval, then tracked asynchronous execution and reconciled results
+        back into the TPS.
       }
       \resumeItem{
-        Implemented \textbf{Temporal-style durable-execution} primitives:
-        deterministic workflow orchestration, activities for side-effecting
-        adapters, signals for QA approval, task-queue job claiming,
-        idempotent writes, event-history replay, and local sandbox recovery.
+        Implemented deterministic workflow primitives with Confluence-backed
+        approval state, SQLite-backed runtime state, reusable enterprise
+        adapters, idempotent writes, job claiming, page-version conflict
+        protection, and local sandbox replay for safe recovery.
       }
     \resumeItemListEnd
   \resumeSubheading
