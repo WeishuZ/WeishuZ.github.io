@@ -428,7 +428,7 @@ footer {
   <aside class="sidebar">
     <h1 class="name">Weishu Zhang</h1>
     <p class="role">
-      UC Berkeley EECS. Building <strong>AI infrastructure</strong>, LLM serving systems, and applied backend systems for reliable AI.
+      UC Berkeley EECS. Building <strong>AI infrastructure</strong>, LLM serving systems, and <strong>agent runtimes</strong> for reliable production workflows.
     </p>
 
     <div class="links" aria-label="links">
@@ -452,7 +452,7 @@ footer {
     <div class="meta">
       Berkeley, CA<br>
       BS EECS, May 2027<br>
-      Last updated August 2026
+      Last updated September 2026
     </div>
   </aside>
 
@@ -463,31 +463,62 @@ footer {
         I like systems where the interesting part is below the API surface: schedulers, memory managers, serving control planes, data pipelines, and the benchmarks that make performance claims honest. My current focus is AI infrastructure for LLM inference.
       </p>
       <p>
-        Recently I built <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">mini-vLLM</a>, a small LLM serving engine simulator for learning and testing paged KV cache, continuous batching, preemption, and prefix caching. I am also working on clinical LLM extraction at UCSF and backend infrastructure for a health-agent product at BalanX-BIO.
+        Recently I built <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">mini-vLLM</a>, a small LLM serving engine simulator for learning and testing paged KV cache, continuous batching, preemption, and prefix caching. At ASML I am designing the runtime agent infrastructure for the Tachyon SQA process. Incoming SDE intern at <strong>Amazon AI Studio</strong> (Sep–Nov 2026).
       </p>
       <ul class="focus-list">
         <li><strong>LLM serving</strong><span>KV cache management, request scheduling, batching, preemption, prefix reuse, inference metrics.</span></li>
+        <li><strong>Agent runtimes</strong><span>Durable workflows, human-approval gates, async job execution, result reconciliation.</span></li>
         <li><strong>AI systems</strong><span>Reliable extraction, evaluation, schema fidelity, long-context pipelines, production constraints.</span></li>
-        <li><strong>Backend infra</strong><span>APIs, event pipelines, sync engines, databases, observability, deployment.</span></li>
       </ul>
     </section>
 
     <section id="news">
       <h2>News</h2>
       <ul class="news">
+        <li><span class="date">2026.09</span><span>Incoming SDE intern at <strong>Amazon AI Studio</strong>.</span></li>
         <li><span class="date">2026.07</span><span>Published <a href="/blog/agent-native-cli/">The Shell Is a Protocol Now</a>, on agent-native CLIs as execution and governance boundaries for enterprise workflows.</span></li>
+        <li><span class="date">2026.06</span><span>Started as a Software Engineering in Test intern at ASML on Tachyon SQA: daily regression and async test-plan lifecycle with QA approval gates.</span></li>
         <li><span class="date">2026.05</span><span>Published <a href="/learning/infra-learning-path/">Infra Learning Path</a>, a textbook-style AI infrastructure path anchored on vLLM and mini-vLLM.</span></li>
         <li><span class="date">2026.05</span><span>Published <a href="/learning/cloud-os/">Cloud Computing, from the machine up</a>, a Chinese learning site for OS concepts, cloud architecture, Kubernetes, serverless, and GPU inference.</span></li>
         <li><span class="date">2026.05</span><span>Published <a href="/learning/db-book/">Data Systems Illustrated</a>, a CS186-style visual companion for databases from SQL down to storage and recovery.</span></li>
         <li><span class="date">2026.05</span><span>Released <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">mini-vLLM</a>: a reproducible, CPU-only simulator of modern LLM serving internals.</span></li>
         <li><span class="date">2026.05</span><span>Updated benchmark suite for continuous batching, prefix caching, preemption, and serving latency tradeoffs.</span></li>
-        <li><span class="date">2026.01</span><span>Started backend infrastructure work at BalanX-BIO for a health-agent system.</span></li>
         <li><span class="date">2025.08</span><span>Started UCSF research on LLM-based clinical note structure extraction.</span></li>
       </ul>
     </section>
 
     <section id="systems">
       <h2>Selected Systems</h2>
+
+      <article class="item">
+        <div class="item-head">
+          <h3>Tachyon SQA runtime</h3>
+          <div class="item-links">
+            <span>private</span>
+          </div>
+        </div>
+        <div class="item-kicker">ASML, Software Engineering in Test intern</div>
+        <p>
+          Runtime agent infrastructure for the Tachyon SQA process. The control plane drafts a test plan, pauses for QA, runs jobs asynchronously, and writes results back — then evolves the harness itself under human audit, instead of silently accumulating prompt residue.
+        </p>
+        <ul class="bullets">
+          <li>Designed the runtime agent infra for Tachyon SQA: a workspace harness plus an execution layer that owns test-plan state across draft, approval, job run, and result writeback.</li>
+          <li>Built a daily regression tracking harness that materializes review sections from regression inputs, reads QA gates from Confluence, and drives follow-up work through durable runtime state.</li>
+          <li>Encoded the test-plan lifecycle as a durable workflow: draft test plan → capture job execution details → wait for QA approval → agent executes jobs asynchronously → update job results and inspection results when each job finishes.</li>
+          <li>Built a human-governed self-evolution loop: while a human uses the harness, the agent extracts reusable memory from the session into a temporary shared-memory layer; humans periodically audit and edit that layer; after approval, the agent persists the changes into the harness internals.</li>
+          <li>Used Temporal-style durable-execution primitives: deterministic workflow orchestration, activities for side-effecting adapters, signals for QA approval, task-queue job claiming, retries/idempotent writes, event-history replay, and local sandbox recovery.</li>
+        </ul>
+        <div class="tags">
+          <span class="tag">Durable execution</span>
+          <span class="tag">Temporal</span>
+          <span class="tag">Workflows / Activities</span>
+          <span class="tag">Signals</span>
+          <span class="tag">Task queues</span>
+          <span class="tag">Shared memory</span>
+          <span class="tag">Human audit</span>
+          <span class="tag">Python</span>
+        </div>
+      </article>
 
       <article class="item">
         <div class="item-head">
@@ -542,31 +573,6 @@ footer {
           <span class="tag">QLoRA</span>
           <span class="tag">MedSpacy</span>
           <span class="tag">Structured extraction</span>
-        </div>
-      </article>
-
-      <article class="item">
-        <div class="item-head">
-          <h3>Health-agent backend infrastructure</h3>
-          <div class="item-links">
-            <span>private</span>
-          </div>
-        </div>
-        <div class="item-kicker">BalanX-BIO, backend and AI orchestration</div>
-        <p>
-          Backend systems for a personalized health-agent product, with emphasis on server-authoritative state, context assembly, and reliable data flows.
-        </p>
-        <ul class="bullets">
-          <li>Built Express.js services and an AI orchestrator proxy for LLM API calls, context injection, and health summary retrieval.</li>
-          <li>Designed sync and conflict-resolution logic across mobile health data sources.</li>
-          <li>Used AWS EventBridge, Lambda, Cognito, and JWT-based auth for daily metric aggregation and secure access.</li>
-        </ul>
-        <div class="tags">
-          <span class="tag">TypeScript</span>
-          <span class="tag">Express</span>
-          <span class="tag">AWS</span>
-          <span class="tag">Sync engines</span>
-          <span class="tag">LLM APIs</span>
         </div>
       </article>
 
@@ -708,22 +714,15 @@ footer {
         <li>
           <span>Sep - Nov 2026</span>
           <div>
-            <strong>Incoming Software Development Engineer Intern, Amazon</strong>
-            <p>Upcoming software engineering internship.</p>
+            <strong>Incoming Software Development Engineer Intern, Amazon AI Studio</strong>
+            <p>Upcoming internship on Amazon AI Studio.</p>
           </div>
         </li>
         <li>
           <span>2026 - present</span>
           <div>
             <strong>Software Engineering in Test Intern, ASML</strong>
-            <p>Agent runtime and test infrastructure in San Jose, CA.</p>
-          </div>
-        </li>
-        <li>
-          <span>2026 - present</span>
-          <div>
-            <strong>CS Intern - Backend, BalanX-BIO</strong>
-            <p>Backend infrastructure, AI orchestration, health data sync, and AWS event pipelines.</p>
+            <p>Designed runtime agent infrastructure for the Tachyon SQA process: daily regression tracking, a test-plan lifecycle with QA approval gates, asynchronous agent job execution with result / inspection writeback, and a human-governed self-evolution loop (session → temporary shared memory → human audit → persist into the harness). Built on Temporal-style durable workflows.</p>
           </div>
         </li>
         <li>
