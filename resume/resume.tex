@@ -171,24 +171,21 @@
     \resumeItemListStart
 
       \resumeItem{
-        Designed and implemented \textbf{Regression Report Integration (RRI)},
-        an ontology-driven Python
-        workflow CLI and agent-ready execution layer for SQA regression review,
-        unifying governed entities and actions across Confluence review pages,
-        Jira metadata, qTest synchronization, email, and compute jobs.
+        Built \textbf{RRI} for daily SQA regression tracking, cutting
+        \textbf{80\%} of repetitive review work by automating Confluence
+        review pages, Jira metadata, qTest sync, email, and compute-job
+        follow-up.
       }
       \resumeItem{
-        Developed a \textbf{Test Plan Runtime Agent} and workspace harness for
-        stateful workflows that synthesized EPDS and Jira documentation to
-        create or enhance TPS artifacts, proposed test-task changes for human
-        approval, then tracked asynchronous execution and reconciled results
-        back into the TPS.
+        Designed a \textbf{Test Plan Runtime Agent} that drafts plans from
+        cases covering \textbf{20+} coverage types, so QA only authors a few
+        exceptional cases instead of handwriting the full plan.
       }
       \resumeItem{
-        Implemented deterministic workflow primitives with Confluence-backed
-        approval state, SQLite-backed runtime state, reusable enterprise
-        adapters, idempotent writes, job claiming, page-version conflict
-        protection, and local sandbox replay for safe recovery.
+        Compressed test-plan turnaround from \textbf{2 weeks} of manual
+        writing to as little as \textbf{hours} of human review, with the
+        agent executing approved jobs asynchronously and writing results
+        back.
       }
     \resumeItemListEnd
   \resumeSubheading
@@ -199,24 +196,22 @@
     \resumeItemListStart
 
       \resumeItem{
-        Designed a \textbf{Kubernetes-native agent sandbox control plane} using
-        CRDs and controllers to reconcile isolated, stateful workspaces from
-        reusable runtime templates, with warm-pool provisioning, suspend/resume,
-        and TTL-based garbage collection.
+        Built a Kubernetes-native sandbox control plane that packs
+        \textbf{15+ concurrent gVisor-isolated agent instances} onto a
+        single AWS m6i.2xlarge (8 vCPU, 32 GB) via bin-packing, warm pools,
+        and suspend/resume.
       }
 
       \resumeItem{
         Hardened untrusted-code execution with \textbf{gVisor/Kata
-        RuntimeClasses}, namespace-scoped service accounts and RBAC,
-        default-deny NetworkPolicies, restricted pod security contexts, and
+        RuntimeClasses}, namespace RBAC, default-deny NetworkPolicies, and
         CPU, memory, and ephemeral-storage quotas.
       }
 
       \resumeItem{
-        Standardized reproducible agent environments using immutable OCI images,
-        validated configuration and short-lived secret projection, repository
-        bootstrap, and PVC-backed workspaces; instrumented provisioning and
-        execution with OpenTelemetry traces and lifecycle metrics.
+        Standardized reproducible agent environments with immutable OCI
+        images, PVC-backed workspaces, TTL garbage collection, and
+        OpenTelemetry traces so idle sandboxes yield host CPU.
       }
 
     \resumeItemListEnd
