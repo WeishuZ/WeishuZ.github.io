@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#fbfaf7">
+<meta name="theme-color" content="#f7f5ef">
 
-<title>Weishu Zhang — AI Infrastructure Engineer</title>
+<title>Weishu Zhang</title>
 <meta name="description" content="UC Berkeley EECS student focused on AI infrastructure, LLM serving systems, and applied systems for reliable AI. Creator of mini-vLLM.">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="Weishu Zhang — AI Infrastructure Engineer">
+<meta property="og:title" content="Weishu Zhang">
 <meta property="og:description" content="UC Berkeley EECS. AI infrastructure, LLM serving systems, and applied systems for reliable AI.">
 <meta property="og:url" content="https://weishuz.com">
 <meta name="twitter:card" content="summary">
 
 <link rel="preconnect" href="https://fonts.bunny.net">
-<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700|jetbrains-mono:400,500&display=swap">
+<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600&display=swap">
 
 <link rel="canonical" href="https://weishuz.com/">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
@@ -24,28 +24,65 @@
 <body id="top">
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="page">
-  <header class="site-header">
-    <a class="wordmark" href="#top" aria-label="Weishu Zhang, back to top">WZ.</a>
-    <nav aria-label="Main navigation"><a href="#systems">Work</a><a href="#writing">Writing</a><a href="#learning">Learning</a><a href="#experience">Experience</a><a class="resume-link" href="/resume/resume.pdf" target="_blank" rel="noopener">Resume<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></nav>
-  </header>
-  <main id="main" tabindex="-1">
-    <section id="about" class="hero" aria-labelledby="name">
-      <div class="hero-intro"><h1 id="name">Weishu Zhang.</h1><p class="hero-title">Building the systems behind AI.</p>
-      <p class="hero-description">UC Berkeley EECS. I build LLM serving systems, agent runtimes, and the infrastructure that makes AI reliable.</p>
-      <div class="hero-actions"><a class="button" href="#systems">Explore my work<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a><a href="mailto:weszhang@berkeley.edu">Get in touch<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></div></div>
-      <dl class="hero-context"><div><dt>Currently</dt><dd>SDE Intern · Amazon AI Studio<small>Distributed training &amp; inference</small></dd></div><div><dt>Previously</dt><dd>ASML · UCSF · UC Berkeley</dd></div><div><dt>Based in</dt><dd>Berkeley, CA<small>BS EECS, May 2027</small></dd></div></dl>
+<aside class="sidebar">
+    <h1 class="name">Weishu <br>Zhang</h1>
+    <p class="role">
+      UC Berkeley EECS. Building <strong>AI infrastructure</strong>, LLM serving systems, and <strong>agent runtimes</strong> for reliable production workflows.
+    </p>
+
+    <nav class="links" aria-label="Contact and resources">
+      <a href="mailto:weszhang@berkeley.edu">Email</a>
+      <a href="https://github.com/WeishuZ" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://linkedin.com/in/Weishuz" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="/resume/resume.pdf" target="_blank" rel="noopener">Resume</a>
+      <a href="/blog/">Blog</a>
+      <a href="/learning/">Learning</a>
+    </nav>
+
+    <nav class="nav" aria-label="page navigation">
+      <a href="#about">About</a>
+      <a href="#news">News</a>
+      <a href="#systems">Selected systems</a>
+      <a href="#learning">Learning</a>
+      <a href="#writing">Writing</a>
+      <a href="#experience">Experience</a>
+    </nav>
+
+    <div class="meta">
+      <span>Berkeley, CA</span>
+      <span>BS EECS, May 2027</span>
+      <span>Last updated September 2026</span>
+    </div>
+  </aside>
+<main id="main" tabindex="-1">
+<section id="about">
+      <h2>About</h2>
+      <p class="lede">
+        I like systems where the interesting part is below the API surface: schedulers, memory managers, serving control planes, data pipelines, and the benchmarks that make performance claims honest. My current focus is AI infrastructure for LLM inference.
+      </p>
+      <p>
+        Recently I built <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">mini-vLLM</a>, a small LLM serving engine simulator for learning and testing paged KV cache, continuous batching, preemption, and prefix caching. At ASML I designed the runtime agent infrastructure for the Tachyon SQA process. SDE intern at <strong>Amazon AI Studio</strong> (Sep 2026–present), building distributed training and inference infrastructure.
+      </p>
+      <ul class="focus-list">
+        <li><strong>LLM serving</strong><span>KV cache management, request scheduling, batching, preemption, prefix reuse, inference metrics.</span></li>
+        <li><strong>Agent runtimes</strong><span>Durable workflows, human-approval gates, async job execution, result reconciliation.</span></li>
+        <li><strong>AI systems</strong><span>Reliable extraction, evaluation, schema fidelity, long-context pipelines, production constraints.</span></li>
+      </ul>
     </section>
-    <div class="social-rail"><nav aria-label="Social links"><a href="mailto:weszhang@berkeley.edu">Email</a><a href="https://github.com/WeishuZ" target="_blank" rel="noopener">GitHub<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a><a href="https://linkedin.com/in/Weishuz" target="_blank" rel="noopener">LinkedIn<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></nav></div>
-    <section id="systems" class="content-section" aria-labelledby="systems-heading">
-      <header class="section-heading"><span class="section-number" aria-hidden="true">01</span><div><h2 id="systems-heading">Selected systems</h2><p>Control planes, serving engines, and production infrastructure.</p></div></header>
-      <article class="project featured">
-      <span class="project-number" aria-hidden="true">01</span>
-      <div class="project-body"><div class="project-title"><h3>mini-vLLM</h3><span class="project-kind">LLM serving · Python</span></div>
-      <p class="project-summary">A CPU-only simulator of modern LLM serving. Paged KV cache, continuous batching, preemption, and prefix caching — inspectable on a laptop.</p><div class="project-links"><a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">Code<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a><a href="https://github.com/WeishuZ/mini-vllm#benchmarks" target="_blank" rel="noopener">Benchmarks<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></div>
-      <details class="project-details"><summary>Engineering details<span class="sr-only"> for mini-vLLM</span></summary><div class="detail-body">
+<section id="news"><h2>News</h2><ul class="news"><li><span class="date">2026.09</span><span>Wrote <a href="/blog/two-loops/">Two Simple Loops</a>, on human-governed skill evolution and stage checkpoints in SQA agent runtime.</span></li><li><span class="date">2026.09</span><span>Started as an SDE intern at <strong>Amazon AI Studio</strong>, on distributed training and inference infrastructure.</span></li><li><span class="date">2026.07</span><span>Published <a href="/blog/agent-native-cli/">The Shell Is a Protocol Now</a>, on agent-native CLIs as execution and governance boundaries for enterprise workflows.</span></li></ul><details class="news-archive"><summary>Earlier updates</summary><ul class="news"><li><span class="date">2026.05</span><span>Started Software Engineering, Test Infrastructure at ASML on Tachyon SQA: daily regression and async test-plan lifecycle with QA approval gates.</span></li><li><span class="date">2026.05</span><span>Published <a href="/learning/infra-learning-path/">Infra Learning Path</a>, a textbook-style AI infrastructure path anchored on vLLM and mini-vLLM.</span></li><li><span class="date">2026.05</span><span>Published <a href="/learning/cloud-os/">Cloud Computing, from the machine up</a>, a Chinese learning site for OS concepts, cloud architecture, Kubernetes, serverless, and GPU inference.</span></li><li><span class="date">2026.05</span><span>Published <a href="/learning/db-book/">Data Systems Illustrated</a>, a CS186-style visual companion for databases from SQL down to storage and recovery.</span></li><li><span class="date">2026.05</span><span>Released <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">mini-vLLM</a>: a reproducible, CPU-only simulator of modern LLM serving internals.</span></li><li><span class="date">2026.05</span><span>Updated benchmark suite for continuous batching, prefix caching, preemption, and serving latency tradeoffs.</span></li><li><span class="date">2025.08</span><span>Started UCSF research on LLM-based clinical note structure extraction.</span></li></ul></details></section>
+<section id="systems"><h2>Selected systems</h2><article class="item">
+        <div class="item-head">
+          <h3>mini-vLLM</h3>
+          <div class="item-links">
+            <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">code</a>
+            <a href="https://github.com/WeishuZ/mini-vllm#benchmarks" target="_blank" rel="noopener">benchmarks</a>
+          </div>
+        </div>
+        <div class="item-kicker">LLM serving control plane, from scratch</div>
         <p>
           A compact implementation of the control-plane ideas behind high-throughput LLM inference. It keeps compute simulated on purpose so memory management and scheduling behavior are easy to inspect, test, and benchmark on a laptop.
-        </p>
+        </p><p class="benchmark-note">CPU-only simulation benchmarks: <strong>7×</strong> more active sequences; <strong>1.53×</strong> sustained throughput; <strong>54×</strong> lower p99 TTFT. <a href="https://github.com/WeishuZ/mini-vllm#benchmarks" target="_blank" rel="noopener">Workloads &amp; baselines</a>.</p>
+<details><summary>Technical notes<span class="sr-only"> for mini-vLLM</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Implemented paged KV-cache allocation, block reuse, preemption, prefix caching, and continuous batching.</li>
           <li>Added deterministic workload benchmarks and unit tests for scheduler, cache, engine, and prefix behavior.</li>
@@ -59,14 +96,20 @@
           <span class="tag">Scheduler</span>
           <span class="tag">Benchmarking</span>
         </div>
-      </div></details></div><aside class="benchmark" aria-label="mini-vLLM simulated workload results"><p class="benchmark-label">Simulated workload results</p><dl><div><dt>Active sequences</dt><dd>7×</dd></div><div><dt>Sustained throughput</dt><dd>1.53×</dd></div><div><dt>Lower p99 TTFT</dt><dd>54×</dd></div></dl><p class="benchmark-note">CPU-only simulation. See benchmarks for workload and baseline details.</p></aside></article><article class="project ">
-      <span class="project-number" aria-hidden="true">02</span>
-      <div class="project-body"><div class="project-title"><h3>Tachyon SQA runtime</h3><span class="project-kind">ASML · Durable agent workflows</span></div>
-      <p class="project-summary">A runtime for test-plan drafting, QA approval, async execution, and human-governed harness evolution.</p><div class="project-links"><span class="private">Private project</span></div>
-      <details class="project-details"><summary>Engineering details<span class="sr-only"> for Tachyon SQA runtime</span></summary><div class="detail-body">
+      </div></details>
+</article>
+<article class="item">
+        <div class="item-head">
+          <h3>Tachyon SQA runtime</h3>
+          <div class="item-links">
+            <span>private</span>
+          </div>
+        </div>
+        <div class="item-kicker">ASML, Software Engineering in Test intern</div>
         <p>
           Runtime agent infrastructure for the Tachyon SQA process. The control plane drafts a test plan, pauses for QA, runs jobs asynchronously, and writes results back — then evolves the harness itself under human audit, instead of silently accumulating prompt residue.
         </p>
+<details><summary>Technical notes<span class="sr-only"> for Tachyon SQA runtime</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Designed the runtime agent infra for Tachyon SQA: a workspace harness plus an execution layer that owns test-plan state across draft, approval, job run, and result writeback.</li>
           <li>Built a daily regression tracking harness that materializes review sections from regression inputs, reads QA gates from Confluence, and drives follow-up work through durable runtime state.</li>
@@ -94,8 +137,7 @@
               <path class="d-agent" marker-end="url(#a1)" d="M350 112 C350 88 280 88 280 112"/>
               <path class="d-agent" marker-end="url(#a1)" d="M233 148 V204"/>
               <path class="d-human" marker-end="url(#h1)" d="M168 224 H92 V36 H166"/>
-              <text class="d-edge d-human-fill" x="44" y="128" text-anchor="middle">Human</text>
-              <text class="d-edge d-human-fill" x="44" y="144" text-anchor="middle">Approval</text>
+              <text class="d-edge d-human-fill" x="44" y="128" text-anchor="middle">Human</text><text class="d-edge d-human-fill" x="44" y="144" text-anchor="middle">Approval</text>
             </svg>
             <figcaption>Human-gated stage loop</figcaption>
           </figure>
@@ -138,14 +180,20 @@
           <span class="tag">Human audit</span>
           <span class="tag">Python</span>
         </div>
-      </div></details></div></article><article class="project ">
-      <span class="project-number" aria-hidden="true">03</span>
-      <div class="project-body"><div class="project-title"><h3>Ludus</h3><span class="project-kind">Kubernetes-native agent infrastructure</span></div>
-      <p class="project-summary">Isolated, stateful agent workspaces with a sandbox control plane and reproducible environments.</p><div class="project-links"><a href="https://ludus.my/" target="_blank" rel="noopener">Visit site<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></div>
-      <details class="project-details"><summary>Engineering details<span class="sr-only"> for Ludus</span></summary><div class="detail-body">
+      </div></details>
+</article>
+<article class="item">
+        <div class="item-head">
+          <h3>Ludus</h3>
+          <div class="item-links">
+            <a href="https://ludus.my/" target="_blank" rel="noopener">site</a>
+          </div>
+        </div>
+        <div class="item-kicker">Cloud agent infrastructure</div>
         <p>
           A Kubernetes-native control plane for isolated, stateful agent workspaces: provision from runtime templates, suspend and resume, then garbage-collect on TTL.
         </p>
+<details><summary>Technical notes<span class="sr-only"> for Ludus</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Designed the sandbox control plane with CRDs and controllers, warm-pool provisioning, and lifecycle reconciliation.</li>
           <li>Hardened untrusted-code execution with gVisor/Kata RuntimeClasses, namespace-scoped RBAC, default-deny NetworkPolicies, and resource quotas.</li>
@@ -158,14 +206,20 @@
           <span class="tag">OCI</span>
           <span class="tag">OpenTelemetry</span>
         </div>
-      </div></details></div></article><article class="project ">
-      <span class="project-number" aria-hidden="true">04</span>
-      <div class="project-body"><div class="project-title"><h3>Clinical note structure extraction</h3><span class="project-kind">UCSF · Clinical NLP</span></div>
-      <p class="project-summary">Long clinical records turned into structured outputs under privacy and schema constraints.</p><div class="project-links"><span class="private">Private project</span></div>
-      <details class="project-details"><summary>Engineering details<span class="sr-only"> for Clinical note structure extraction</span></summary><div class="detail-body">
+      </div></details>
+</article>
+<article class="item">
+        <div class="item-head">
+          <h3>Clinical note structure extraction</h3>
+          <div class="item-links">
+            <span>private</span>
+          </div>
+        </div>
+        <div class="item-kicker">UCSF research, clinical NLP and LLM inference</div>
         <p>
           A pipeline for turning long, unstructured clinical records into standardized structured outputs under privacy and schema constraints.
         </p>
+<details><summary>Technical notes<span class="sr-only"> for Clinical note structure extraction</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Decomposed monolithic extraction into smaller schema-specific subtasks to reduce context waste and improve debuggability.</li>
           <li>Built domain datasets and fine-tuning experiments with Qwen, QLoRA, self-consistency checks, and schema validation.</li>
@@ -178,14 +232,20 @@
           <span class="tag">MedSpacy</span>
           <span class="tag">Structured extraction</span>
         </div>
-      </div></details></div></article><article class="project ">
-      <span class="project-number" aria-hidden="true">05</span>
-      <div class="project-body"><div class="project-title"><h3>GradeSync / GradeView</h3><span class="project-kind">UC Berkeley · Course infrastructure</span></div>
-      <p class="project-summary">A distributed course-management system for consistent score data and role-aware access.</p><div class="project-links"><a href="https://gradeview.eecs.berkeley.edu" target="_blank" rel="noopener">Live site<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></div>
-      <details class="project-details"><summary>Engineering details<span class="sr-only"> for GradeSync / GradeView</span></summary><div class="detail-body">
+      </div></details>
+</article>
+<article class="item">
+        <div class="item-head">
+          <h3>GradeSync / GradeView</h3>
+          <div class="item-links">
+            <a href="https://gradeview.eecs.berkeley.edu" target="_blank" rel="noopener">live</a>
+          </div>
+        </div>
+        <div class="item-kicker">UC Berkeley course infrastructure</div>
         <p>
           A distributed course-management system for normalizing student score data across Gradescope, PrairieLearn, iClicker, and internal course workflows.
         </p>
+<details><summary>Technical notes<span class="sr-only"> for GradeSync / GradeView</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Migrated fragmented course data into a normalized PostgreSQL-backed service with role-aware access control.</li>
           <li>Added Redis-backed caching and pre-rendering paths to reduce repeated query load.</li>
@@ -198,50 +258,21 @@
           <span class="tag">Node.js</span>
           <span class="tag">RBAC</span>
         </div>
-      </div></details></div></article>
-      <details class="approach"><summary>How I approach systems</summary><div class="detail-body"><p>
-        I like systems where the interesting part is below the API surface: schedulers, memory managers, serving control planes, data pipelines, and the benchmarks that make performance claims honest. My current focus is AI infrastructure for LLM inference.
-      </p><ul class="focus-list">
-        <li><strong>LLM serving</strong><span>KV cache management, request scheduling, batching, preemption, prefix reuse, inference metrics.</span></li>
-        <li><strong>Agent runtimes</strong><span>Durable workflows, human-approval gates, async job execution, result reconciliation.</span></li>
-        <li><strong>AI systems</strong><span>Reliable extraction, evaluation, schema fidelity, long-context pipelines, production constraints.</span></li>
-      </ul></div></details>
-    </section>
-    <section id="writing" class="content-section" aria-labelledby="writing-heading">
-      <header class="section-heading"><span class="section-number" aria-hidden="true">02</span><div><h2 id="writing-heading">Writing</h2></div><a class="section-link" href="/blog/">All writing<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></header>
-      <ul class="writing">
-        <li>
-          <a href="/blog/two-loops/"><span class="writing-title">Two Simple Loops</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <span>Human-governed skill evolution and stage checkpoints for long SQA agent tasks.</span>
-        </li>
-        <li>
-          <a href="/blog/agent-native-cli/"><span class="writing-title">The Shell Is a Protocol Now</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <span>Agent-native CLIs as executable contracts for reliable enterprise workflows.</span>
-        </li>
-        <li>
-          <a href="/learning/infra-learning-path/"><span class="writing-title">Infra Learning Path</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <span>Textbook-style path for learning AI infrastructure through vLLM and mini-vLLM.</span>
-        </li>
-        <li>
-          <a href="/blog/anatomy-of-recsys-graph/"><span class="writing-title">Anatomy of a Recommender System as a Graph</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <span>Networks, recommendation, sparsity, and fairness.</span>
-        </li>
-        <li>
-          <a href="/blog/why-networks-matter/"><span class="writing-title">Why Networks Matter</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <span>Graph structure, degree distributions, and connected systems.</span>
-        </li>
-        <li>
-          <a href="/blog/swarm-coder-setup/"><span class="writing-title">Swarm Coder Setup</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <span>Notes on local agent workflows and coding infrastructure.</span>
-        </li>
-      </ul>
-    </section>
-    <section id="learning" class="content-section" aria-labelledby="learning-heading">
-      <header class="section-heading"><span class="section-number" aria-hidden="true">03</span><div><h2 id="learning-heading">Learning</h2><p>Notes that became textbooks.</p></div><a class="section-link" href="/learning/">All learning<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></header>
-      <div class="learning-grid"><article class="learning-item"><h3><a href="/learning/infra-learning-path/">Infra Learning Path</a></h3><p>A practical path through vLLM and serving systems.</p><a class="read-link" href="/learning/infra-learning-path/">Read<span class="sr-only"> Infra Learning Path</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a><details><summary>What’s inside<span class="sr-only"> Infra Learning Path</span></summary><div class="detail-body">
+      </div></details>
+</article></section>
+<section id="learning"><h2>Learning</h2><article class="item">
+        <div class="item-head">
+          <h3>Infra Learning Path</h3>
+          <div class="item-links">
+            <a href="/learning/infra-learning-path/">open</a>
+            <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">source</a>
+          </div>
+        </div>
+        <div class="item-kicker">AI infrastructure textbook anchored on vLLM</div>
         <p>
           A six-month path for learning LLM serving systems through vLLM: request lifecycle, PagedAttention, scheduler design, kernels, mini-vLLM, and frontier serving systems.
         </p>
+<details><summary>Technical notes<span class="sr-only"> for Infra Learning Path</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Connects operating systems concepts to real LLM serving internals instead of teaching them as isolated theory.</li>
           <li>Includes diagrams, source-reading anchors, self-checks, paper reading order, and a mini-vLLM project arc.</li>
@@ -254,10 +285,20 @@
           <span class="tag">LLM serving</span>
           <span class="tag">Systems</span>
         </div>
-      <a href="https://github.com/WeishuZ/infra-learning-path" target="_blank" rel="noopener">Source<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></div></details></article><article class="learning-item"><h3><a href="/learning/cloud-os/">Cloud Computing, from the machine up</a></h3><p>14 chapters from operating systems to cloud infrastructure.</p><a class="read-link" href="/learning/cloud-os/">Read<span class="sr-only"> Cloud Computing, from the machine up</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a><details><summary>What’s inside<span class="sr-only"> Cloud Computing, from the machine up</span></summary><div class="detail-body">
+      </div></details>
+</article>
+<article class="item">
+        <div class="item-head">
+          <h3>Cloud Computing, from the machine up</h3>
+          <div class="item-links">
+            <a href="/learning/cloud-os/">open</a>
+          </div>
+        </div>
+        <div class="item-kicker">Cloud / OS illustrated companion in Chinese</div>
         <p>
           A learning site that follows one cloud request down through CPU scheduling, virtual memory, I/O, virtualization, containers, networking, Kubernetes, serverless, and GPU inference.
         </p>
+<details><summary>Technical notes<span class="sr-only"> for Cloud Computing, from the machine up</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Organizes 14 chapters around the path from a single machine to cloud-scale infrastructure.</li>
           <li>Connects CS162-style operating systems concepts to virtual machines, containers, orchestration, and AI serving.</li>
@@ -270,10 +311,20 @@
           <span class="tag">Serverless</span>
           <span class="tag">GPU inference</span>
         </div>
-      </div></details></article><article class="learning-item"><h3><a href="/learning/db-book/">Data Systems Illustrated</a></h3><p>12 chapters from SQL to storage, transactions, and recovery.</p><a class="read-link" href="/learning/db-book/">Read<span class="sr-only"> Data Systems Illustrated</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a><details><summary>What’s inside<span class="sr-only"> Data Systems Illustrated</span></summary><div class="detail-body">
+      </div></details>
+</article>
+<article class="item">
+        <div class="item-head">
+          <h3>Data Systems Illustrated</h3>
+          <div class="item-links">
+            <a href="/learning/db-book/">open</a>
+          </div>
+        </div>
+        <div class="item-kicker">CS186-style visual companion for database systems</div>
         <p>
           A local-first illustrated textbook that walks from SQL and relational algebra down to buffer pools, B+ trees, query execution, locking, recovery, distributed commit, and modern data systems.
         </p>
+<details><summary>Technical notes<span class="sr-only"> for Data Systems Illustrated</span></summary><div class="detail-body">
         <ul class="bullets">
           <li>Organizes 12 database systems chapters around diagrams, invariants, and I/O cost intuition.</li>
           <li>Includes a B+ tree sandbox plus static visual chapters for sorting, joins, optimization, recovery, and distributed transactions.</li>
@@ -286,19 +337,79 @@
           <span class="tag">Transactions</span>
           <span class="tag">Recovery</span>
         </div>
-      </div></details></article></div>
+      </div></details>
+</article></section>
+<section id="writing">
+      <h2>Writing</h2>
+      <ul class="writing">
+        <li>
+          <a href="/blog/two-loops/">Two Simple Loops</a>
+          <span>Human-governed skill evolution and stage checkpoints for long SQA agent tasks.</span>
+        </li>
+        <li>
+          <a href="/blog/agent-native-cli/">The Shell Is a Protocol Now</a>
+          <span>Agent-native CLIs as executable contracts for reliable enterprise workflows.</span>
+        </li>
+        <li>
+          <a href="/learning/infra-learning-path/">Infra Learning Path</a>
+          <span>Textbook-style path for learning AI infrastructure through vLLM and mini-vLLM.</span>
+        </li>
+        <li>
+          <a href="/blog/anatomy-of-recsys-graph/">Anatomy of a Recommender System as a Graph</a>
+          <span>Networks, recommendation, sparsity, and fairness.</span>
+        </li>
+        <li>
+          <a href="/blog/why-networks-matter/">Why Networks Matter</a>
+          <span>Graph structure, degree distributions, and connected systems.</span>
+        </li>
+        <li>
+          <a href="/blog/swarm-coder-setup/">Swarm Coder Setup</a>
+          <span>Notes on local agent workflows and coding infrastructure.</span>
+        </li>
+      </ul>
     </section>
-    <section id="experience" class="content-section" aria-labelledby="experience-heading">
-      <header class="section-heading"><span class="section-number" aria-hidden="true">04</span><div><h2 id="experience-heading">Experience</h2></div></header>
-      <ul class="experience"><li><span class="date">Sep 2026 - present</span><div><h3>Software Development Engineer Intern, Amazon AI Studio</h3><p>Distributed training and inference infrastructure for AI Studio.</p></div></li><li><span class="date">May 2026 - Aug 2026</span><div><h3>Software Engineering, Test Infrastructure, ASML</h3><p>Designed runtime agent infrastructure for the Tachyon SQA process: daily regression tracking, a test-plan lifecycle with QA approval gates, asynchronous agent job execution with result / inspection writeback, and a human-governed self-evolution loop (session → temporary shared memory → human audit → persist into the harness). Built on Temporal-style durable workflows.</p></div></li><li><span class="date">Apr 2026 - Aug 2026</span><div><h3>Co-Founder &amp; Software Engineer, <a href="https://ludus.my/" target="_blank" rel="noopener">Ludus</a></h3><p>Cloud agent infrastructure: Kubernetes-native sandbox control plane, isolated workspaces, and untrusted-code execution.</p></div></li><li><span class="date">Aug 2025 - Jan 2026</span><div><h3>Undergraduate Research Assistant, UCSF</h3><p>Clinical NLP, LLM fine-tuning, long-context inference, and schema-constrained extraction.</p></div></li><li><span class="date">2025 - present</span><div><h3>Lead Systems Architect, UC Berkeley</h3><p>Course infrastructure for GradeSync and GradeView under Prof. Dan Garcia.</p></div></li></ul>
+<section id="experience">
+      <h2>Experience</h2>
+      <ul class="experience">
+        <li>
+          <span>Sep 2026 - present</span>
+          <div>
+            <strong>Software Development Engineer Intern, Amazon AI Studio</strong>
+            <p>Distributed training and inference infrastructure for AI Studio.</p>
+          </div>
+        </li>
+        <li>
+          <span>May 2026 - Aug 2026</span>
+          <div>
+            <strong>Software Engineering, Test Infrastructure, ASML</strong>
+            <p>Designed runtime agent infrastructure for the Tachyon SQA process: daily regression tracking, a test-plan lifecycle with QA approval gates, asynchronous agent job execution with result / inspection writeback, and a human-governed self-evolution loop (session → temporary shared memory → human audit → persist into the harness). Built on Temporal-style durable workflows.</p>
+          </div>
+        </li>
+        <li>
+          <span>Apr 2026 - Aug 2026</span>
+          <div>
+            <strong>Co-Founder &amp; Software Engineer, <a href="https://ludus.my/" target="_blank" rel="noopener">Ludus</a></strong>
+            <p>Cloud agent infrastructure: Kubernetes-native sandbox control plane, isolated workspaces, and untrusted-code execution.</p>
+          </div>
+        </li>
+        <li>
+          <span>Aug 2025 - Jan 2026</span>
+          <div>
+            <strong>Undergraduate Research Assistant, UCSF</strong>
+            <p>Clinical NLP, LLM fine-tuning, long-context inference, and schema-constrained extraction.</p>
+          </div>
+        </li>
+        <li>
+          <span>2025 - present</span>
+          <div>
+            <strong>Lead Systems Architect, UC Berkeley</strong>
+            <p>Course infrastructure for GradeSync and GradeView under Prof. Dan Garcia.</p>
+          </div>
+        </li>
+      </ul>
     </section>
-    <section id="news" class="content-section" aria-labelledby="news-heading">
-      <header class="section-heading"><span class="section-number" aria-hidden="true">05</span><div><h2 id="news-heading">Latest</h2></div></header>
-      <ul class="news"><li><span class="date">2026.09</span><span>Wrote <a href="/blog/two-loops/">Two Simple Loops</a>, on human-governed skill evolution and stage checkpoints in SQA agent runtime.</span></li><li><span class="date">2026.09</span><span>Started as an SDE intern at <strong>Amazon AI Studio</strong>, on distributed training and inference infrastructure.</span></li></ul>
-      <details class="news-archive"><summary>Earlier updates</summary><ul class="news"><li><span class="date">2026.07</span><span>Published <a href="/blog/agent-native-cli/">The Shell Is a Protocol Now</a>, on agent-native CLIs as execution and governance boundaries for enterprise workflows.</span></li><li><span class="date">2026.05</span><span>Started Software Engineering, Test Infrastructure at ASML on Tachyon SQA: daily regression and async test-plan lifecycle with QA approval gates.</span></li><li><span class="date">2026.05</span><span>Published <a href="/learning/infra-learning-path/">Infra Learning Path</a>, a textbook-style AI infrastructure path anchored on vLLM and mini-vLLM.</span></li><li><span class="date">2026.05</span><span>Published <a href="/learning/cloud-os/">Cloud Computing, from the machine up</a>, a Chinese learning site for OS concepts, cloud architecture, Kubernetes, serverless, and GPU inference.</span></li><li><span class="date">2026.05</span><span>Published <a href="/learning/db-book/">Data Systems Illustrated</a>, a CS186-style visual companion for databases from SQL down to storage and recovery.</span></li><li><span class="date">2026.05</span><span>Released <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">mini-vLLM</a>: a reproducible, CPU-only simulator of modern LLM serving internals.</span></li><li><span class="date">2026.05</span><span>Updated benchmark suite for continuous batching, prefix caching, preemption, and serving latency tradeoffs.</span></li><li><span class="date">2025.08</span><span>Started UCSF research on LLM-based clinical note structure extraction.</span></li></ul></details>
-    </section>
-  </main>
-  <footer><div><a class="footer-name" href="#top">Weishu Zhang</a><p>Last updated September 2026</p></div><nav aria-label="Footer links"><a href="mailto:weszhang@berkeley.edu">Email</a><a href="https://github.com/WeishuZ" target="_blank" rel="noopener">GitHub</a><a href="https://linkedin.com/in/Weishuz" target="_blank" rel="noopener">LinkedIn</a></nav><a class="back-top" href="#top">Back to top<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></footer>
+<footer><span>Weishu Zhang · Berkeley, CA</span><a href="#top">Back to top</a></footer>
+</main>
 </div>
 </body>
 </html>
