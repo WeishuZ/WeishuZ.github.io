@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#faf9f5" />
+    <title>Agent Operations — Redacted interface</title>
+    <meta
+      name="description"
+      content="Redacted interface of a private operations tool. No operational data is loaded."
+    />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="preview.css" />
+    <script src="preview.js" defer></script>
+  </head>
+  <body data-mode="redacted">
+    <a class="skip" href="#main">Skip to observations</a>
+    <div class="shell">
+      <aside class="rail">
+        <a class="brand" href="#overview">Agent Operations</a>
+        <nav aria-label="Console">
+          <a href="#overview" data-view="overview" aria-current="page"
+            ><span aria-hidden="true">▥</span>Overview</a
+          >
+          <a href="#instances" data-view="instances"
+            ><span aria-hidden="true">▤</span>Instances</a
+          >
+          <a href="#reliability" data-view="reliability"
+            ><span aria-hidden="true">⌁</span>Reliability</a
+          >
+          <a href="#signals" data-view="signals"
+            ><span aria-hidden="true">≡</span>Signals</a
+          >
+        </nav>
+        <a class="portfolio" href="../../#work">↗ Portfolio</a>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <span class="workspace-name">Interface preview</span>
+          <div class="actions">
+            <span class="preview-notice">Operational data redacted</span>
+          </div>
+        </header>
+        <main id="main" tabindex="-1">
+          <section id="access" class="panel collection-policy" hidden>
+            <h1>Private operations workspace</h1>
+            <p>
+              Live resource and health observations require an authorized
+              connection to the deployment.
+            </p>
+            <p>
+              <a
+                href="https://github.com/WeishuZ/WeishuZ.github.io/tree/codex/resume-template-and-site-cleanup/services/observer"
+                >View the implementation and metric model ↗</a
+              >
+            </p>
+          </section>
+          <div id="error" class="error" role="alert" hidden></div>
+          <section id="overview" data-panel>
+            <h1>Runtime overview</h1>
+            <p class="subtitle">
+              Resource use and service health for connected runtimes.
+            </p>
+            <div id="summary" class="summary" aria-live="polite"></div>
+            <div class="charts">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>CPU utilization</h2>
+                  <span id="cpu-caption"></span>
+                </div>
+                <div id="cpu-chart" class="chart"></div>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Host memory</h2>
+                  <span id="memory-caption"></span>
+                </div>
+                <div id="memory-chart" class="chart"></div>
+              </section>
+            </div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Connected runtimes</h2>
+                <a href="#instances">Inspect instances →</a>
+              </div>
+              <div class="table-wrap" id="overview-table"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Probe reliability</h2>
+                <a href="#reliability">View checks →</a>
+              </div>
+              <div id="probe-summary" class="probe-summary"></div>
+            </section>
+          </section>
+          <section id="instances" data-panel hidden>
+            <h1>Instance diagnostics</h1>
+            <p class="subtitle">
+              Inspect runtime state, resource accounting, limits and restart
+              signals.
+            </p>
+            <div class="filters">
+              <label
+                >Type
+                <select
+                  id="kind"
+                  disabled
+                  aria-label="Type filter requires private access"
+                >
+                  <option value="all">Private inventory</option>
+                  <option value="agent">Agent runtimes</option>
+                  <option value="service">Services</option>
+                </select></label
+              ><label
+                >State
+                <select
+                  id="state"
+                  disabled
+                  aria-label="State filter requires private access"
+                >
+                  <option value="all">Private state</option>
+                  <option value="active">Running</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="failed">Failed</option>
+                </select></label
+              >
+            </div>
+            <div class="instance-layout">
+              <section class="panel">
+                <div class="panel-head">
+                  <h2>Runtime inventory</h2>
+                  <span id="inventory-count"></span>
+                </div>
+                <div class="table-wrap" id="instances-table"></div>
+              </section>
+              <aside
+                class="panel inspector"
+                id="inspector"
+                aria-live="polite"
+              ></aside>
+            </div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Selected runtime CPU</h2>
+                <span>CPU seconds per wall second</span>
+              </div>
+              <div class="chart" id="instance-chart"></div>
+            </section>
+          </section>
+          <section id="reliability" data-panel hidden>
+            <h1>Reliability explorer</h1>
+            <p class="subtitle">
+              Recorded HTTP health checks, latency distributions and observed
+              state changes.
+            </p>
+            <p class="scope-note">
+              Probe availability measures local service reachability. It is not
+              agent task completion or user request success.
+            </p>
+            <div id="probe-details"></div>
+            <div id="check-inspector" class="observation-detail" role="status">
+              Individual check details, timestamps and targets are withheld.
+            </div>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>State transition ledger</h2>
+                <span>Observed transitions only</span>
+              </div>
+              <div id="events" class="table-wrap"></div>
+            </section>
+          </section>
+          <section id="signals" data-panel hidden>
+            <h1>Signal coverage</h1>
+            <p class="subtitle">
+              What is measured, where it comes from, and what is not yet
+              connected.
+            </p>
+            <section class="panel">
+              <div id="signal-table" class="table-wrap"></div>
+            </section>
+            <section class="panel definitions">
+              <h2>Metric definitions</h2>
+              <dl id="definitions"></dl>
+            </section>
+            <section class="panel collection-policy">
+              <h2>Collection boundaries</h2>
+              <p>
+                Observations are read-only. Runtime identities use stable
+                aliases. The collector does not read prompts, messages, process
+                arguments, environments, passwords or access tokens.
+              </p>
+              <p>
+                Resources and health are sampled every 10 seconds. Missing
+                accounting stays unavailable. Charts do not interpolate across
+                missing intervals; aggregates use recorded checks rather than
+                chart points.
+              </p>
+            </section>
+          </section>
+          <footer>
+            <span id="coverage">Interface structure only · identity, values and history withheld</span
+            ><a href="#signals">Metric definitions ↗</a>
+          </footer>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

@@ -29,6 +29,12 @@ The existing application and its database are not modified. All writes belong to
 
 The interface source is in `projects/agent-operations/`. Static hosting alone does not create a working data source. The private server serves these files in live mode and queries its local observation API.
 
+## Public portfolio preview
+
+The user chose to keep all operational metrics private. The homepage therefore uses `preview.html` and static renders under `assets/agent-operations/`, with values, identities, statuses, row counts, timestamps, histories and deployment coverage withheld. This data-free renderer reuses the actual interface shell and styles, but does not load `app.js`, the observation API, a dataset, or a private screenshot. It contains no fabricated activity.
+
+The public link opens only this redacted interface. The actual application entry remains private-access gated on static hosting, and the running observer remains loopback-only. Public preview generation does not change the private deployment or its access boundary.
+
 ## Collection semantics
 
 - Host CPU is a delta of `/proc/stat`; the first observation is unavailable rather than zero.

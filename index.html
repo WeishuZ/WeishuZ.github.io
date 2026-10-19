@@ -16,6 +16,8 @@
   <link rel="preload" href="/assets/fonts/newsreader-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/source-sans-3-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/home.css">
+  <link rel="stylesheet" href="assets/showcase.css">
+  <script src="assets/showcase.js" defer></script>
 </head>
 <body id="top">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -90,6 +92,45 @@
 
       <section id="work">
         <h2>Selected work</h2>
+        <article class="operations-showcase" aria-labelledby="operations-title">
+          <div class="operations-heading">
+            <div>
+              <h3 id="operations-title">Agent Operations</h3>
+              <p>A read-only operations console for my running agent infrastructure.</p>
+            </div>
+            <a class="implementation-link" href="https://github.com/WeishuZ/WeishuZ.github.io/tree/codex/resume-template-and-site-cleanup/services/observer" target="_blank" rel="noopener">Implementation ↗</a>
+          </div>
+          <div class="operations-layout">
+            <figure class="operations-preview">
+              <a id="preview-link" href="projects/agent-operations/preview.html#signals" target="_blank" rel="noopener" aria-label="Open redacted signal coverage">
+                <picture>
+                  <source id="preview-mobile" media="(max-width: 600px)" srcset="assets/agent-operations/signals-mobile.png">
+                  <img id="preview-image" src="assets/agent-operations/signals.png" width="1280" height="1020" alt="Redacted Agent Operations interface showing metric definitions and source contracts, with deployment coverage withheld." loading="lazy">
+                </picture>
+              </a>
+              <figcaption><span id="preview-caption">Signal coverage</span><a id="open-console" href="projects/agent-operations/preview.html#signals" target="_blank" rel="noopener">Inspect redacted interface ↗</a></figcaption>
+            </figure>
+            <div class="operations-features" aria-label="Agent Operations capabilities">
+              <details class="operations-feature" name="operations-features" data-view="signals" open>
+                <summary id="feature-signals">Metrics with a paper trail<span aria-hidden="true">+</span></summary>
+                <div><p>Trace each signal to its source, definition and collection coverage. Counts use the full observation window; charts use a bounded series.</p></div>
+              </details>
+              <details class="operations-feature" name="operations-features" data-view="instances">
+                <summary id="feature-instances">Instance-level diagnostics<span aria-hidden="true">+</span></summary>
+                <div><p>Inspect each runtime’s state, resource limits, restarts and exit signals. Reconcile systemd accounting with legacy tmux sessions.</p></div>
+              </details>
+              <details class="operations-feature" name="operations-features" data-view="reliability">
+                <summary id="feature-reliability">Health checks you can inspect<span aria-hidden="true">+</span></summary>
+                <div><p>Follow local probe availability and p50/p95 latency to the individual recorded check. Sample counts and state changes make the result traceable.</p><p class="feature-boundary">Service reachability is measured separately from agent task success.</p></div>
+              </details>
+              <details class="operations-feature" name="operations-features" data-view="overview">
+                <summary id="feature-overview">Resource use, with context<span aria-hidden="true">+</span></summary>
+                <div><p>Compare host CPU and memory trends with runtime accounting. Collection gaps stay visible, and unavailable counters stay unavailable.</p></div>
+              </details>
+            </div>
+          </div>
+          <p class="operations-access">Interface preview · Operational values, runtime identities and history are redacted. The live console remains private.</p>
+        </article>
         <article class="item">
           <div class="item-head">
             <h3>mini-vLLM</h3>
