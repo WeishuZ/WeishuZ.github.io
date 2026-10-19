@@ -10,9 +10,9 @@
       content="A browser serving terminal with a mock LLM: inspect paged KV, batching and preemption, then continue in a CPU notebook."
     />
     <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="lab.css" />
+    <link rel="stylesheet" href="lab.css?v=showcase-2" />
     <script src="engine.js" defer></script>
-    <script src="lab.js" defer></script>
+    <script src="lab.js?v=showcase-2" defer></script>
   </head>
   <body>
     <main class="lab-page">
@@ -60,7 +60,7 @@
             /><button class="sr-only" type="submit">Execute command</button>
           </form>
         </section>
-        <aside class="inspector">
+        <aside class="inspector" id="kv-inspector">
           <div class="inspector-head">
             <h2>KV block pool</h2>
             <span id="pool-caption"></span>

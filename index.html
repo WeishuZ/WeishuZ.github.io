@@ -16,8 +16,8 @@
   <link rel="preload" href="/assets/fonts/newsreader-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/source-sans-3-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/home.css">
-  <link rel="stylesheet" href="assets/showcase.css?v=mock-1">
-  <script src="assets/showcase.js?v=mock-1" defer></script>
+  <link rel="stylesheet" href="assets/showcase.css?v=showcase-2">
+  <script src="assets/showcase.js?v=showcase-2" defer></script>
 </head>
 <body id="top">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -92,7 +92,7 @@
 
       <section id="work">
         <h2>Selected work</h2>
-        <article class="operations-showcase" aria-labelledby="operations-title">
+        <article class="operations-showcase" data-project-showcase="operations" aria-labelledby="operations-title">
           <div class="operations-heading">
             <div>
               <h3 id="operations-title">Agent Operations</h3>
@@ -102,13 +102,13 @@
           </div>
           <div class="operations-layout">
             <figure class="operations-preview">
-              <a id="preview-link" href="projects/agent-operations/preview.html#overview" target="_blank" rel="noopener" aria-label="Open mock resource overview">
+              <a id="preview-link" data-preview-link href="projects/agent-operations/preview.html#overview" target="_blank" rel="noopener" aria-label="Open mock resource overview">
                 <picture>
-                  <source id="preview-mobile" media="(max-width: 600px)" srcset="assets/agent-operations/overview-mobile.png?v=mock-1">
-                  <img id="preview-image" src="assets/agent-operations/overview.png?v=mock-1" width="1280" height="1020" alt="Mock Agent Operations interface showing synthetic resource series and instance data." loading="lazy">
+                  <source id="preview-mobile" data-preview-mobile media="(max-width: 600px)" srcset="assets/agent-operations/overview-mobile.png?v=mock-1">
+                  <img id="preview-image" data-preview-image src="assets/agent-operations/overview.png?v=mock-1" width="1280" height="1020" alt="Mock Agent Operations interface showing synthetic resource series and instance data." loading="lazy">
                 </picture>
               </a>
-              <figcaption><strong class="mock-caption">Mock data · illustrative only</strong><span id="preview-caption">Resource overview</span><a id="open-console" href="projects/agent-operations/preview.html#overview" target="_blank" rel="noopener">Explore mock interface ↗</a></figcaption>
+              <figcaption><strong class="mock-caption">Mock data · illustrative only</strong><span id="preview-caption" data-preview-caption>Resource overview</span><a id="open-console" data-preview-cta href="projects/agent-operations/preview.html#overview" target="_blank" rel="noopener">Explore mock interface ↗</a></figcaption>
             </figure>
             <div class="operations-features" aria-label="Agent Operations capabilities">
               <details class="operations-feature" name="operations-features" data-view="overview" open>
@@ -131,15 +131,38 @@
           </div>
           <p class="operations-access">Mock data · illustrative only. The preview uses a fixed synthetic scenario; live operational metrics remain private.</p>
         </article>
-        <article class="item">
-          <div class="item-head">
-            <h3>mini-vLLM</h3>
-            <div class="item-links">
-              <a href="projects/mini-vllm/">Play terminal</a>
-              <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener" aria-label="mini-vLLM source code">Code</a>
+        <article id="mini-vllm" class="operations-showcase mini-showcase" data-project-showcase="mini-vllm" aria-labelledby="mini-title">
+          <div class="operations-heading">
+            <div><h3 id="mini-title">mini-vLLM</h3><p>A model-free serving loop you can step through, inspect and change.</p></div>
+            <nav class="showcase-links" aria-label="mini-vLLM resources">
+              <a href="projects/mini-vllm/">Play terminal ↗</a>
+              <a href="projects/mini-vllm/serving-lab.ipynb" download>Notebook ↓</a>
+              <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener">Code ↗</a>
+            </nav>
+          </div>
+          <div class="operations-layout">
+            <figure class="operations-preview">
+              <a data-preview-link href="projects/mini-vllm/" target="_blank" rel="noopener" aria-label="Open the mini-vLLM serving terminal">
+                <picture><source data-preview-mobile media="(max-width: 600px)" srcset="assets/mini-vllm/terminal-mobile.png?v=mini-1"><img data-preview-image src="assets/mini-vllm/terminal.png?v=mini-1" width="1280" height="1020" loading="lazy" alt="Mock mini-vLLM terminal alongside physical KV blocks and the request queue."></picture>
+              </a>
+              <figcaption><strong class="mock-caption">Mock LLM · simulated compute</strong><span data-preview-caption>Serving terminal</span><a data-preview-cta href="projects/mini-vllm/" target="_blank" rel="noopener">Open terminal ↗</a></figcaption>
+            </figure>
+            <div class="operations-features" aria-label="mini-vLLM capabilities">
+              <details class="operations-feature" name="mini-vllm-features" data-view="terminal" open>
+                <summary id="mini-feature-terminal">Control the serving loop<span aria-hidden="true">+</span></summary>
+                <div><p>Submit requests, change token and batch budgets, then step through prefill and decode. The terminal drives the scheduler state you see.</p></div>
+              </details>
+              <details class="operations-feature" name="mini-vllm-features" data-view="kv-blocks">
+                <summary id="mini-feature-kv">Inspect KV block ownership<span aria-hidden="true">+</span></summary>
+                <div><p>Select a request or physical block to inspect its logical-to-physical mapping. Watch blocks grow on demand and return to the pool when requests finish.</p></div>
+              </details>
+              <details class="operations-feature" name="mini-vllm-features" data-view="pressure">
+                <summary id="mini-feature-pressure">Trigger recompute preemption<span aria-hidden="true">+</span></summary>
+                <div><p>Shrink the KV pool and inspect a pressure scenario. Generated tokens survive eviction; their KV is recomputed when the request resumes.</p></div>
+              </details>
             </div>
           </div>
-          <p>Explore paged KV allocation, continuous batching and recompute preemption in a model-free serving terminal. Continue with the actual CPU scheduler in a runnable notebook.</p>
+          <p class="operations-access">Browser teaching model · scripted tokens and simulated time. Continue with the actual CPU scheduler in the runnable notebook.</p>
         </article>
         <article class="item">
           <div class="item-head">
