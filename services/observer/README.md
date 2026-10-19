@@ -31,9 +31,9 @@ The interface source is in `projects/agent-operations/`. Static hosting alone do
 
 ## Public portfolio preview
 
-The user chose to keep all operational metrics private. The homepage therefore uses `preview.html` and static renders under `assets/agent-operations/`, with values, identities, statuses, row counts, timestamps, histories and deployment coverage withheld. This data-free renderer reuses the actual interface shell and styles, but does not load `app.js`, the observation API, a dataset, or a private screenshot. It contains no fabricated activity.
+The public homepage and `preview.html` use a fixed synthetic scenario, clearly marked **Mock data · illustrative only**. The fixture in `mock-scenario.js` is generated locally and does not derive from private observations. The real interface renderer is shared, but its explicit mock adapter never falls back to the observation API. Mock exports include the same provenance marker.
 
-The public link opens only this redacted interface. The actual application entry remains private-access gated on static hosting, and the running observer remains loopback-only. Public preview generation does not change the private deployment or its access boundary.
+Real metrics, identities and private screenshots stay private. The original static app entry remains access-gated, and the private observer remains loopback-only. Mock values illustrate interface behavior; they are not deployment scale, performance or availability claims.
 
 ## Collection semantics
 

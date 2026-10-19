@@ -16,8 +16,8 @@
   <link rel="preload" href="/assets/fonts/newsreader-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/assets/fonts/source-sans-3-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/home.css">
-  <link rel="stylesheet" href="assets/showcase.css">
-  <script src="assets/showcase.js" defer></script>
+  <link rel="stylesheet" href="assets/showcase.css?v=mock-1">
+  <script src="assets/showcase.js?v=mock-1" defer></script>
 </head>
 <body id="top">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -98,22 +98,22 @@
               <h3 id="operations-title">Agent Operations</h3>
               <p>A read-only operations console for my running agent infrastructure.</p>
             </div>
-            <a class="implementation-link" href="https://github.com/WeishuZ/WeishuZ.github.io/tree/codex/resume-template-and-site-cleanup/services/observer" target="_blank" rel="noopener">Implementation ↗</a>
+            <a class="implementation-link" href="https://github.com/WeishuZ/WeishuZ.github.io/tree/main/services/observer" target="_blank" rel="noopener">Implementation ↗</a>
           </div>
           <div class="operations-layout">
             <figure class="operations-preview">
-              <a id="preview-link" href="projects/agent-operations/preview.html#signals" target="_blank" rel="noopener" aria-label="Open redacted signal coverage">
+              <a id="preview-link" href="projects/agent-operations/preview.html#overview" target="_blank" rel="noopener" aria-label="Open mock resource overview">
                 <picture>
-                  <source id="preview-mobile" media="(max-width: 600px)" srcset="assets/agent-operations/signals-mobile.png">
-                  <img id="preview-image" src="assets/agent-operations/signals.png" width="1280" height="1020" alt="Redacted Agent Operations interface showing metric definitions and source contracts, with deployment coverage withheld." loading="lazy">
+                  <source id="preview-mobile" media="(max-width: 600px)" srcset="assets/agent-operations/overview-mobile.png?v=mock-1">
+                  <img id="preview-image" src="assets/agent-operations/overview.png?v=mock-1" width="1280" height="1020" alt="Mock Agent Operations interface showing synthetic resource series and instance data." loading="lazy">
                 </picture>
               </a>
-              <figcaption><span id="preview-caption">Signal coverage</span><a id="open-console" href="projects/agent-operations/preview.html#signals" target="_blank" rel="noopener">Inspect redacted interface ↗</a></figcaption>
+              <figcaption><strong class="mock-caption">Mock data · illustrative only</strong><span id="preview-caption">Resource overview</span><a id="open-console" href="projects/agent-operations/preview.html#overview" target="_blank" rel="noopener">Explore mock interface ↗</a></figcaption>
             </figure>
             <div class="operations-features" aria-label="Agent Operations capabilities">
-              <details class="operations-feature" name="operations-features" data-view="signals" open>
-                <summary id="feature-signals">Metrics with a paper trail<span aria-hidden="true">+</span></summary>
-                <div><p>Trace each signal to its source, definition and collection coverage. Counts use the full observation window; charts use a bounded series.</p></div>
+              <details class="operations-feature" name="operations-features" data-view="overview" open>
+                <summary id="feature-overview">Resource use, with context<span aria-hidden="true">+</span></summary>
+                <div><p>Compare host CPU and memory trends with runtime accounting. Collection gaps stay visible, and unavailable counters stay unavailable.</p></div>
               </details>
               <details class="operations-feature" name="operations-features" data-view="instances">
                 <summary id="feature-instances">Instance-level diagnostics<span aria-hidden="true">+</span></summary>
@@ -123,22 +123,23 @@
                 <summary id="feature-reliability">Health checks you can inspect<span aria-hidden="true">+</span></summary>
                 <div><p>Follow local probe availability and p50/p95 latency to the individual recorded check. Sample counts and state changes make the result traceable.</p><p class="feature-boundary">Service reachability is measured separately from agent task success.</p></div>
               </details>
-              <details class="operations-feature" name="operations-features" data-view="overview">
-                <summary id="feature-overview">Resource use, with context<span aria-hidden="true">+</span></summary>
-                <div><p>Compare host CPU and memory trends with runtime accounting. Collection gaps stay visible, and unavailable counters stay unavailable.</p></div>
+              <details class="operations-feature" name="operations-features" data-view="signals">
+                <summary id="feature-signals">Metrics with a paper trail<span aria-hidden="true">+</span></summary>
+                <div><p>Trace each signal to its source, definition and collection coverage. Counts use the full observation window; charts use a bounded series.</p></div>
               </details>
             </div>
           </div>
-          <p class="operations-access">Interface preview · Operational values, runtime identities and history are redacted. The live console remains private.</p>
+          <p class="operations-access">Mock data · illustrative only. The preview uses a fixed synthetic scenario; live operational metrics remain private.</p>
         </article>
         <article class="item">
           <div class="item-head">
             <h3>mini-vLLM</h3>
             <div class="item-links">
+              <a href="projects/mini-vllm/">Play terminal</a>
               <a href="https://github.com/WeishuZ/mini-vllm" target="_blank" rel="noopener" aria-label="mini-vLLM source code">Code</a>
             </div>
           </div>
-          <p>A CPU-only simulator of paged KV-cache management, continuous batching, prefix reuse, and preemption, with deterministic workloads and an interactive scheduler trace.</p>
+          <p>Explore paged KV allocation, continuous batching and recompute preemption in a model-free serving terminal. Continue with the actual CPU scheduler in a runnable notebook.</p>
         </article>
         <article class="item">
           <div class="item-head">

@@ -4,16 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#faf9f5" />
-    <title>Agent Operations — Redacted interface</title>
+    <title>Agent Operations — Mock data</title>
     <meta
       name="description"
-      content="Redacted interface of a private operations tool. No operational data is loaded."
+      content="Interactive Agent Operations interface using fixed mock data, illustrative only. Live operational data stays private."
     />
     <link rel="stylesheet" href="app.css" />
-    <link rel="stylesheet" href="preview.css" />
-    <script src="preview.js" defer></script>
+    <link rel="stylesheet" href="preview.css?v=mock-1" />
+    <script src="mock-scenario.js" defer></script>
+    <script src="app.js?v=mock-1" defer></script>
   </head>
-  <body data-mode="redacted">
+  <body data-mode="mock">
     <a class="skip" href="#main">Skip to observations</a>
     <div class="shell">
       <aside class="rail">
@@ -35,10 +36,25 @@
         <a class="portfolio" href="../../#work">↗ Portfolio</a>
       </aside>
       <div class="workspace">
+        <div class="mock-banner" role="note">
+          <strong>Mock data · illustrative only</strong
+          ><span>Fixed synthetic scenario, not production measurements.</span>
+        </div>
         <header class="topbar">
-          <span class="workspace-name">Interface preview</span>
+          <span class="workspace-name">Mock environment</span>
           <div class="actions">
-            <span class="preview-notice">Operational data redacted</span>
+            <button id="refresh" class="quiet">Reload mock data</button
+            ><button id="export">↓ Export mock JSON</button>
+            <label class="sr-only" for="window">Observation window</label
+            ><select id="window">
+              <option value="15m">15 minutes</option>
+              <option value="1h">1 hour</option>
+              <option value="6h">6 hours</option>
+              <option value="24h">24 hours</option>
+            </select>
+            <span id="freshness" class="freshness" role="status"
+              >Connecting…</span
+            >
           </div>
         </header>
         <main id="main" tabindex="-1">
@@ -50,7 +66,7 @@
             </p>
             <p>
               <a
-                href="https://github.com/WeishuZ/WeishuZ.github.io/tree/codex/resume-template-and-site-cleanup/services/observer"
+                href="https://github.com/WeishuZ/WeishuZ.github.io/tree/main/services/observer"
                 >View the implementation and metric model ↗</a
               >
             </p>
@@ -102,23 +118,15 @@
             <div class="filters">
               <label
                 >Type
-                <select
-                  id="kind"
-                  disabled
-                  aria-label="Type filter requires private access"
-                >
-                  <option value="all">Private inventory</option>
+                <select id="kind">
+                  <option value="all">All runtimes</option>
                   <option value="agent">Agent runtimes</option>
                   <option value="service">Services</option>
                 </select></label
               ><label
                 >State
-                <select
-                  id="state"
-                  disabled
-                  aria-label="State filter requires private access"
-                >
-                  <option value="all">Private state</option>
+                <select id="state">
+                  <option value="all">All states</option>
                   <option value="active">Running</option>
                   <option value="inactive">Inactive</option>
                   <option value="failed">Failed</option>
@@ -159,7 +167,7 @@
             </p>
             <div id="probe-details"></div>
             <div id="check-inspector" class="observation-detail" role="status">
-              Individual check details, timestamps and targets are withheld.
+              Select a recorded check to inspect its observation.
             </div>
             <section class="panel">
               <div class="panel-head">
@@ -198,7 +206,7 @@
             </section>
           </section>
           <footer>
-            <span id="coverage">Interface structure only · identity, values and history withheld</span
+            <span id="coverage">Waiting for first observation.</span
             ><a href="#signals">Metric definitions ↗</a>
           </footer>
         </main>

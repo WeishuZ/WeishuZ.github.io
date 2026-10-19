@@ -1,72 +1,25 @@
-.preview-notice {
-  color: #62655c;
-  border-left: 2px solid #aeb9a5;
-  padding-left: 12px;
-  font-size: 14px;
-}
-.redacted-history {
-  height: 100%;
-  min-height: 140px;
+.mock-banner {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-align: center;
-  padding: 20px;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 54px,
-    #e5e7de 55px,
-    transparent 56px
-  );
-}
-.redacted-history span {
-  color: #62655c;
-  font: 400 24px/1.2 var(--serif);
-  background: var(--paper);
-  padding: 6px 12px;
-}
-.redacted-history small {
-  color: #676a60;
-  background: var(--paper);
-  padding: 3px 6px;
-  font-size: 12px;
-}
-.redaction-row {
-  color: #676a60;
-  height: 150px;
-  white-space: normal;
-  text-align: center;
-}
-.redaction-label {
-  font-size: 13px;
-  color: #676a60;
-  margin: 0;
-}
-.withheld {
-  color: #676a60;
+  flex-wrap: wrap;
+  gap: 5px 18px;
+  padding: 10px 30px;
+  border-bottom: 1px solid #d5dbce;
+  background: #e8ede2;
+  color: #394c36;
   font-size: 13px;
 }
-.check-history {
-  min-height: 130px;
-  margin-bottom: 12px;
+.mock-banner strong {
+  font-weight: 600;
 }
-body[data-mode="redacted"] .summary strong {
-  font-size: 26px;
-  font-weight: 400;
-  color: #676a60;
-  font-family: var(--serif);
-}
-body[data-mode="redacted"] .probe-stats strong {
-  color: #676a60;
-  font-size: 23px;
-  font-family: var(--serif);
-  font-weight: 400;
+.mock-banner span {
+  color: #56614f;
 }
 @media (max-width: 700px) {
-  .preview-notice {
+  .mock-banner {
+    padding: 10px 20px;
     font-size: 12px;
   }
 }

@@ -37,6 +37,7 @@ const dateLabel = (v) =>
       })
     : "—";
 const live = document.body.dataset.mode === "live";
+const mock = document.body.dataset.mode === "mock";
 const views = ["overview", "instances", "reliability", "signals"];
 let payload = null,
   selected = "console",
@@ -468,7 +469,7 @@ function renderSignals() {
     .join("");
 }
 function selectView() {
-  if (!live) {
+  if (!live && !mock) {
     document.querySelectorAll("[data-panel]").forEach((p) => (p.hidden = true));
     $("#access").hidden = false;
     return;
@@ -491,10 +492,15 @@ function selectView() {
       instances: "Instance diagnostics",
       reliability: "Reliability explorer",
       signals: "Signal coverage",
-    }[view] + " — Agent Operations";
+    }[view] +
+    (mock ? " — Agent Operations · Mock data" : " — Agent Operations");
 }
 function freshness() {
   if (!payload) return;
+  if (mock) {
+    $("#freshness").textContent = "Fixed mock scenario";
+    return;
+  }
   const age = Math.max(
       0,
       Math.floor(Date.now() / 1000 - payload.coverage.last_sample_at),
@@ -528,20 +534,31 @@ function render() {
     " · " +
     payload.interval_seconds +
     "-second collection · " +
-    (live ? "private live view" : "read-only publication");
+    (mock
+      ? "mock data · illustrative only"
+      : live
+        ? "private live view"
+        : "read-only publication");
 }
 async function load() {
-  if (!live) return;
+  if (!live && !mock) return;
   const current = ++sequence,
-    window = $("#window").value,
-    url = "/api/v1/observations?window=" + window;
+    windowKey = $("#window").value,
+    url = "/api/v1/observations?window=" + windowKey;
   pending = true;
   $("#refresh").disabled = true;
   try {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok)
-      throw new Error("Observation source returned HTTP " + response.status);
-    const data = await response.json();
+    let data;
+    if (mock) {
+      if (!globalThis.AgentOperationsMock)
+        throw new Error("Mock dataset unavailable");
+      data = globalThis.AgentOperationsMock.snapshot(windowKey);
+    } else {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok)
+        throw new Error("Observation source returned HTTP " + response.status);
+      data = await response.json();
+    }
     if (current !== sequence) return;
     if (!data.coverage || !Array.isArray(data.timeline))
       throw new Error("Observation response is incomplete");
@@ -611,7 +628,7 @@ $("#export").addEventListener("click", () => {
     link = document.createElement("a");
   link.href = url;
   link.download =
-    "agent-observations-" +
+    (mock ? "mock-agent-observations-" : "agent-observations-") +
     payload.window +
     "-" +
     payload.generated_at +
@@ -625,14 +642,14 @@ window.addEventListener("hashchange", () => {
 });
 setInterval(
   () => {
-    if (!pending && !document.hidden) load();
+    if (live && !pending && !document.hidden) load();
   },
   live ? 10000 : 60000,
 );
 setInterval(() => {
   if (!lastError) freshness();
 }, 1000);
-if (!live) {
+if (!live && !mock) {
   $("#freshness").textContent = "Private deployment";
   $("#refresh").disabled = true;
   $("#export").disabled = true;

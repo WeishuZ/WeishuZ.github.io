@@ -1,7 +1,7 @@
-# Redacted interface previews
+# Mock interface previews
 
-These images are browser renders of `projects/agent-operations/preview.html`, which reuses the actual private tool's interface shell and styles. The renderer loads only static labels and metric definitions. It has no observation client or operational dataset.
+The public interface and these images use a fixed synthetic scenario, explicitly labelled **Mock data · illustrative only** in the interface, screenshot, homepage caption and export metadata. They are not production measurements or evidence of deployment scale, performance or availability.
 
-No private screenshot was blurred, copied or used as a background. Resource values, limits, counters, sample/instance counts, service identities, statuses, historical curves, checks, timestamps and deployment coverage are absent at the source. Neutral “Private” / “Withheld” text replaces those fields. Blank chart frames are explicitly labelled withheld; no synthetic history is substituted.
+`projects/agent-operations/mock-scenario.js` generates the fixture locally. It does not use a server observation, private screenshot, user identity or network input. The public page shares the real tool's renderer and inspection controls, but selects an explicit mock adapter with no fallback to a live API. Missing fixture code fails closed.
 
-The public homepage uses these static images and links only to the redacted interface. The private application entry remains access-gated on static hosting. Live metrics require the existing private connection.
+Synthetic records include a collection gap, a failed worker, a failed health check and calculated percentiles. Aggregate counts use the full synthetic window, while chart points are bounded. All live metrics and the actual service remain private.

@@ -229,3 +229,8 @@
     break-inside: avoid;
   }
 }
+.mock-caption {
+  width: 100%;
+  color: var(--ink);
+  font-weight: 600;
+}

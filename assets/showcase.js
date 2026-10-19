@@ -5,35 +5,35 @@
   const views = {
     overview: {
       caption: "Resource overview",
-      alt: "Redacted Agent Operations interface showing resource panels and inventory fields, with operational values withheld.",
+      alt: "Mock Agent Operations interface showing resource panels and inventory fields, using illustrative mock data.",
     },
     instances: {
       caption: "Instance diagnostics",
-      alt: "Redacted Agent Operations interface showing diagnostic fields and accounting sources, with instance identity and values withheld.",
+      alt: "Mock Agent Operations interface showing diagnostic fields and accounting sources, using synthetic instance identities and values.",
     },
     reliability: {
       caption: "Reliability explorer",
-      alt: "Redacted Agent Operations interface showing health-check and latency fields, with check history and values withheld.",
+      alt: "Mock Agent Operations interface showing health-check and latency fields, using synthetic check history and values.",
     },
     signals: {
       caption: "Signal coverage",
-      alt: "Redacted Agent Operations interface showing metric definitions and source contracts, with deployment coverage withheld.",
+      alt: "Mock Agent Operations interface showing metric definitions and source contracts, with illustrative coverage.",
     },
   };
   function select(view) {
     const description = views[view];
     if (!description) return;
-    image.src = `assets/agent-operations/${view}.png`;
+    image.src = `assets/agent-operations/${view}.png?v=mock-1`;
     image.alt = description.alt;
     document.querySelector("#preview-mobile").srcset =
-      `assets/agent-operations/${view}-mobile.png`;
+      `assets/agent-operations/${view}-mobile.png?v=mock-1`;
     document.querySelector("#preview-caption").textContent =
       description.caption;
     document
       .querySelector("#preview-link")
       .setAttribute(
         "aria-label",
-        `Open redacted ${description.caption.toLowerCase()}`,
+        `Open mock ${description.caption.toLowerCase()}`,
       );
     for (const link of [
       document.querySelector("#preview-link"),
