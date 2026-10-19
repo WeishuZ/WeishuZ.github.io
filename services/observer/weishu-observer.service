@@ -1,0 +1,30 @@
+[Unit]
+Description=Read-only Agent Runtime Observer
+After=network.target agent-console.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/weishu-observer
+ExecStart=/usr/bin/python3 /opt/weishu-observer/server.py --web-root /opt/weishu-observer/web
+Restart=on-failure
+RestartSec=5
+StateDirectory=weishu-observer
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/weishu-observer
+ReadOnlyPaths=/var/lib/agent-console
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=192M
+CPUQuota=20%
+
+[Install]
+WantedBy=multi-user.target

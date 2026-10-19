@@ -114,3 +114,5 @@ footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16
   .experience li, .item { break-inside: avoid; }
   h2, h3 { break-after: avoid; }
 }
+
+.experience p strong.impact{display:inline;font-size:inherit;font-family:inherit;font-weight:600;line-height:inherit;color:var(--ink);text-decoration:underline;text-decoration-color:#b1b4a8;text-underline-offset:3px;text-decoration-thickness:1px}
