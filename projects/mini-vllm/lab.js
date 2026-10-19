@@ -248,5 +248,14 @@
     },
     execute,
   });
-  preset("batching");
+  const params = new URLSearchParams(location.search);
+  preset(params.get("scenario") === "pressure" ? "pressure" : "batching");
+  const initialSteps = Number(params.get("steps") || 0);
+  if (Number.isInteger(initialSteps) && initialSteps > 0 && initialSteps <= 100)
+    step(initialSteps);
+  const initialRequest = params.get("inspect");
+  if (lab.requests.some((request) => request.id === initialRequest)) {
+    lab.selected = initialRequest;
+    render();
+  }
 })();
