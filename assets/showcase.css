@@ -1,0 +1,236 @@
+.page {
+  width: min(1500px, calc(100% - 96px));
+  grid-template-columns: 196px minmax(0, 1fr);
+  gap: 52px;
+}
+.sidebar {
+  width: 196px;
+}
+.operations-showcase {
+  padding: 0 0 28px;
+}
+.operations-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 0 22px;
+}
+.operations-heading h3 {
+  font: 400 30px/1.15 var(--serif);
+  letter-spacing: -0.35px;
+}
+.operations-heading p {
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 8px 0 0;
+}
+.implementation-link {
+  font-size: 14px;
+  white-space: nowrap;
+}
+.operations-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2.15fr) minmax(240px, 1fr);
+  align-items: start;
+  gap: 30px;
+}
+.operations-preview {
+  min-width: 0;
+  margin: 0;
+  padding: 18px 18px 0;
+  background: #e6e8df;
+  border: 1px solid #d4d8cb;
+  border-radius: 8px;
+}
+.operations-preview > a {
+  display: block;
+  overflow: hidden;
+  border: 1px solid #d9dcd1;
+  border-radius: 3px;
+  background: var(--paper);
+}
+.operations-preview picture,
+.operations-preview img {
+  display: block;
+  width: 100%;
+}
+.operations-preview img {
+  height: auto;
+  aspect-ratio: 1280 / 1020;
+  object-fit: cover;
+  object-position: top;
+}
+.operations-preview figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 12px 0 13px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.operations-preview figcaption a {
+  font-size: 12px;
+}
+.operations-features {
+  border-top: 1px solid #aeb4a3;
+}
+.operations-feature {
+  border-bottom: 1px solid var(--rule);
+  padding: 0;
+}
+.operations-feature summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 18px;
+  list-style: none;
+  cursor: pointer;
+  padding: 20px 0;
+  color: var(--ink);
+  font: 400 24px/1.2 var(--serif);
+  letter-spacing: -0.2px;
+}
+.operations-feature summary::-webkit-details-marker {
+  display: none;
+}
+.operations-feature summary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+.operations-feature summary span {
+  color: var(--muted);
+  flex: 0 0 auto;
+  font: 400 20px/1 var(--sans);
+}
+.operations-feature[open] summary span {
+  font-size: 0;
+}
+.operations-feature[open] summary span::after {
+  content: "−";
+  font-size: 20px;
+}
+.operations-feature summary:hover {
+  color: #4c624a;
+}
+.operations-feature > div {
+  padding: 0 0 20px;
+}
+.operations-feature p {
+  font-size: 16px;
+  line-height: 1.65;
+  margin: 0;
+}
+.operations-feature .feature-boundary {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.operations-access {
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+@media (max-width: 1150px) {
+  .page {
+    width: calc(100% - 64px);
+    grid-template-columns: 176px minmax(0, 1fr);
+    gap: 34px;
+  }
+  .sidebar {
+    width: 176px;
+  }
+  .operations-layout {
+    grid-template-columns: 1fr;
+    gap: 23px;
+  }
+  .operations-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 26px;
+  }
+  .operations-feature summary {
+    font-size: 23px;
+  }
+}
+@media (max-width: 700px) {
+  .page {
+    display: block;
+    width: calc(100% - 40px);
+  }
+  .sidebar {
+    width: auto;
+  }
+  .operations-heading {
+    display: block;
+  }
+  .operations-heading h3 {
+    font-size: 29px;
+  }
+  .implementation-link {
+    display: inline-block;
+    margin-top: 12px;
+  }
+  .operations-layout {
+    gap: 20px;
+  }
+  .operations-preview {
+    padding: 10px 10px 0;
+  }
+  .operations-preview figcaption {
+    font-size: 11px;
+    padding: 10px 0;
+  }
+  .operations-preview figcaption a {
+    font-size: 11px;
+  }
+  .operations-features {
+    display: block;
+  }
+  .operations-feature summary {
+    font-size: 23px;
+    padding: 17px 0;
+  }
+  .operations-feature > div {
+    padding-bottom: 17px;
+  }
+  .operations-access {
+    font-size: 12px;
+  }
+}
+@media (max-width: 600px) {
+  .operations-preview {
+    max-width: 420px;
+    width: 100%;
+    margin-inline: auto;
+  }
+  .operations-preview img {
+    aspect-ratio: 390 / 900;
+  }
+}
+@media print {
+  .page {
+    display: block;
+    width: 100%;
+  }
+  .sidebar {
+    width: auto;
+  }
+  .operations-layout {
+    display: block;
+  }
+  .operations-features {
+    display: block;
+  }
+  .operations-feature {
+    break-inside: avoid;
+  }
+}
+.mock-caption {
+  width: 100%;
+  color: var(--ink);
+  font-weight: 600;
+}

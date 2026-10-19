@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#faf9f5" />
+    <title>mini-vLLM — Serving terminal</title>
+    <meta
+      name="description"
+      content="A browser serving terminal with a mock LLM: inspect paged KV, batching and preemption, then continue in a CPU notebook."
+    />
+    <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="lab.css" />
+    <script src="engine.js" defer></script>
+    <script src="lab.js" defer></script>
+  </head>
+  <body>
+    <main class="lab-page">
+      <nav class="top-links" aria-label="Page resources">
+        <a href="../../#work">← Portfolio</a>
+        <div>
+          <a href="serving-lab.ipynb" download>Notebook ↓</a
+          ><a
+            href="https://github.com/WeishuZ/mini-vllm"
+            target="_blank"
+            rel="noopener"
+            >Source ↗</a
+          >
+        </div>
+      </nav>
+      <h1>mini-vLLM</h1>
+      <p class="intro">A serving loop you can take apart.</p>
+      <p class="mock-notice">Mock LLM · simulated compute · no GPU</p>
+      <div class="workspace">
+        <section class="terminal-panel" aria-labelledby="terminal-title">
+          <div class="panel-head">
+            <h2 id="terminal-title">Serving terminal</h2>
+            <div class="controls">
+              <button id="step">Step</button
+              ><button id="run" class="primary">Run</button
+              ><button id="reset">Reset</button>
+            </div>
+          </div>
+          <div
+            id="terminal"
+            class="terminal-output"
+            role="log"
+            aria-label="Serving terminal output"
+            tabindex="0"
+          ></div>
+          <form id="command-form" autocomplete="off">
+            <label for="command">lab $</label
+            ><input
+              id="command"
+              maxlength="512"
+              name="command"
+              aria-label="Terminal command"
+              spellcheck="false"
+              placeholder="help · submit · step · run · inspect"
+            /><button class="sr-only" type="submit">Execute command</button>
+          </form>
+        </section>
+        <aside class="inspector">
+          <div class="inspector-head">
+            <h2>KV block pool</h2>
+            <span id="pool-caption"></span>
+          </div>
+          <div
+            id="blocks"
+            class="block-pool"
+            aria-label="Physical KV blocks"
+          ></div>
+          <div class="legend">
+            <span><i class="allocated"></i>Allocated</span
+            ><span><i></i>Free</span
+            ><span>Click a block to inspect its owner</span>
+          </div>
+          <h2 class="queue-heading">Request queue</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Request</th>
+                  <th>State</th>
+                  <th>KV computed</th>
+                  <th>Decode</th>
+                </tr>
+              </thead>
+              <tbody id="queue"></tbody>
+            </table>
+          </div>
+          <p class="small-note">
+            One decode step emits one scripted token per ready request. Values
+            are simulated for teaching.
+          </p>
+          <div
+            id="request-detail"
+            class="request-detail"
+            aria-live="polite"
+          ></div>
+        </aside>
+      </div>
+      <div class="metrics" aria-label="Simulation metrics">
+        <div>Simulated clock<strong id="clock"></strong></div>
+        <div>KV blocks used<strong id="occupancy"></strong></div>
+        <div>Preemptions<strong id="preemptions"></strong></div>
+      </div>
+      <section class="mapping" aria-labelledby="mapping-title">
+        <h2 id="mapping-title">From the lab to vLLM</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>What you see here</th>
+                <th>Maps to vLLM</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Running / waiting</td>
+                <td>
+                  <code>vllm:num_requests_running</code><br /><code
+                    >vllm:num_requests_waiting</code
+                  >
+                </td>
+                <td>Execution batch and queued requests.</td>
+              </tr>
+              <tr>
+                <td>KV occupancy</td>
+                <td><code>vllm:kv_cache_usage_perc</code></td>
+                <td>A ratio: 1 means full, not 1 percent.</td>
+              </tr>
+              <tr>
+                <td>Token budget</td>
+                <td><code>--max-num-batched-tokens</code></td>
+                <td>Prefill and decode tokens scheduled per iteration.</td>
+              </tr>
+              <tr>
+                <td>Recompute preemption</td>
+                <td><code>vllm:num_preemptions</code></td>
+                <td>Free KV under pressure; recompute on resumption.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="reference-note">
+          The browser implements a small scheduling model, not vLLM itself. It
+          omits GPU kernels, real tokenization, prefix caching and distributed
+          execution. See
+          <a
+            href="https://docs.vllm.ai/en/latest/usage/metrics/"
+            target="_blank"
+            rel="noopener"
+            >vLLM metrics ↗</a
+          >
+          and
+          <a
+            href="https://docs.vllm.ai/en/latest/configuration/optimization/"
+            target="_blank"
+            rel="noopener"
+            >V1 scheduling and tuning ↗</a
+          >.
+        </p>
+      </section>
+      <div class="continuation">
+        <section>
+          <h2>Try a pressure scenario</h2>
+          <p>
+            Use a small pool to observe eviction, re-prefill and block reuse.
+          </p>
+          <button id="pressure">Load pressure scenario</button
+          ><button id="batching">Load batching scenario</button
+          ><code class="hint">preset pressure → step 10 → inspect req-03</code>
+          <p class="small-note">
+            Type <code>help</code> for commands. Arrow keys recall command
+            history.
+          </p>
+        </section>
+        <section id="notebook">
+          <h2>Continue in a notebook</h2>
+          <p>
+            Run the actual CPU mini-vLLM scheduler, inspect block tables and
+            compare batching policies.
+          </p>
+          <a href="serving-lab.ipynb" download>Download notebook ↓</a>
+          <p class="small-note">
+            Python, no model weights or GPU. The notebook installs a pinned
+            revision of the mini-vLLM package.
+          </p>
+          <a
+            class="small-note"
+            href="https://github.com/WeishuZ/WeishuZ.github.io/blob/main/projects/mini-vllm/serving-lab.ipynb"
+            target="_blank"
+            rel="noopener"
+            >View notebook source ↗</a
+          >
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

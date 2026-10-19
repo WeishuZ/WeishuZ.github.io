@@ -1,0 +1,25 @@
+.mock-banner {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 18px;
+  padding: 10px 30px;
+  border-bottom: 1px solid #d5dbce;
+  background: #e8ede2;
+  color: #394c36;
+  font-size: 13px;
+}
+.mock-banner strong {
+  font-weight: 600;
+}
+.mock-banner span {
+  color: #56614f;
+}
+@media (max-width: 700px) {
+  .mock-banner {
+    padding: 10px 20px;
+    font-size: 12px;
+  }
+}
