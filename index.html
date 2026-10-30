@@ -49,18 +49,18 @@
     <main id="main" tabindex="-1">
       <section id="about">
         <h2>About</h2>
-        <p class="lede">I'm an EECS student at UC Berkeley, focused on AI infrastructure and LLM serving. I work on inference scheduling, agent execution, and the data services around them.</p>
+        <p class="lede">I'm an EECS student at UC Berkeley, focused on AI infrastructure and LLM serving. I work on inference scheduling, agent execution, and the data services around them. Co-author of <a href="https://arxiv.org/abs/2606.05405" target="_blank" rel="noopener">Agents' Last Exam</a> (NeurIPS 2026).</p>
       </section>
 
       <section id="experience">
         <h2>Experience</h2>
         <ul class="experience">
           <li>
-            <span>Sep 2026 – present</span>
+            <span>Sep – Nov 2026</span>
             <div>
               <strong>Amazon</strong>
-              <p class="experience-role">Software Development Engineer Intern</p>
-              <p>Distributed training and inference infrastructure for AI Studio.</p>
+              <p class="experience-role">Software Development Engineer Intern, AI Studio</p>
+              <p>Culver City. A unified inference and training cluster, and a zero-shot VFX background workflow that keeps spatial consistency and scene lighting.</p>
             </div>
           </li>
           <li>
@@ -68,7 +68,7 @@
             <div>
               <strong>ASML</strong>
               <p class="experience-role">Software Engineering, Test Infrastructure</p>
-              <p><strong class="impact">Automated daily regression review.</strong> Moved test planning into a QA-approved workflow with asynchronous execution and result writeback.</p>
+              <p><strong class="impact">Cut repetitive SQA review by 80%.</strong> Automated daily regression review, and a test-plan agent over 20+ coverage types shortened plan turnaround from 2 weeks to hours.</p>
             </div>
           </li>
           <li>
@@ -76,7 +76,15 @@
             <div>
               <strong><a href="https://ludus.my/" target="_blank" rel="noopener">Ludus</a></strong>
               <p class="experience-role">Co-Founder &amp; Software Engineer, Cloud Agent Infrastructure</p>
-              <p>Kubernetes-based agent workspaces with lifecycle management, persistent storage, and sandbox isolation.</p>
+              <p>Multiple agents finish the same task from shared materials, and a reviewer compares results. Sessions use git worktrees, virtualenvs, and per-process resource caps.</p>
+            </div>
+          </li>
+          <li>
+            <span>Mar – May 2026</span>
+            <div>
+              <strong>BAIR</strong>
+              <p class="experience-role">Undergraduate Research Assistant</p>
+              <p>Expert task acquisition for <a href="https://arxiv.org/abs/2606.05405" target="_blank" rel="noopener">Agents' Last Exam</a> (NeurIPS 2026): 30+ domain experts and 80+ tasks.</p>
             </div>
           </li>
           <li>
@@ -84,7 +92,7 @@
             <div>
               <strong>University of California, San Francisco</strong>
               <p class="experience-role">Software Research Assistant</p>
-              <p><strong class="impact">Turned long clinical notes into schema-validated outputs.</strong> Built extraction and Qwen fine-tuning workflows.</p>
+              <p><strong class="impact">Served fixed-schema clinical extraction on one RTX A6000.</strong> Qwen3-32B with AWQ W4A16 Marlin, a cached schema prefix, and QLoRA on a 4,000+-example set.</p>
             </div>
           </li>
         </ul>
@@ -172,15 +180,6 @@
             </div>
           </div>
           <p>An upstream CELU validation fix aligning <code>torch.compile</code> with eager behavior, with regression tests for numerical parity, in-place mutation, and invalid inputs.</p>
-        </article>
-        <article class="item">
-          <div class="item-head">
-            <h3>GradeView / GradeSync</h3>
-            <div class="item-links">
-              <a href="https://gradeview.eecs.berkeley.edu/" target="_blank" rel="noopener" aria-label="GradeView live website">Live</a>
-            </div>
-          </div>
-          <p>Berkeley course-data services built around PostgreSQL, with React interfaces and Redis caching for repeated analytics queries.</p>
         </article>
       </section>
 

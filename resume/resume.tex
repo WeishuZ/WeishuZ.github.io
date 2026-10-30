@@ -97,91 +97,250 @@
 
 \begin{center}
   \small
-  AI Infrastructure | Inference Systems, Workload Orchestration \& Performance Modeling
+  Infrastructure-leaning engineer building distributed training,
+  serving, and production agent runtimes.
 \end{center}
 
+%----------EDUCATION----------
 
-% Content-review draft: private-work implementation details require confirmation.
-% Formatting, preamble, heading and resume macros retained from the original.
 \section{Education}
+
 \resumeSubHeadingListStart
+
   \resumeSubheading
     {University of California, Berkeley}{Berkeley, CA}
     {Bachelor of Science in Electrical Engineering and Computer Sciences}
-    {Expected May 2027}
+    {May 2027}
+
+    \resumeItemListStart
+      \resumeItem{GPA: 4.0/4.0}
+      \resumeItem{
+        Relevant Coursework:
+        Efficient Algorithms, Network Science, Artificial Intelligence
+      }
+    \resumeItemListEnd
+
 \resumeSubHeadingListEnd
+
+%----------TECHNICAL SKILLS----------
+
 \section{Technical Skills}
+
 \begin{itemize}[leftmargin=0.15in, label={}]
-  \small{\item{
-    \textbf{Languages}{: Python, C/C++, TypeScript/JavaScript, SQL} \\
-    \textbf{AI / ML Systems}{: PyTorch, torch.compile, vLLM, QLoRA, LLM APIs} \\
-    \textbf{Infrastructure}{: Kubernetes, Docker, gVisor, OCI, OpenTelemetry, CI/CD} \\
-    \textbf{Backend / Data}{: FastAPI, Node.js, React, PostgreSQL, Redis, REST APIs}
-  }}
+  \small{
+    \item{
+      \textbf{Languages}{:
+        Python, TypeScript/JavaScript, SQL, Java, Go, C/C++
+      } \\
+
+      \textbf{Full Stack}{:
+        React, Next.js, Node.js, FastAPI, PostgreSQL, Redis, SQLite,
+        REST APIs
+      } \\
+
+      \textbf{AI \& Agents}{:
+        LangGraph, MCP, LLM APIs, agent runtimes, structured generation,
+        PyTorch, vLLM, QLoRA
+      } \\
+
+      \textbf{Infrastructure}{:
+        Docker, Kubernetes, gVisor, OCI, OpenTelemetry, pytest,
+        distributed jobs, CI/CD
+      }
+    }
+  }
 \end{itemize}
+
+%----------EXPERIENCE----------
+
 \section{Experience}
+
 \resumeSubHeadingListStart
+
   \resumeSubheading
-    {Amazon}{}
-    {Software Development Engineer Intern}{Sep 2026 -- Present}
-\resumeItemListStart
-  \resumeItem{Developing distributed training and inference infrastructure for Amazon AI Studio.}
-\resumeItemListEnd
+    {Amazon}{Culver City, CA}
+    {Software Development Engineer Intern, AI Studio}
+    {Sep 2026 -- Nov 2026}
+
+    \resumeItemListStart
+      \resumeItem{
+        Built a unified inference and training cluster supporting generative
+        AI workloads for Amazon AI Studio.
+      }
+      \resumeItem{
+        Designed a zero-shot generation workflow for VFX background
+        generation and harmonization, accelerating production and lowering
+        generation cost for VFX creators.
+      }
+      \resumeItem{
+        Preserved spatial consistency and matched scene lighting to
+        live-action footage for professional VFX production.
+      }
+    \resumeItemListEnd
+    \vspace{18pt}
+
   \resumeSubheading
     {ASML}{San Jose, CA}
-    {Software Engineering, Test Infrastructure}{May 2026 -- Aug 2026}
-\resumeItemListStart
-  \resumeItem{Built RRI, an SQA regression-review system integrating Confluence, Jira, qTest, email, and compute-job status; automated review-page generation, metadata synchronization, and follow-up tracking.}
-  \resumeItem{Designed an agent-driven test-plan lifecycle spanning case-to-plan generation, QA approval, asynchronous compute-job execution, and result/inspection writeback, with explicit review and execution stages.}
-  \resumeItem{Built a human-reviewed knowledge-update loop that stages reusable session learnings for QA audit and promotes approved changes into the agent harness.}
-\resumeItemListEnd
+    {Software Engineering, Test Infrastructure
+      $|$ \href{https://weishuz.com/blog/two-loops/}{\underline{Blog}}}
+    {May 2026 -- Aug 2026}
+
+    \resumeItemListStart
+
+      \resumeItem{
+        Built RRI to automate daily SQA regression review across Confluence,
+        Jira, and qTest, cutting 80\% of repetitive review work.
+      }
+      \resumeItem{
+        Built a test-plan agent over 20+ coverage types, cutting plan
+        turnaround from 2 weeks of writing to hours of review.
+      }
+    \resumeItemListEnd
+    \vspace{18pt}
+
   \resumeSubheading
     {\href{https://ludus.my/}{\underline{Ludus}}}{Berkeley, CA}
-    {Co-Founder \& Software Engineer, Cloud Agent Infrastructure}{Apr 2026 -- Aug 2026}
-\resumeItemListStart
-  \resumeItem{Implemented a Kubernetes-native control plane for stateful agent sandboxes, covering runtime templates, warm-pool provisioning, suspend/resume, and TTL-based lifecycle reconciliation.}
-  \resumeItem{Isolated untrusted-code execution with gVisor RuntimeClasses, namespace-scoped RBAC, default-deny NetworkPolicies, and CPU, memory, and ephemeral-storage quotas.}
-  \resumeItem{Packaged reproducible agent environments as immutable OCI images with PVC-backed workspaces and OpenTelemetry traces for sandbox lifecycle observability.}
-\resumeItemListEnd
+    {Co-Founder \& Software Engineer, Cloud Agent Infrastructure}
+    {Apr 2026 -- Aug 2026}
+
+    \resumeItemListStart
+
+      \resumeItem{
+        Co-founded an agent workspace that reached the \textbf{top 10\% of
+        Y Combinator} applicants and the \textbf{top 5\% of a16z Speedrun}
+        applicants. Multiple agents complete the same task independently
+        from shared materials and requirements, and a reviewer can quickly
+        switch across results to compare and preview the outcome.
+      }
+
+      \resumeItem{
+        Adapted \textbf{git worktrees} so each agent session gets its own
+        checkout, virtualenv, and process. Sessions share one object store
+        and cannot see each other's files, packages, or uncommitted edits.
+      }
+
+      \resumeItem{
+        Capped each session process in CPU and memory. An extra session adds
+        a checkout and a virtualenv, at about \textbf{10$\times$} lower memory
+        overhead than a per-agent container sandbox.
+      }
+
+    \resumeItemListEnd
+    \vspace{18pt}
+
   \resumeSubheading
-    {Berkeley Artificial Intelligence Research (BAIR)}{Berkeley, CA}
-    {Undergraduate Research Assistant}{Mar 2026 -- May 2026}
-\resumeItemListStart
-  \resumeItem{Coordinated domain-expert task acquisition for the Agent Human Last Exam benchmark, translating expert proposals into cross-domain agent evaluation tasks.}
-  \resumeItem{Built an LLM-assisted proposal workflow with structured generation, iterative refinement, and constraint checks to turn rough ideas into reviewable benchmark submissions.}
-\resumeItemListEnd
+    {Berkeley Artificial Intelligence Research (BAIR)}
+    {Berkeley, CA}
+    {Undergraduate Research Assistant}
+    {Mar 2026 -- May 2026}
+
+    \resumeItemListStart
+
+      \resumeItem{
+        Led expert task acquisition for Agents' Last Exam, recruiting 30+
+        domain experts and contributing to the collection of 80+ complex,
+        cross-domain agent tasks.
+      }
+
+      \resumeItem{
+        Built an LLM-powered proposal agent that converts rough expert ideas
+        into structured benchmark tasks, supporting iterative refinement,
+        constraint checking, and higher-quality submissions.
+      }
+
+    \resumeItemListEnd
+    \vspace{18pt}
+
   \resumeSubheading
-    {University of California, San Francisco}{San Francisco, CA}
-    {Software Research Assistant}{Aug 2025 -- Jan 2026}
-\resumeItemListStart
-  \resumeItem{Developed a long-context clinical information-extraction pipeline, decomposing records into schema-specific subtasks and combining output validation with self-consistency checks.}
-  \resumeItem{Constructed domain-specific training data and fine-tuned Qwen with QLoRA; optimized vLLM inference through quantization and batched execution to address memory and throughput constraints.}
-\resumeItemListEnd
+    {University of California, San Francisco}
+    {San Francisco, CA}
+    {Software Research Assistant}
+    {Aug 2025 -- Jan 2026}
+
+    \resumeItemListStart
+
+      \resumeItem{
+        Served fixed-schema clinical extraction for \textbf{Qwen3-32B} on one
+        \textbf{RTX A6000} with AWQ W4A16 Marlin, a cached schema prefix, and
+        JSON-schema decoding.
+      }
+
+      \resumeItem{
+        QLoRA-tuned it on a 4,000+-example set with thinking disabled, and
+        measured valid documents/s separately from field accuracy.
+      }
+
+    \resumeItemListEnd
+
 \resumeSubHeadingListEnd
-\section{Open Source}
+
+%----------PUBLICATIONS----------
+
+\section{Publications}
+
 \resumeSubHeadingListStart
   \resumeProjectHeading
-    {\textbf{\href{https://github.com/pytorch/pytorch/commit/fc4ad208aabc2ce37c9134d1041f287037ea250e}{PyTorch}} $|$ \emph{torch.compile, Dynamo}}
-    {\href{https://github.com/pytorch/pytorch/commit/fc4ad208aabc2ce37c9134d1041f287037ea250e}{\underline{Commit}}}
-\resumeItemListStart
-  \resumeItem{Landed a CELU validation fix aligning torch.compile with eager-mode behavior for alpha=0; added regression tests for numerical parity, in-place mutation, and invalid inputs.}
-\resumeItemListEnd
+    {
+      \textbf{Agents' Last Exam} $|$ Co-author $|$
+      \href{https://arxiv.org/abs/2606.05405}{\underline{arXiv:2606.05405}}
+    }
+    {\href{https://neurips.cc/virtual/2026/poster/139517}{\underline{NeurIPS 2026}}}
 \resumeSubHeadingListEnd
-\section{Selected Projects}
+
+%----------PROJECTS----------
+
+\section{Open Source \& Projects}
+
 \resumeSubHeadingListStart
+
   \resumeProjectHeading
-    {\textbf{\href{https://github.com/WeishuZ/mini-vllm}{mini-vLLM}} $|$ \emph{LLM Serving \& Performance Modeling}}
-    {\href{https://github.com/WeishuZ/mini-vllm}{\underline{Code}}}
-\resumeItemListStart
-  \resumeItem{Built a CPU-only serving simulator with paged KV allocation, reference-counted prefix caching, copy-on-write, continuous batching, and recompute/swap preemption; added deterministic workloads and an interactive execution trace.}
-  \resumeItem{Benchmarked KV capacity, throughput, and time-to-first-token (TTFT) under deterministic workloads; paged allocation fit 112 versus 16 sequences under a fixed 32,768-slot budget, with simulated compute.}
-\resumeItemListEnd
+    {
+      \textbf{
+        \href{
+          https://github.com/pytorch/pytorch/pulls?q=is\%3Apr+author\%3AWeishuZ
+        }{PyTorch}
+      }
+      $|$
+      \emph{torch.compile, torch.export, Dynamo}
+      \hfill
+      \href{
+        https://github.com/pytorch/pytorch/pulls?q=is\%3Apr+author\%3AWeishuZ
+      }{\underline{PRs}}
+    }
+    {}
+
+    \resumeItemListStart
+
+      \resumeItem{
+        Contributed production fixes to pytorch/pytorch across
+        compiler and export internals, resolving eager-versus-compiled
+        correctness gaps, tracing failures, and export regressions with
+        targeted tests and maintainer-reviewed patches.
+      }
+
+    \resumeItemListEnd
+
   \resumeProjectHeading
-    {\textbf{\href{https://gradeview.eecs.berkeley.edu/}{GradeView / GradeSync}} $|$ \emph{Berkeley Course Infrastructure}}
-    {\href{https://gradeview.eecs.berkeley.edu/}{\underline{Live}}}
-\resumeItemListStart
-  \resumeItem{Refactored Berkeley course analytics into containerized React, Node.js, and Python services; centralized course data in PostgreSQL and added Redis caching/prewarming for repeated queries.}
-  \resumeItem{Normalized score data across Gradescope, PrairieLearn, and iClicker with role-aware access for students and course staff.}
-\resumeItemListEnd
+    {
+      \textbf{
+        \href{https://github.com/WeishuZ/mini-vllm}{mini-vLLM}
+      }
+      $|$
+      \emph{Python, PagedAttention, KV cache, Scheduler}
+      \hfill
+      \href{https://github.com/WeishuZ/mini-vllm}{\underline{Code}}
+    }
+    {}
+
+    \resumeItemListStart
+      \resumeItem{
+        Built a GPU-free from-scratch model of vLLM's systems core:
+        paged KV cache, continuous batching, preemption, and prefix
+        caching, with reproducible benchmarks (7x more active sequences,
+        1.53x throughput, 54x lower p99 TTFT).
+      }
+    \resumeItemListEnd
+
 \resumeSubHeadingListEnd
+
 \end{document}
